@@ -31,6 +31,19 @@ from extractor import PDFExtractor
 from epub_builder import EPUBBuilder
 
 
+def _column_type(value: str):
+    """Tipo argparse per --columns: accetta auto, 1, 2."""
+    if value.lower() == "auto":
+        return None
+    try:
+        v = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"valore non valido: {value!r}. Usa auto, 1 o 2.")
+    if v not in (1, 2):
+        raise argparse.ArgumentTypeError("deve essere 1, 2 o auto")
+    return v
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Converti PDF di manuali GDR in EPUB ottimizzato per e-reader",
@@ -48,8 +61,19 @@ def parse_args():
     # Layout
     layout = parser.add_argument_group("Layout pagina")
     layout.add_argument(
-        "--columns", type=int, choices=[1, 2], default=1,
-        help="Numero di colonne (default: 1)",
+        "--columns", type=_column_type, default=None, metavar="auto|1|2",
+        help=(
+            "Numero di colonne: 1 (forza singola), 2 (forza doppia), "
+            "auto (rileva pagina per pagina). Default: auto."
+        ),
+    )
+    layout.add_argument(
+        "--column-gap", type=float, default=0.08, metavar="0.0-1.0",
+        help=(
+            "Soglia gap colonne in modalita auto: frazione della larghezza "
+            "pagina. Default 0.08. Aumenta se rileva doppie colonne per errore; "
+            "abbassa se non rileva doppie colonne reali."
+        ),
     )
     layout.add_argument(
         "--column-split", type=float, default=None, metavar="0.0-1.0",
@@ -159,6 +183,7 @@ def main():
     config = LayoutConfig(
         columns=args.columns,
         column_split=args.column_split,
+        column_gap_threshold=args.column_gap,
         min_image_width=args.min_image_size,
         min_image_height=args.min_image_size,
         heading_font_size_threshold=args.heading_threshold,
@@ -191,12 +216,15 @@ def main():
     print(f"\n{'='*50}")
     print(f"  PDF   : {pdf_path.name}")
     print(f"  Titolo: {title}")
-    print(f"  Colonne: {config.columns}", end="")
-    if config.columns == 2 and config.column_split:
-        print(f" (divisore a {config.column_split:.0%})", end="")
+    if config.columns is None:
+        print("  Colonne: auto-detect per pagina")
     elif config.columns == 2:
-        print(" (divisore: auto-detect)", end="")
-    print()
+        if config.column_split:
+            print(f"  Colonne: 2 (divisore fisso a {config.column_split:.0%})")
+        else:
+            print("  Colonne: 2 (divisore auto-detect)")
+    else:
+        print("  Colonne: 1 (singola, forzata)")
     print(f"  Tabelle: {'sì' if config.extract_tables else 'no'}")
     print(f"  Descrizioni AI: {'sì' if config.describe_with_ai else 'no'}")
     print(f"  Output: {Path(args.output).resolve()}")
