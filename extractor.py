@@ -411,7 +411,13 @@ class PDFExtractor:
                 parent[px] = py
 
         # Espandi i bbox di un margine prima di confrontarli
-        expanded = [fitz.Rect(d["rect"]).expand(margin) for d in relevant]
+        expanded = [
+            fitz.Rect(fitz.Rect(d["rect"]).x0 - margin,
+                      fitz.Rect(d["rect"]).y0 - margin,
+                      fitz.Rect(d["rect"]).x1 + margin,
+                      fitz.Rect(d["rect"]).y1 + margin)
+            for d in relevant
+        ]
 
         for i in range(n):
             for j in range(i + 1, n):
