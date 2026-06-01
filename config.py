@@ -11,14 +11,26 @@ from typing import Optional
 @dataclass
 class LayoutConfig:
     # ---- Layout pagina ----
-    columns: int = 1
-    """Numero di colonne: 1 (singola) o 2 (doppia)."""
+    columns: Optional[int] = None
+    """
+    Numero di colonne: 1 (forza singola), 2 (forza doppia), None (auto).
+    Con None il layout viene rilevato pagina per pagina analizzando la
+    distribuzione orizzontale dei blocchi di testo. Consigliato per manuali
+    con layout misto (es. intro a singola colonna, corpo a doppia).
+    """
 
     column_split: Optional[float] = None
     """
-    Punto di divisione tra le colonne, espresso come frazione della larghezza
-    pagina (0.0–1.0). Se None, viene rilevato automaticamente cercando il gap
-    più ampio nella zona centrale della pagina.
+    Punto di divisione tra le colonne (0.0-1.0). None = auto-detect.
+    Ignorato per pagine classificate come singola colonna.
+    """
+
+    column_gap_threshold: float = 0.08
+    """
+    Gap orizzontale minimo (frazione larghezza pagina) per classificare
+    una pagina come doppia colonna. Default 0.08 = 8% della larghezza.
+    Aumenta se singole colonne vengono rilevate come doppie; abbassa
+    se doppie colonne non vengono rilevate.
     """
 
     # ---- Immagini ----
