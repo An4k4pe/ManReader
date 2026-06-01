@@ -226,6 +226,9 @@ class PDFExtractor:
         for d in (self.images_dir, self.vectors_dir, self.tables_dir):
             d.mkdir(parents=True, exist_ok=True)
 
+        # Contatori per il riepilogo finale del rilevamento colonne
+        self._col_stats: dict = {1: 0, 2: 0}
+
     def extract_all(self, describer=None) -> List[PageData]:
         pages = []
         with pdfplumber.open(str(self.pdf_path)) as plumb:
@@ -233,6 +236,10 @@ class PDFExtractor:
                 print(f"  Pagina {i+1}/{self.page_count}...", end="\r", flush=True)
                 pages.append(self._extract_page(i, plumb.pages[i], describer))
         print(f"  Estratte {self.page_count} pagine.             ")
+        if self.config.columns is None:
+            p1 = self._col_stats[1]
+            p2 = self._col_stats[2]
+            print(f"  Layout rilevato: {p1} pag. singola colonna, {p2} pag. doppia colonna")
         return pages
 
     def get_toc(self) -> List[Tuple[int, str, int]]:
@@ -582,39 +589,115 @@ class PDFExtractor:
             if spans:
                 text_blocks.append(TextBlock(spans=spans, bbox=bbox))
 
-        if self.config.columns == 2:
-            split = self.config.column_split
-            if split is None:
-                split = self._auto_detect_column_split(text_blocks, width)
-            text_blocks = self._sort_double_column(text_blocks, width * split)
+        # Determina layout colonne per questa pagina
+        forced = self.config.columns
+        if forced == 1:
+            n_cols, split_ratio = 1, 0.5
+        elif forced == 2:
+            split_ratio = self.config.column_split or self._find_split_ratio(text_blocks, width)
+            n_cols = 2
+        else:
+            # None = auto: rileva per questa pagina
+            n_cols, split_ratio = self._detect_page_columns(text_blocks, width)
+
+        if n_cols == 2:
+            text_blocks = self._sort_double_column(text_blocks, width * split_ratio, width)
+            self._col_stats[2] += 1
         else:
             text_blocks.sort(key=lambda b: b.bbox[1])
+            self._col_stats[1] += 1
 
         return text_blocks
 
-    def _auto_detect_column_split(self, blocks: List[TextBlock], width: float) -> float:
-        if not blocks:
-            return 0.5
-        centers = [
+    def _detect_page_columns(
+        self, blocks: List[TextBlock], width: float
+    ) -> Tuple[int, float]:
+        """
+        Rileva se una pagina e a singola o doppia colonna.
+
+        Esclude blocchi larghi (>60% pagina) come titoli full-width che non
+        rappresentano il layout del corpo. Cerca il gap orizzontale piu ampio
+        nella fascia centrale 25%-75%. Se supera column_gap_threshold e ci
+        sono blocchi da entrambi i lati, la pagina e a doppia colonna.
+        """
+        if len(blocks) < 4:
+            return 1, 0.5
+
+        fw_limit = width * 0.60
+        content_blocks = [b for b in blocks if (b.bbox[2] - b.bbox[0]) < fw_limit]
+
+        if len(content_blocks) < 4:
+            return 1, 0.5
+
+        split_ratio = self._find_split_ratio(content_blocks, width)
+        split_x = width * split_ratio
+
+        left_count  = sum(1 for b in content_blocks if b.bbox[0] < split_x)
+        right_count = sum(1 for b in content_blocks if b.bbox[0] >= split_x)
+        if left_count < 2 or right_count < 2:
+            return 1, 0.5
+
+        centers = sorted(
+            (b.bbox[0] + b.bbox[2]) / 2
+            for b in content_blocks
+            if 0.25 * width < (b.bbox[0] + b.bbox[2]) / 2 < 0.75 * width
+        )
+        if len(centers) < 2:
+            return 1, 0.5
+
+        max_gap = max(centers[i+1] - centers[i] for i in range(len(centers)-1))
+
+        if max_gap >= self.config.column_gap_threshold * width:
+            return 2, split_ratio
+        return 1, 0.5
+
+    def _find_split_ratio(self, blocks: List[TextBlock], width: float) -> float:
+        """Posizione X del gap piu ampio nella zona centrale della pagina."""
+        centers = sorted(
             (b.bbox[0] + b.bbox[2]) / 2
             for b in blocks
             if 0.25 * width < (b.bbox[0] + b.bbox[2]) / 2 < 0.75 * width
-        ]
-        if len(centers) < 4:
+        )
+        if len(centers) < 2:
             return 0.5
-        centers.sort()
         max_gap, split_x = 0.0, width / 2
         for i in range(len(centers) - 1):
-            gap = centers[i + 1] - centers[i]
+            gap = centers[i+1] - centers[i]
             if gap > max_gap:
                 max_gap = gap
-                split_x = (centers[i] + centers[i + 1]) / 2
+                split_x = (centers[i] + centers[i+1]) / 2
         return split_x / width
 
-    def _sort_double_column(self, blocks: List[TextBlock], split_x: float) -> List[TextBlock]:
-        left  = sorted([b for b in blocks if b.bbox[0] < split_x],  key=lambda b: b.bbox[1])
-        right = sorted([b for b in blocks if b.bbox[0] >= split_x], key=lambda b: b.bbox[1])
-        return left + right
+    def _sort_double_column(
+        self, blocks: List[TextBlock], split_x: float, page_width: float
+    ) -> List[TextBlock]:
+        """
+        Ordina blocchi per doppia colonna separando quelli a piena larghezza
+        (titoli, intestazioni di sezione) dai blocchi di colonna veri.
+
+        I blocchi piu larghi del 60% della pagina vengono trattati come
+        full-width e posizionati prima/dopo i blocchi di colonna in base
+        alla loro posizione Y relativa alla zona colonnata.
+        """
+        fw_limit = page_width * 0.60
+        full_w = sorted([b for b in blocks if (b.bbox[2]-b.bbox[0]) >= fw_limit],
+                        key=lambda b: b.bbox[1])
+        col_b  = [b for b in blocks if (b.bbox[2]-b.bbox[0]) < fw_limit]
+
+        if not col_b:
+            return full_w
+
+        col_top    = min(b.bbox[1] for b in col_b)
+        col_bottom = max(b.bbox[3] for b in col_b)
+
+        fw_above  = [b for b in full_w if b.bbox[3] <= col_top]
+        fw_below  = [b for b in full_w if b.bbox[1] >= col_bottom]
+        fw_inside = [b for b in full_w if b not in fw_above and b not in fw_below]
+
+        left  = sorted([b for b in col_b if b.bbox[0] <  split_x], key=lambda b: b.bbox[1])
+        right = sorted([b for b in col_b if b.bbox[0] >= split_x], key=lambda b: b.bbox[1])
+
+        return fw_above + fw_inside + left + right + fw_below
 
     @staticmethod
     def _overlaps_any(bbox: Tuple, excluded: List[Tuple], threshold: float = 0.3) -> bool:
