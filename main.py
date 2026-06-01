@@ -1,0 +1,264 @@
+"""
+main.py — CLI per la conversione PDF→EPUB di manuali GDR.
+
+Uso base:
+  python main.py manuale.pdf
+
+Esempi pratici:
+  # Manuale doppia colonna, con descrizioni AI
+  python main.py dnd5e.pdf --columns 2 --title "D&D 5e - Player's Handbook"
+
+  # Singola colonna, senza AI (più veloce)
+  python main.py pathfinder.pdf --no-ai --title "Pathfinder 2e"
+
+  # Doppia colonna con divisione manuale (0.52 = divisione al 52% della larghezza)
+  python main.py manuale.pdf --columns 2 --column-split 0.52
+
+  # Test su prime 10 pagine
+  python main.py manuale.pdf --pages 1-10 --no-ai
+
+Variabile d'ambiente:
+  ANTHROPIC_API_KEY=sk-ant-...   (alternativa a --api-key)
+"""
+
+import argparse
+import os
+import sys
+from pathlib import Path
+
+from config import LayoutConfig
+from extractor import PDFExtractor
+from epub_builder import EPUBBuilder
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Converti PDF di manuali GDR in EPUB ottimizzato per e-reader",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+    )
+
+    parser.add_argument("pdf", help="Path al file PDF da convertire")
+
+    # Metadati
+    meta = parser.add_argument_group("Metadati libro")
+    meta.add_argument("--title", help="Titolo (default: nome file senza estensione)")
+    meta.add_argument("--author", default="", help="Autore del manuale")
+
+    # Layout
+    layout = parser.add_argument_group("Layout pagina")
+    layout.add_argument(
+        "--columns", type=int, choices=[1, 2], default=1,
+        help="Numero di colonne (default: 1)",
+    )
+    layout.add_argument(
+        "--column-split", type=float, default=None, metavar="0.0-1.0",
+        help=(
+            "Posizione manuale del divisore tra colonne, come frazione della "
+            "larghezza pagina. Esempio: 0.5 = metà pagina. "
+            "Se non specificato, viene rilevato automaticamente (solo con --columns 2)."
+        ),
+    )
+    layout.add_argument(
+        "--heading-threshold", type=float, default=1.3, metavar="MULT",
+        help=(
+            "Moltiplicatore font per rilevare i titoli. "
+            "Default 1.3 = font ≥ 130%% della mediana. "
+            "Abbassa se i tuoi titoli sono piccoli; aumenta se rileva troppi falsi titoli."
+        ),
+    )
+    layout.add_argument(
+        "--min-image-size", type=int, default=80, metavar="PX",
+        help="Dimensione minima (pixel) per includere un'immagine (default: 80)",
+    )
+
+    # Funzionalità
+    feat = parser.add_argument_group("Funzionalità")
+    feat.add_argument(
+        "--no-tables", action="store_true",
+        help="Non estrarre tabelle (più veloce, utile per test)",
+    )
+    feat.add_argument(
+        "--no-vectors", action="store_true",
+        help="Non estrarre illustrazioni vettoriali",
+    )
+    feat.add_argument(
+        "--no-ai", action="store_true",
+        help="Non usare l'AI per descrivere immagini e tabelle",
+    )
+    feat.add_argument(
+        "--ai-language", default="italiano",
+        help="Lingua per le descrizioni AI (default: italiano)",
+    )
+    feat.add_argument(
+        "--no-filter", action="store_true",
+        help="Non rimuovere intestazioni/piè di pagina/filigrane ripetute",
+    )
+    feat.add_argument(
+        "--header-zone", type=float, default=0.08, metavar="0.0-1.0",
+        help=(
+            "Altezza della zona header/footer come frazione della pagina. "
+            "Default 0.08 = top e bottom 8%%. Aumenta se le intestazioni "
+            "sono alte; abbassa se i titoli di capitolo venissero rimossi."
+        ),
+    )
+    feat.add_argument(
+        "--repeat-threshold", type=float, default=0.25, metavar="0.0-1.0",
+        help=(
+            "Soglia ripetizione: testo presente su più di questa frazione "
+            "di pagine viene rimosso. Default 0.25 = >25%% delle pagine."
+        ),
+    )
+    feat.add_argument(
+        "--pages", metavar="N o N-M",
+        help="Elabora solo queste pagine, es: '1-20' o '5'. Utile per test.",
+    )
+
+    # Output
+    out = parser.add_argument_group("Output")
+    out.add_argument(
+        "--output", default="output",
+        help="Cartella di output (default: ./output)",
+    )
+
+    # API
+    api = parser.add_argument_group("API")
+    api.add_argument(
+        "--api-key",
+        help="Anthropic API key (alternativa alla variabile ANTHROPIC_API_KEY)",
+    )
+
+    return parser.parse_args()
+
+
+def parse_page_range(spec: str, total: int):
+    """Converti '1-20' o '5' in (start, end) 0-based."""
+    try:
+        if "-" in spec:
+            a, b = spec.split("-", 1)
+            return int(a) - 1, min(int(b), total)
+        else:
+            n = int(spec)
+            return n - 1, n
+    except ValueError:
+        print(f"Errore: formato pagine non valido '{spec}'. Usa '5' o '1-20'.")
+        sys.exit(1)
+
+
+def main():
+    args = parse_args()
+
+    pdf_path = Path(args.pdf)
+    if not pdf_path.exists():
+        print(f"Errore: file non trovato: {pdf_path}", file=sys.stderr)
+        sys.exit(1)
+
+    title = args.title or pdf_path.stem
+    book_name = title.replace(" ", "_").replace("/", "-")[:60]
+
+    config = LayoutConfig(
+        columns=args.columns,
+        column_split=args.column_split,
+        min_image_width=args.min_image_size,
+        min_image_height=args.min_image_size,
+        heading_font_size_threshold=args.heading_threshold,
+        extract_tables=not args.no_tables,
+        extract_vectors=not args.no_vectors,
+        describe_with_ai=not args.no_ai,
+        ai_language=args.ai_language,
+        filter_repeated=not args.no_filter,
+        header_footer_zone=args.header_zone,
+        repetition_threshold=args.repeat_threshold,
+        output_dir=args.output,
+        book_name=book_name,
+    )
+
+    # Setup AI describer
+    describer = None
+    if config.describe_with_ai:
+        api_key = args.api_key or os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            print(
+                "  [warn] ANTHROPIC_API_KEY non trovata. Descrizioni AI disabilitate.\n"
+                "  Imposta la variabile o usa --api-key per abilitarle."
+            )
+            config.describe_with_ai = False
+        else:
+            from describer import AIDescriber
+            describer = AIDescriber(api_key, config.ai_language)
+
+    # Stampa riepilogo
+    print(f"\n{'='*50}")
+    print(f"  PDF   : {pdf_path.name}")
+    print(f"  Titolo: {title}")
+    print(f"  Colonne: {config.columns}", end="")
+    if config.columns == 2 and config.column_split:
+        print(f" (divisore a {config.column_split:.0%})", end="")
+    elif config.columns == 2:
+        print(" (divisore: auto-detect)", end="")
+    print()
+    print(f"  Tabelle: {'sì' if config.extract_tables else 'no'}")
+    print(f"  Descrizioni AI: {'sì' if config.describe_with_ai else 'no'}")
+    print(f"  Output: {Path(args.output).resolve()}")
+    print(f"{'='*50}\n")
+
+    # Estrazione
+    extractor = PDFExtractor(pdf_path, config)
+    total_pages = extractor.page_count
+
+    # Gestione --pages
+    page_start, page_end = 0, total_pages
+    if args.pages:
+        page_start, page_end = parse_page_range(args.pages, total_pages)
+        print(f"  Elaboro pagine {page_start+1}–{page_end} di {total_pages}")
+
+    # Estrazione TOC (outline/bookmarks embedded nel PDF)
+    toc = extractor.get_toc()
+    if toc:
+        print(f"  TOC trovata: {len(toc)} voci (livelli: {sorted(set(l for l,_,_ in toc))})")
+    else:
+        print("  TOC non trovata: userò euristica font per i capitoli")
+
+    print(f"  Pagine totali: {total_pages}")
+
+    import pdfplumber
+    from extractor import filter_repeated_blocks
+    pages_data = []
+    with pdfplumber.open(str(pdf_path)) as plumb:
+        for i in range(page_start, page_end):
+            print(f"  Pagina {i+1}/{page_end}...", end="\r", flush=True)
+            pages_data.append(extractor._extract_page(i, plumb.pages[i], describer))
+    print(f"  Estratte {len(pages_data)} pagine.            ")
+
+    # Rimozione intestazioni, piè di pagina e filigrane ripetute
+    if config.filter_repeated and len(pages_data) >= 4:
+        # Con meno di 4 pagine la statistica non ha senso
+        pages_data = filter_repeated_blocks(
+            pages_data,
+            header_footer_zone=config.header_footer_zone,
+            repetition_threshold=config.repetition_threshold,
+        )
+    elif config.filter_repeated:
+        print("  Filtro ripetizioni: saltato (troppo poche pagine per statistica affidabile)")
+
+    # Build EPUB
+    print("\n  Costruzione EPUB...")
+    builder = EPUBBuilder(config, title, args.author)
+    epub_path = builder.build(pages_data, toc=toc)
+
+    # Riepilogo finale
+    img_count = sum(len(p.images)  for p in pages_data)
+    vec_count = sum(len(p.vectors) for p in pages_data)
+    tbl_count = sum(len(p.tables)  for p in pages_data)
+    extracted = Path(args.output) / f"{book_name}_extracted"
+
+    print(f"\n{'='*50}")
+    print(f"  ✓ EPUB:      {epub_path}")
+    print(f"  ✓ Immagini:  {img_count} → {extracted / 'images'}")
+    print(f"  ✓ Vettoriali:{vec_count} → {extracted / 'vectors'}")
+    print(f"  ✓ Tabelle:   {tbl_count} → {extracted / 'tables'}")
+    print(f"{'='*50}\n")
+
+
+if __name__ == "__main__":
+    main()
