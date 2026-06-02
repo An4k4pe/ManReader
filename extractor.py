@@ -227,8 +227,19 @@ _SYMBOL_FONT_KEYWORDS = frozenset([
 
 # Singole lettere che non sono mai parole standalone in italiano/inglese
 # (tipicamente glifi di font icona mappati su lettere ASCII)
-_LONE_GLYPH_CHARS = frozenset('bcdfghjklmnpqrstuvwxyzBCDFGHJKLMNPQRSTUVWXYZ')
-# Nota: vowels (aeiouAEIOU) e 'I' sono esclusi perche possono essere parole reali
+# Escluse le vocali e 'I': possono essere articoli/congiunzioni reali
+_LONE_GLYPH_CHARS = frozenset(
+    'bcdfghjklmnpqrstuvwxyz'   # consonanti minuscole
+    'BCDFGHJKLMNPQRSTUVWXYZ'   # consonanti maiuscole
+    '0123456789'                # cifre standalone gia coperte dal check numerico
+)
+
+# Regex per caratteri non-standard che compaiono spesso come glifi decorativi:
+# caratteri di controllo, PUA Unicode, simboli non comuni
+import re as _noise_re
+_NONSTANDARD_CHAR_RE = _noise_re.compile(
+    r'^[\x00-\x1f\x7f-\x9f\ue000-\uf8ff\u2000-\u206f\u2400-\u27ff]+$'
+)
 
 
 def _is_noise_block(spans: list) -> bool:
@@ -256,6 +267,10 @@ def _is_noise_block(spans: list) -> bool:
 
     # Numero di pagina standalone: solo cifre, 1-3 chars, bold
     if full_text.isdigit() and len(full_text) <= 3 and any(s.bold for s in spans):
+        return True
+
+    # Caratteri non-standard (PUA Unicode, simboli rari): quasi sicuramente glifi
+    if len(full_text) <= 4 and _NONSTANDARD_CHAR_RE.match(full_text):
         return True
 
     return False
