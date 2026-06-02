@@ -26,6 +26,12 @@ import os
 import sys
 from pathlib import Path
 
+# Permette di eseguire main.py da qualsiasi directory:
+# aggiunge la cartella dello script al Python path
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).parent))
+
 from config import LayoutConfig
 from extractor import PDFExtractor
 from epub_builder import EPUBBuilder
@@ -131,6 +137,13 @@ def parse_args():
         help=(
             "Soglia ripetizione: testo presente su più di questa frazione "
             "di pagine viene rimosso. Default 0.25 = >25%% delle pagine."
+        ),
+    )
+    feat.add_argument(
+        "--keep-toc-pages", action="store_true",
+        help=(
+            "Non rimuovere le pagine di indice/sommario dal corpo EPUB. "
+            "Di default vengono rimosse e sostituite con una pagina TOC navigabile."
         ),
     )
     feat.add_argument(
@@ -268,6 +281,15 @@ def main():
         )
     elif config.filter_repeated:
         print("  Filtro ripetizioni: saltato (troppo poche pagine per statistica affidabile)")
+
+    # Rimozione pagine sommario/indice dal corpo EPUB
+    if not args.keep_toc_pages:
+        from extractor import is_toc_page
+        before = len(pages_data)
+        pages_data = [p for p in pages_data if not is_toc_page(p)]
+        removed = before - len(pages_data)
+        if removed:
+            print(f"  Rimosse {removed} pagine indice dal corpo (disponibili come TOC navigabile)")
 
     # Build EPUB
     print("\n  Costruzione EPUB...")
