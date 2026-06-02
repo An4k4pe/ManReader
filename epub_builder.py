@@ -45,6 +45,17 @@ from config import LayoutConfig
 from extractor import ImageBlock, PageData, TableBlock, TextBlock, VectorBlock
 
 
+_ANCHOR_SLUG_RE = re.compile(r'[^a-z0-9]+')
+_anchor_counter: list = [0]
+
+
+def _anchor_id(text: str) -> str:
+    """Genera un id HTML stabile per un heading (slug + contatore)."""
+    _anchor_counter[0] += 1
+    slug = _ANCHOR_SLUG_RE.sub('-', text.lower().strip())[:35].strip('-')
+    return f"h{_anchor_counter[0]}-{slug}"
+
+
 class EPUBBuilder:
     def __init__(self, config: LayoutConfig, title: str, author: str = ""):
         self.config = config
@@ -83,8 +94,15 @@ class EPUBBuilder:
         print(f"  Capitoli rilevati: {len(chapters_data)} (via {source})")
 
         epub_chapters = []
+        heading_map: dict = {}  # testo_heading → (file_name, anchor_id)
+
         for ch_idx, (ch_title, ch_pages) in enumerate(chapters_data):
-            body = self._render_chapter(ch_pages, threshold)
+            ch_file = f"chap_{ch_idx:03d}.xhtml"
+            body = self._render_chapter(
+                ch_pages, threshold,
+                heading_map=heading_map,
+                chapter_file=ch_file,
+            )
 
             if not body.strip():
                 first = ch_pages[0].page_num + 1 if ch_pages else "?"
@@ -92,7 +110,7 @@ class EPUBBuilder:
 
             ch = epub.EpubHtml(
                 title=ch_title,
-                file_name=f"chap_{ch_idx:03d}.xhtml",
+                file_name=ch_file,
                 lang="it",
             )
             ch.content = self._wrap_xhtml(ch_title, body).encode("utf-8")
@@ -100,10 +118,15 @@ class EPUBBuilder:
             book.add_item(ch)
             epub_chapters.append(ch)
 
-        book.toc = tuple(epub_chapters)
+        # Pagina TOC navigabile in cima all'EPUB
+        toc_ch = self._build_toc_chapter(toc, epub_chapters, heading_map, css)
+        book.add_item(toc_ch)
+
+        # Nested book.toc per e-reader (usa livelli PDF se disponibili)
+        book.toc = self._build_epub_toc(toc, epub_chapters, heading_map)
         book.add_item(epub.EpubNcx())
         book.add_item(epub.EpubNav())
-        book.spine = ["nav"] + epub_chapters
+        book.spine = ["nav", toc_ch] + epub_chapters
 
         out_path = self.out_dir / f"{self.config.book_name}.epub"
         epub.write_epub(str(out_path), book)
@@ -180,7 +203,13 @@ class EPUBBuilder:
     # Rendering HTML
     # -----------------------------------------------------------------------
 
-    def _render_chapter(self, pages: List[PageData], threshold: float) -> str:
+    def _render_chapter(
+        self,
+        pages: List[PageData],
+        threshold: float,
+        heading_map: dict = None,
+        chapter_file: str = "",
+    ) -> str:
         parts = []
         for page in pages:
             # Unifica tutti gli elementi per Y-position
@@ -200,7 +229,9 @@ class EPUBBuilder:
 
             for kind, _, elem in elements:
                 if kind == "text":
-                    parts.append(self._render_text(elem, threshold))
+                    parts.append(self._render_text(
+                        elem, threshold, heading_map, chapter_file
+                    ))
                 elif kind == "image":
                     parts.append(self._render_image(elem))
                 elif kind == "vector":
@@ -210,17 +241,37 @@ class EPUBBuilder:
 
         return "\n".join(p for p in parts if p)
 
-    def _render_text(self, block: TextBlock, threshold: float) -> str:
+    def _render_text(
+        self,
+        block: TextBlock,
+        threshold: float,
+        heading_map: dict = None,
+        chapter_file: str = "",
+    ) -> str:
+        """
+        Renderizza un blocco di testo.
+        heading_map: se fornito, raccoglie {testo_heading: (chapter_file, anchor_id)}
+        per costruire il TOC navigabile.
+        """
         txt = html.escape(_dehyphenate(block.text))
         if not txt.strip():
             return ""
         size = block.avg_font_size
         if size >= threshold * 1.6:
-            return f'<h1>{txt}</h1>'
+            aid = _anchor_id(block.text)
+            if heading_map is not None:
+                heading_map[block.text.strip()] = (chapter_file, aid)
+            return f'<h1 id="{aid}">{txt}</h1>'
         elif size >= threshold * 1.3:
-            return f'<h2>{txt}</h2>'
+            aid = _anchor_id(block.text)
+            if heading_map is not None:
+                heading_map[block.text.strip()] = (chapter_file, aid)
+            return f'<h2 id="{aid}">{txt}</h2>'
         elif size >= threshold:
-            return f'<h3>{txt}</h3>'
+            aid = _anchor_id(block.text)
+            if heading_map is not None:
+                heading_map[block.text.strip()] = (chapter_file, aid)
+            return f'<h3 id="{aid}">{txt}</h3>'
         elif block.is_bold and block.is_italic:
             return f'<p><strong><em>{txt}</em></strong></p>'
         elif block.is_bold:
@@ -296,6 +347,101 @@ class EPUBBuilder:
         )
 
     # -----------------------------------------------------------------------
+    # TOC navigabile e anchor ID
+    # -----------------------------------------------------------------------
+
+    def _build_toc_chapter(
+        self,
+        toc: list,
+        epub_chapters,
+        heading_map: dict,
+        css,
+    ):
+        """
+        Crea una pagina XHTML "Indice" con link cliccabili ai capitoli.
+        Usa la TOC embedded del PDF se disponibile (con livelli gerarchici),
+        altrimenti lista piatta dei capitoli EPUB.
+        """
+        items = []
+        if toc:
+            # Mappa titolo capitolo → file (per livello 1)
+            ch_map = {ch.title: ch.file_name for ch in epub_chapters}
+            for level, title, _ in toc:
+                esc_title = html.escape(title)
+                if level == 1:
+                    fname = ch_map.get(title, epub_chapters[0].file_name if epub_chapters else "#")
+                    items.append(
+                        f'<p class="toc-l1"><a href="{html.escape(fname)}">{esc_title}</a></p>'
+                    )
+                else:
+                    # Cerca l'anchor nel heading_map per link diretto alla sezione
+                    entry = heading_map.get(title)
+                    if entry:
+                        fname, aid = entry
+                        href = f"{html.escape(fname)}#{aid}"
+                        indent_class = f"toc-l{min(level, 3)}"
+                        items.append(
+                            f'<p class="{indent_class}"><a href="{href}">{esc_title}</a></p>'
+                        )
+                    else:
+                        indent_class = f"toc-l{min(level, 3)}"
+                        items.append(f'<p class="{indent_class}">{esc_title}</p>')
+        else:
+            # Nessuna TOC PDF: lista piatta dei capitoli EPUB
+            for ch in epub_chapters:
+                esc = html.escape(ch.title)
+                items.append(
+                    f'<p class="toc-l1"><a href="{html.escape(ch.file_name)}">{esc}</a></p>'
+                )
+
+        body = '<h1>Indice</h1>\n' + "\n".join(items)
+        ch = epub.EpubHtml(title="Indice", file_name="toc_page.xhtml", lang="it")
+        ch.content = self._wrap_xhtml("Indice", body).encode("utf-8")
+        ch.add_item(css)
+        return ch
+
+    def _build_epub_toc(self, toc: list, epub_chapters, heading_map: dict):
+        """
+        Costruisce book.toc con struttura annidata per la navigazione e-reader.
+        Usa la TOC PDF con livelli se disponibile.
+        """
+        if not toc:
+            return tuple(epub_chapters)
+
+        ch_map = {ch.title: ch.file_name for ch in epub_chapters}
+        result = []
+        current_l1 = None
+        current_children = []
+
+        def flush():
+            if current_l1 is None:
+                return
+            if current_children:
+                result.append((current_l1, current_children[:]))
+            else:
+                result.append(current_l1)
+
+        for level, title, _ in toc:
+            if level == 1:
+                flush()
+                current_children = []
+                fname = ch_map.get(title)
+                if fname:
+                    current_l1 = epub.Link(fname, title, _anchor_id(title))
+                else:
+                    current_l1 = epub.Section(title)
+            else:
+                entry = heading_map.get(title)
+                if entry:
+                    fname, aid = entry
+                    href = f"{fname}#{aid}"
+                    current_children.append(
+                        epub.Link(href, title, _anchor_id(title))
+                    )
+        flush()
+        return tuple(result) if result else tuple(epub_chapters)
+
+    # -----------------------------------------------------------------------
     # CSS
     # -----------------------------------------------------------------------
 
@@ -320,6 +466,12 @@ h1 {
 h2 { font-size: 1.35em; margin: 1.4em 0 0.4em; }
 h3 { font-size: 1.1em;  margin: 1.1em 0 0.3em; }
 p  { margin: 0.35em 0; text-align: justify; orphans: 2; widows: 2; }
+
+/* Pagina Indice / TOC navigabile */
+p.toc-l1 { margin: 0.5em 0; font-size: 1em; font-weight: bold; }
+p.toc-l2 { margin: 0.2em 0 0.2em 1.5em; font-size: 0.95em; }
+p.toc-l3 { margin: 0.1em 0 0.1em 3em; font-size: 0.9em; color: #444; }
+p.toc-l1 a, p.toc-l2 a, p.toc-l3 a { text-decoration: none; color: inherit; }
 
 /* Blocchi di riferimento asset */
 div.asset-ref-block {
