@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+import hashlib
 import fitz  # PyMuPDF
 import pdfplumber
 from PIL import Image
@@ -84,6 +85,9 @@ class ImageBlock:
     index: int
     saved_path: Optional[str] = None
     description: Optional[str] = None
+    is_background: bool = False
+    """True se l'immagine copre >60% della pagina (sfondo/texture).
+    Non viene aggiunta a excluded_bboxes: il testo soprastante viene conservato."""
 
 
 @dataclass
@@ -229,6 +233,10 @@ class PDFExtractor:
         # Contatori per il riepilogo finale del rilevamento colonne
         self._col_stats: dict = {1: 0, 2: 0}
 
+        # Dedup inline immagini: hash MD5 -> path del file gia salvato
+        # Evita di salvare piu volte lo stesso sfondo/texture su pagine diverse
+        self._seen_image_hashes: dict = {}
+
     def extract_all(self, describer=None) -> List[PageData]:
         pages = []
         with pdfplumber.open(str(self.pdf_path)) as plumb:
@@ -273,9 +281,11 @@ class PDFExtractor:
         if self.config.extract_tables:
             tables = self._extract_tables(plumb_page, page_num, describer)
 
-        # Escludi dal testo le aree già coperte da immagini, vettoriali e tabelle
+        # Escludi dal testo le aree coperte da contenuto reale.
+        # Le immagini di sfondo (is_background=True) NON vengono escluse:
+        # il testo vi e sovrapposto nel PDF e deve essere conservato.
         excluded = (
-            [b.bbox for b in images] +
+            [b.bbox for b in images if not b.is_background] +
             [b.bbox for b in vectors] +
             [b.bbox for b in tables]
         )
@@ -323,9 +333,29 @@ class PDFExtractor:
 
                 bbox = self._get_image_bbox(page, xref)
 
+                # Rileva se e uno sfondo: copre >60% della pagina
+                page_area = page.rect.width * page.rect.height
+                x0, y0, x1, y1 = bbox
+                bbox_area = max((x1-x0) * (y1-y0), 1)
+                is_bg = (bbox_area / page_area) > 0.60
+
+                # Dedup inline: se questa immagine e gia stata salvata
+                # in una pagina precedente, riusa il file esistente
+                img_hash = hashlib.md5(img_bytes).hexdigest()
+                if img_hash in self._seen_image_hashes:
+                    existing_path = self._seen_image_hashes[img_hash]
+                    results.append(ImageBlock(
+                        image_data=b"", ext=ext, bbox=bbox,
+                        page_num=page_num, index=idx,
+                        saved_path=existing_path, description=None,
+                        is_background=is_bg,
+                    ))
+                    continue
+
                 fname = f"{book}_p{page_num+1}_img{idx+1}.{ext}"
                 save_path = self.images_dir / fname
                 save_path.write_bytes(img_bytes)
+                self._seen_image_hashes[img_hash] = str(save_path)
 
                 description = None
                 if describer:
@@ -336,6 +366,7 @@ class PDFExtractor:
                     image_data=img_bytes, ext=ext, bbox=bbox,
                     page_num=page_num, index=idx,
                     saved_path=str(save_path), description=description,
+                    is_background=is_bg,
                 ))
             except Exception as e:
                 print(f"\n  [warn] immagine p{page_num+1} #{idx}: {e}")
@@ -435,6 +466,10 @@ class PDFExtractor:
             merged = fitz.Rect()
             for r in bbox_list:
                 merged |= r
+            # Scarta bbox degeneri (area zero o non finiti) che causano
+            # "clip must be finite and not empty" in get_svg_image
+            if merged.is_empty or not merged.is_finite:
+                continue
             if merged.width < min_sz or merged.height < min_sz:
                 continue
 
