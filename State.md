@@ -44,3 +44,4 @@
 ## Prossimi step
 - Test su manuali reali con layout misto e verifica qualità rilevamento colonne
 - Eventuale tuning column_gap_threshold per tipi di PDF diversi
+- selettore di cartella di imput e output dei file
