@@ -173,7 +173,9 @@ class EPUBBuilder:
             for b in page.text_blocks:
                 elements.append(("text",   b.bbox[1], b))
             for img in page.images:
-                elements.append(("image",  img.bbox[1], img))
+                # Sfondi e duplicati: salvati su disco ma silenziosi nell'EPUB
+                if not img.is_background and not img.is_duplicate:
+                    elements.append(("image",  img.bbox[1], img))
             for vec in page.vectors:
                 elements.append(("vector", vec.bbox[1], vec))
             for tbl in page.tables:
