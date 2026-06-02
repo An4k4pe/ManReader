@@ -125,6 +125,32 @@ class PageData:
 
 
 # ---------------------------------------------------------------------------
+# Rilevamento pagine sommario / indice
+# ---------------------------------------------------------------------------
+
+_TOC_LINE_RE = _re.compile(r'.{3,}\s+\d{1,3}\s*$')
+
+
+def is_toc_page(page: "PageData") -> bool:
+    """
+    Rileva se una pagina e un sommario/indice stampato.
+
+    Algoritmo: conta i blocchi di testo che seguono il pattern
+    tipico di un indice: testo descrittivo seguito da un numero
+    di pagina ("Introduzione ............ 9").
+    Se piu del 40% dei blocchi ha questa struttura, la pagina
+    viene classificata come indice.
+    """
+    if len(page.text_blocks) < 3:
+        return False
+    matches = sum(
+        1 for b in page.text_blocks
+        if _TOC_LINE_RE.search(b.text.strip())
+    )
+    return (matches / len(page.text_blocks)) > 0.40
+
+
+# ---------------------------------------------------------------------------
 # Filtro intestazioni / piè di pagina / filigrane
 # ---------------------------------------------------------------------------
 
