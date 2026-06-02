@@ -20,7 +20,22 @@ Rilevamento capitoli:
 """
 
 import html
+import re
 import statistics
+
+# Rimuove trattini di sillabazione da fine riga:
+# 'affronta- re' → 'affrontare', 'parola- continuazione' → 'parolacontinuazione'
+# Agisce solo se sia il char prima del trattino che quello dopo sono lettere
+# minuscole (incluse accentate): non tocca compound-word, em-dash, ecc.
+_HYPHEN_RE = re.compile(
+    r'([a-z\u00e0-\u00fc\u00df])-\s+([a-z\u00e0-\u00fc\u00df])'
+)
+
+
+def _dehyphenate(text: str) -> str:
+    """Rimuove i trattini di sillabazione da fine riga PDF."""
+    return _HYPHEN_RE.sub(r'\1\2', text)
+
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -196,7 +211,7 @@ class EPUBBuilder:
         return "\n".join(p for p in parts if p)
 
     def _render_text(self, block: TextBlock, threshold: float) -> str:
-        txt = html.escape(block.text)
+        txt = html.escape(_dehyphenate(block.text))
         if not txt.strip():
             return ""
         size = block.avg_font_size
