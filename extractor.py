@@ -468,7 +468,7 @@ class PDFExtractor:
                 merged |= r
             # Scarta bbox degeneri (area zero o non finiti) che causano
             # "clip must be finite and not empty" in get_svg_image
-            if merged.is_empty or not merged.is_finite:
+            if merged.is_empty or merged.is_infinite:
                 continue
             if merged.width < min_sz or merged.height < min_sz:
                 continue
