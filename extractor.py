@@ -88,6 +88,9 @@ class ImageBlock:
     is_background: bool = False
     """True se l'immagine copre >60% della pagina (sfondo/texture).
     Non viene aggiunta a excluded_bboxes: il testo soprastante viene conservato."""
+    is_duplicate: bool = False
+    """True se questo hash e gia stato salvato in una pagina precedente.
+    Il file esiste gia su disco; nell'EPUB l'occorrenza viene saltata."""
 
 
 @dataclass
@@ -212,6 +215,53 @@ def filter_repeated_blocks(
 
 
 # ---------------------------------------------------------------------------
+# Filtro glifi decorativi e numeri di pagina
+# ---------------------------------------------------------------------------
+
+# Font simbolici/icona noti: i loro glifi vengono estratti come lettere
+# normali ma rappresentano bullets, ornamenti, frecce ecc.
+_SYMBOL_FONT_KEYWORDS = frozenset([
+    'symbol', 'dingbat', 'wingding', 'zapf', 'webding',
+    'icon', 'ornament', 'glyph', 'bullet', 'arrow',
+])
+
+# Singole lettere che non sono mai parole standalone in italiano/inglese
+# (tipicamente glifi di font icona mappati su lettere ASCII)
+_LONE_GLYPH_CHARS = frozenset('bcdfghjklmnpqrstuvwxyzBCDFGHJKLMNPQRSTUVWXYZ')
+# Nota: vowels (aeiouAEIOU) e 'I' sono esclusi perche possono essere parole reali
+
+
+def _is_noise_block(spans: list) -> bool:
+    """
+    Restituisce True se il blocco e quasi certamente rumore decorativo:
+      - tutti gli span usano font simbolici (Wingdings, Dingbats, ecc.)
+      - oppure il testo e un singolo carattere consonante (glifo icona)
+      - oppure e un numero di pagina standalone (solo cifre, 1-3 chars, bold)
+    """
+    if not spans:
+        return True
+
+    full_text = ' '.join(s.text for s in spans).strip()
+
+    # Tutti gli span usano font simbolici?
+    if all(
+        any(kw in s.font.lower() for kw in _SYMBOL_FONT_KEYWORDS)
+        for s in spans
+    ):
+        return True
+
+    # Singolo carattere consonante = quasi sicuramente glifo decorativo
+    if len(full_text) == 1 and full_text in _LONE_GLYPH_CHARS:
+        return True
+
+    # Numero di pagina standalone: solo cifre, 1-3 chars, bold
+    if full_text.isdigit() and len(full_text) <= 3 and any(s.bold for s in spans):
+        return True
+
+    return False
+
+
+# ---------------------------------------------------------------------------
 # Estrattore principale
 # ---------------------------------------------------------------------------
 
@@ -281,14 +331,13 @@ class PDFExtractor:
         if self.config.extract_tables:
             tables = self._extract_tables(plumb_page, page_num, describer)
 
-        # Escludi dal testo le aree coperte da contenuto reale.
-        # Le immagini di sfondo (is_background=True) NON vengono escluse:
-        # il testo vi e sovrapposto nel PDF e deve essere conservato.
-        excluded = (
-            [b.bbox for b in images if not b.is_background] +
-            [b.bbox for b in vectors] +
-            [b.bbox for b in tables]
-        )
+        # Solo le tabelle vanno in excluded_bboxes: il loro testo e gia
+        # estratto da pdfplumber e includerlo come testo libero creerebbe
+        # duplicati. Immagini e vettoriali NON escludono il testo:
+        # nel PDF il testo e un layer separato sopra questi elementi,
+        # quindi escluderlo causerebbe la perdita di titoli nei cartigli
+        # e testo sovrapposto a texture di sfondo.
+        excluded = [b.bbox for b in tables]
         text_blocks = self._extract_text(fitz_page, width, excluded)
 
         return PageData(
@@ -349,6 +398,7 @@ class PDFExtractor:
                         page_num=page_num, index=idx,
                         saved_path=existing_path, description=None,
                         is_background=is_bg,
+                        is_duplicate=True,
                     ))
                     continue
 
@@ -628,7 +678,8 @@ class PDFExtractor:
                     ))
 
             if spans:
-                text_blocks.append(TextBlock(spans=spans, bbox=bbox))
+                if not _is_noise_block(spans):
+                    text_blocks.append(TextBlock(spans=spans, bbox=bbox))
 
         # Determina layout colonne per questa pagina
         forced = self.config.columns
