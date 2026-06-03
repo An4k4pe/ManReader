@@ -17,8 +17,14 @@ Esempi pratici:
   # Test su prime 10 pagine
   python main.py manuale.pdf --pages 1-10 --no-ai
 
-Variabile d'ambiente:
-  ANTHROPIC_API_KEY=sk-ant-...   (alternativa a --api-key)
+Variabili d'ambiente:
+  ANTHROPIC_API_KEY=sk-ant-...   (backend anthropic, alternativa a --api-key)
+  GEMINI_API_KEY=AIza...          (backend gemini, alternativa a --api-key)
+
+Backend vision disponibili (--vision-backend):
+  anthropic  — Claude via API Anthropic (a pagamento)
+  gemini     — Google Gemini Flash, tier gratuito (1500 req/giorno)
+  ollama     — inferenza locale, nessuna API key (richiede Ollama in esecuzione)
 """
 
 import argparse
@@ -158,11 +164,34 @@ def parse_args():
         help="Cartella di output (default: ./output)",
     )
 
-    # API
-    api = parser.add_argument_group("API")
+    # AI Vision backend
+    api = parser.add_argument_group("AI Vision backend")
+    api.add_argument(
+        "--vision-backend", default="anthropic",
+        choices=["anthropic", "gemini", "ollama"],
+        metavar="BACKEND",
+        help=(
+            "Backend per le descrizioni AI: "
+            "anthropic (default, richiede ANTHROPIC_API_KEY), "
+            "gemini (gratuito, richiede GEMINI_API_KEY), "
+            "ollama (locale, nessuna API key). "
+            "Ignorato se --no-ai è attivo."
+        ),
+    )
     api.add_argument(
         "--api-key",
-        help="Anthropic API key (alternativa alla variabile ANTHROPIC_API_KEY)",
+        help=(
+            "API key per il backend scelto. "
+            "Alternativa alle variabili d'ambiente ANTHROPIC_API_KEY / GEMINI_API_KEY."
+        ),
+    )
+    api.add_argument(
+        "--ollama-model", default=None, metavar="NOME",
+        help="Modello Ollama da usare (default: llama3.2-vision). Esempi: llava, bakllava",
+    )
+    api.add_argument(
+        "--ollama-host", default=None, metavar="URL",
+        help="URL server Ollama (default: http://localhost:11434)",
     )
 
     return parser.parse_args()
@@ -214,16 +243,28 @@ def main():
     # Setup AI describer
     describer = None
     if config.describe_with_ai:
-        api_key = args.api_key or os.environ.get("ANTHROPIC_API_KEY")
-        if not api_key:
-            print(
-                "  [warn] ANTHROPIC_API_KEY non trovata. Descrizioni AI disabilitate.\n"
-                "  Imposta la variabile o usa --api-key per abilitarle."
+        backend = args.vision_backend  # argparse converte i trattini in underscore
+        from describer import create_describer
+
+        # API key: prima --api-key, poi variabile d'ambiente specifica del backend
+        api_key = args.api_key
+        if not api_key and backend == "anthropic":
+            api_key = os.environ.get("ANTHROPIC_API_KEY")
+        elif not api_key and backend == "gemini":
+            api_key = os.environ.get("GEMINI_API_KEY")
+        # ollama non usa api_key
+
+        try:
+            describer = create_describer(
+                backend=backend,
+                language=config.ai_language,
+                api_key=api_key,
+                ollama_model=args.ollama_model,
+                ollama_host=args.ollama_host,
             )
+        except (ValueError, ImportError) as e:
+            print(f"  [warn] Describer non disponibile: {e}\n  Descrizioni AI disabilitate.")
             config.describe_with_ai = False
-        else:
-            from describer import AIDescriber
-            describer = AIDescriber(api_key, config.ai_language)
 
     # Stampa riepilogo
     print(f"\n{'='*50}")
@@ -239,7 +280,7 @@ def main():
     else:
         print("  Colonne: 1 (singola, forzata)")
     print(f"  Tabelle: {'sì' if config.extract_tables else 'no'}")
-    print(f"  Descrizioni AI: {'sì' if config.describe_with_ai else 'no'}")
+    print(f"  Descrizioni AI: {'sì (' + args.vision_backend + ')' if config.describe_with_ai else 'no'}")
     print(f"  Output: {Path(args.output).resolve()}")
     print(f"{'='*50}\n")
 
@@ -312,3 +353,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
