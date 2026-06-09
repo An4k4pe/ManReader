@@ -3,7 +3,8 @@ pdfplumber>=0.10.0
 EbookLib>=0.18
 anthropic>=0.25.0
 Pillow>=10.0.0
+requests>=2.31.0
 
 # Backend vision opzionali — installa solo quello che usi:
-# google-genai>=0.8.0           # backend gemini  (pip install google-genai)
-# requests>=2.31.0              # backend ollama  (probabilmente già installato)
+# requests è già incluso sopra per il backend ollama
+# Per il backend anthropic: anthropic è già incluso sopra
