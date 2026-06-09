@@ -19,11 +19,9 @@ Esempi pratici:
 
 Variabili d'ambiente:
   ANTHROPIC_API_KEY=sk-ant-...   (backend anthropic, alternativa a --api-key)
-  GEMINI_API_KEY=AIza...          (backend gemini, alternativa a --api-key)
 
 Backend vision disponibili (--vision-backend):
   anthropic  — Claude via API Anthropic (a pagamento)
-  gemini     — Google Gemini Flash, tier gratuito (1500 req/giorno)
   ollama     — inferenza locale, nessuna API key (richiede Ollama in esecuzione)
 """
 
@@ -168,21 +166,20 @@ def parse_args():
     api = parser.add_argument_group("AI Vision backend")
     api.add_argument(
         "--vision-backend", default="anthropic",
-        choices=["anthropic", "gemini", "ollama"],
+        choices=["anthropic", "ollama"],
         metavar="BACKEND",
         help=(
             "Backend per le descrizioni AI: "
             "anthropic (default, richiede ANTHROPIC_API_KEY), "
-            "gemini (gratuito, richiede GEMINI_API_KEY), "
-            "ollama (locale, nessuna API key). "
+            "ollama (locale, nessuna API key, richiede Ollama in esecuzione). "
             "Ignorato se --no-ai è attivo."
         ),
     )
     api.add_argument(
         "--api-key",
         help=(
-            "API key per il backend scelto. "
-            "Alternativa alle variabili d'ambiente ANTHROPIC_API_KEY / GEMINI_API_KEY."
+            "API key Anthropic. "
+            "Alternativa alla variabile d'ambiente ANTHROPIC_API_KEY."
         ),
     )
     api.add_argument(
@@ -250,8 +247,6 @@ def main():
         api_key = args.api_key
         if not api_key and backend == "anthropic":
             api_key = os.environ.get("ANTHROPIC_API_KEY")
-        elif not api_key and backend == "gemini":
-            api_key = os.environ.get("GEMINI_API_KEY")
         # ollama non usa api_key
 
         try:
@@ -353,4 +348,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
