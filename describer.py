@@ -1,10 +1,12 @@
 """
 describer.py — Descrizioni AI per immagini e tabelle estratte da manuali GDR.
 
-Supporta tre backend selezionabili via flag --vision-backend:
+Supporta due backend selezionabili via flag --vision-backend:
   - anthropic : API Anthropic Claude (richiede ANTHROPIC_API_KEY)
-  - gemini    : API Google Gemini, tier gratuito (richiede GEMINI_API_KEY)
   - ollama    : Inferenza locale via Ollama (nessuna API key, richiede Ollama in esecuzione)
+
+Nota: il backend Gemini è stato rimosso — il free tier Google è inaffidabile per uso
+batch da dicembre 2025 (quota effettiva 0-20 req/giorno su molti account).
 
 Pattern interno: classe base astratta BaseDescriber + implementazioni specifiche.
 La factory function `create_describer()` istanzia il backend corretto.
@@ -170,56 +172,11 @@ class AnthropicDescriber(BaseDescriber):
 
 
 # ---------------------------------------------------------------------------
-# Backend Google Gemini (tier gratuito: 1500 req/giorno, 15 req/min)
-# Usa il pacchetto google-genai (google.generativeai è deprecato da maggio 2025)
-# Documentazione: https://googleapis.github.io/python-genai/
+# Backend Google Gemini — RIMOSSO
+# Il free tier di Gemini è stato tagliato a dicembre 2025 e risulta inaffidabile
+# per uso batch (quota effettiva ~20 req/giorno o 0 su molti account).
+# Usare il backend 'ollama' per inferenza locale gratuita.
 # ---------------------------------------------------------------------------
-
-class GeminiDescriber(BaseDescriber):
-    MODEL = "gemini-2.0-flash"
-
-    def __init__(self, api_key: str, language: str = "italiano"):
-        super().__init__(language)
-        try:
-            from google import genai
-            from google.genai import types as genai_types
-        except ImportError:
-            raise ImportError(
-                "Libreria google-genai non installata.\n"
-                "Installa con: pip install google-genai"
-            )
-        self.client = genai.Client(api_key=api_key)
-        self._types = genai_types
-
-    def describe_image(self, image_data: bytes, ext: str) -> str:
-        mime = self._ext_to_mime(ext)
-        image_part = self._types.Part.from_bytes(data=image_data, mime_type=mime)
-        prompt = self._image_prompt()
-
-        def call():
-            response = self.client.models.generate_content(
-                model=self.MODEL,
-                contents=[image_part, prompt],
-                config=self._types.GenerateContentConfig(max_output_tokens=256),
-            )
-            return response.text.strip()
-
-        return self._retry(call)
-
-    def describe_table(self, rows: List[List[str]]) -> str:
-        if not rows:
-            return "[Tabella vuota]"
-        prompt = self._table_prompt(rows)
-
-        def call():
-            response = self.client.models.generate_content(
-                model=self.MODEL,
-                contents=prompt,
-                config=self._types.GenerateContentConfig(max_output_tokens=150),
-            )
-            return response.text.strip()
-
-        return self._retry(call)
 
 
 # ---------------------------------------------------------------------------
@@ -306,7 +263,7 @@ class OllamaDescriber(BaseDescriber):
 # Factory function — punto di ingresso unico per main.py
 # ---------------------------------------------------------------------------
 
-SUPPORTED_BACKENDS = ("anthropic", "gemini", "ollama")
+SUPPORTED_BACKENDS = ("anthropic", "ollama")
 
 def create_describer(
     backend: str,
@@ -319,9 +276,9 @@ def create_describer(
     Istanzia e ritorna il backend richiesto.
 
     Args:
-        backend:      "anthropic" | "gemini" | "ollama"
+        backend:      "anthropic" | "ollama"
         language:     lingua per le descrizioni
-        api_key:      chiave API (obbligatoria per anthropic e gemini, ignorata per ollama)
+        api_key:      chiave API Anthropic (ignorata per ollama)
         ollama_model: modello Ollama da usare (default: llama3.2-vision)
         ollama_host:  URL del server Ollama (default: http://localhost:11434)
 
@@ -337,15 +294,6 @@ def create_describer(
                 "Imposta ANTHROPIC_API_KEY o usa --api-key"
             )
         return AnthropicDescriber(api_key, language)
-
-    elif backend == "gemini":
-        if not api_key:
-            raise ValueError(
-                "Backend 'gemini' richiede una API key.\n"
-                "Ottienila gratis su https://aistudio.google.com/app/apikey\n"
-                "Imposta GEMINI_API_KEY o usa --api-key"
-            )
-        return GeminiDescriber(api_key, language)
 
     elif backend == "ollama":
         return OllamaDescriber(
@@ -367,5 +315,6 @@ def create_describer(
 # ---------------------------------------------------------------------------
 
 AIDescriber = AnthropicDescriber
+
 
 
