@@ -142,7 +142,8 @@ class AnthropicDescriber(BaseDescriber):
 
 # ---------------------------------------------------------------------------
 # Backend Google Gemini (tier gratuito: 1500 req/giorno, 15 req/min)
-# Documentazione: https://ai.google.dev/api/generate-content
+# Usa il pacchetto google-genai (google.generativeai è deprecato da maggio 2025)
+# Documentazione: https://googleapis.github.io/python-genai/
 # ---------------------------------------------------------------------------
 
 class GeminiDescriber(BaseDescriber):
@@ -151,23 +152,27 @@ class GeminiDescriber(BaseDescriber):
     def __init__(self, api_key: str, language: str = "italiano"):
         super().__init__(language)
         try:
-            import google.generativeai as genai
+            from google import genai
+            from google.genai import types as genai_types
         except ImportError:
             raise ImportError(
-                "Libreria google-generativeai non installata.\n"
-                "Installa con: pip install google-generativeai"
+                "Libreria google-genai non installata.\n"
+                "Installa con: pip install google-genai"
             )
-        genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel(self.MODEL)
+        self.client = genai.Client(api_key=api_key)
+        self._types = genai_types
 
     def describe_image(self, image_data: bytes, ext: str) -> str:
-        import google.generativeai as genai
         mime = self._ext_to_mime(ext)
-        image_part = {"mime_type": mime, "data": image_data}
+        image_part = self._types.Part.from_bytes(data=image_data, mime_type=mime)
         prompt = self._image_prompt()
 
         def call():
-            response = self.model.generate_content([image_part, prompt])
+            response = self.client.models.generate_content(
+                model=self.MODEL,
+                contents=[image_part, prompt],
+                config=self._types.GenerateContentConfig(max_output_tokens=256),
+            )
             return response.text.strip()
 
         return self._retry(call)
@@ -178,7 +183,11 @@ class GeminiDescriber(BaseDescriber):
         prompt = self._table_prompt(rows)
 
         def call():
-            response = self.model.generate_content(prompt)
+            response = self.client.models.generate_content(
+                model=self.MODEL,
+                contents=prompt,
+                config=self._types.GenerateContentConfig(max_output_tokens=150),
+            )
             return response.text.strip()
 
         return self._retry(call)
@@ -329,3 +338,4 @@ def create_describer(
 # ---------------------------------------------------------------------------
 
 AIDescriber = AnthropicDescriber
+
