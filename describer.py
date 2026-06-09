@@ -85,18 +85,47 @@ class BaseDescriber(ABC):
 
     @staticmethod
     def _retry(call_fn, max_retries: int = 3) -> str:
-        """Backoff esponenziale su rate limit (429). Comune a tutti i backend HTTP."""
+        """
+        Gestione errori API con backoff esponenziale selettivo.
+
+        - Rate limit (429 / quota): riprova fino a max_retries volte con backoff 2/4/8s
+        - Auth error (chiave invalida/scaduta): fallisce immediatamente, nessun retry
+        - Altri errori: fallisce immediatamente
+        """
+        AUTH_SIGNALS = (
+            "api_key_invalid", "api key expired", "api_key_expired",
+            "invalid_argument", "unauthenticated", "permission_denied",
+            "401", "403",
+        )
+        RATE_SIGNALS = (
+            "429", "rate_limit", "quota", "resource_exhausted",
+            "resourceexhausted", "retry_delay",
+        )
+
         for attempt in range(max_retries):
             try:
                 return call_fn()
             except Exception as e:
-                err = str(e)
-                if "429" in err or "rate_limit" in err.lower() or "quota" in err.lower():
-                    wait = 2 ** (attempt + 1)
-                    print(f"\n  [rate limit] attendo {wait}s...")
-                    time.sleep(wait)
+                err = str(e).lower()
+
+                if any(s in err for s in AUTH_SIGNALS):
+                    # Errore di autenticazione: inutile riprovare
+                    msg = str(e).split("\n")[0][:120]  # prima riga, troncata
+                    print(f"\n  [auth error] {msg}")
+                    return f"[Descrizione non disponibile: errore autenticazione — verifica la API key]"
+
+                elif any(s in err for s in RATE_SIGNALS):
+                    if attempt < max_retries - 1:
+                        wait = 2 ** (attempt + 1)
+                        print(f"\n  [rate limit] attendo {wait}s...")
+                        time.sleep(wait)
+                    else:
+                        return "[Descrizione non disponibile: troppi tentativi per rate limit]"
+
                 else:
-                    return f"[Descrizione non disponibile: {e}]"
+                    msg = str(e).split("\n")[0][:120]
+                    return f"[Descrizione non disponibile: {msg}]"
+
         return "[Descrizione non disponibile: troppi tentativi]"
 
 
@@ -338,4 +367,5 @@ def create_describer(
 # ---------------------------------------------------------------------------
 
 AIDescriber = AnthropicDescriber
+
 
