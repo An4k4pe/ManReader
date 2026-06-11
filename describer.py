@@ -106,11 +106,8 @@ class BaseDescriber(ABC):
 
         for attempt in range(max_retries):
             try:
-                result = call_fn()
-                print(f"  [debug _retry] call_fn returned: {repr(result[:80]) if isinstance(result, str) else repr(result)}")
-                return result
+                return call_fn()
             except Exception as e:
-                print(f"  [debug _retry] call_fn raised: {type(e).__name__}: {str(e)[:120]}")
                 err = str(e).lower()
 
                 if any(s in err for s in AUTH_SIGNALS):
@@ -230,12 +227,11 @@ class OllamaDescriber(BaseDescriber):
             "prompt": self._image_prompt(),
             "images": [b64],
             "stream": False,
-            "options": {"num_predict": 256},
         }
 
         def call():
             r = self._requests.post(
-                f"{self.host}/api/generate", json=payload, timeout=120
+                f"{self.host}/api/generate", json=payload, timeout=180
             )
             r.raise_for_status()
             return r.json()["response"].strip()
@@ -249,12 +245,11 @@ class OllamaDescriber(BaseDescriber):
             "model":  self.model,
             "prompt": self._table_prompt(rows),
             "stream": False,
-            "options": {"num_predict": 150},
         }
 
         def call():
             r = self._requests.post(
-                f"{self.host}/api/generate", json=payload, timeout=60
+                f"{self.host}/api/generate", json=payload, timeout=120
             )
             r.raise_for_status()
             return r.json()["response"].strip()
