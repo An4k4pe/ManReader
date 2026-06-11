@@ -263,6 +263,22 @@ _LONE_GLYPH_CHARS = frozenset(
 # Regex per caratteri non-standard che compaiono spesso come glifi decorativi:
 # caratteri di controllo, PUA Unicode, simboli non comuni
 import re as _noise_re
+
+
+import re as _re_slug
+
+def _desc_to_slug(description: str, max_words: int = 4) -> str:
+    """
+    Converte le prime max_words parole di una descrizione in uno slug
+    per nome file: minuscolo, solo alfanumerici e trattini.
+    Esempio: "Un sovrano su un trono" → "un-sovrano-su-un"
+    """
+    words = description.strip().split()[:max_words]
+    slug = "-".join(words)
+    slug = _re_slug.sub(r"[^\w\-]", "", slug, flags=_re_slug.UNICODE)
+    slug = _re_slug.sub(r"-+", "-", slug).strip("-")
+    return slug.lower() or "img"
+
 _NONSTANDARD_CHAR_RE = _noise_re.compile(
     r'^[\x00-\x1f\x7f-\x9f\ue000-\uf8ff\u2000-\u206f\u2400-\u27ff]+$'
 )
@@ -434,24 +450,49 @@ class PDFExtractor:
                 img_hash = hashlib.md5(img_bytes).hexdigest()
                 if img_hash in self._seen_image_hashes:
                     existing_path = self._seen_image_hashes[img_hash]
+                    # Recupera la descrizione già salvata dal .txt della prima occorrenza
+                    cached_desc = None
+                    try:
+                        txt_path = Path(existing_path).with_suffix(".txt")
+                        if txt_path.exists():
+                            cached_desc = txt_path.read_text(encoding="utf-8").strip() or None
+                    except Exception:
+                        pass
                     results.append(ImageBlock(
                         image_data=b"", ext=ext, bbox=bbox,
                         page_num=page_num, index=idx,
-                        saved_path=existing_path, description=None,
+                        saved_path=existing_path, description=cached_desc,
                         is_background=is_bg,
                         is_duplicate=True,
                     ))
                     continue
 
-                fname = f"{book}_p{page_num+1}_img{idx+1}.{ext}"
-                save_path = self.images_dir / fname
+                # Nome provvisorio: verrà rinominato dopo la descrizione AI
+                fname_tmp = f"{book}_p{page_num+1}_img{idx+1}.{ext}"
+                save_path = self.images_dir / fname_tmp
                 save_path.write_bytes(img_bytes)
-                self._seen_image_hashes[img_hash] = str(save_path)
 
                 description = None
-                if describer:
+                if describer and not is_bg:
                     description = describer.describe_image(img_bytes, ext)
-                    save_path.with_suffix(".txt").write_text(description, encoding="utf-8")
+                    # Rinomina il file usando le prime 4 parole della descrizione
+                    if description:
+                        slug = _desc_to_slug(description, max_words=4)
+                        fname = f"{book}_p{page_num+1}_{slug}.{ext}"
+                        new_path = self.images_dir / fname
+                        # Evita collisioni aggiungendo suffisso numerico
+                        counter = 1
+                        while new_path.exists():
+                            fname = f"{book}_p{page_num+1}_{slug}_{counter}.{ext}"
+                            new_path = self.images_dir / fname
+                            counter += 1
+                        save_path.rename(new_path)
+                        save_path = new_path
+                        save_path.with_suffix(".txt").write_text(description, encoding="utf-8")
+                    else:
+                        fname = fname_tmp  # mantieni nome numerico se no descrizione
+
+                self._seen_image_hashes[img_hash] = str(save_path)
 
                 results.append(ImageBlock(
                     image_data=img_bytes, ext=ext, bbox=bbox,
@@ -850,3 +891,4 @@ class PDFExtractor:
                 self.doc.close()
             except Exception:
                 pass
+
