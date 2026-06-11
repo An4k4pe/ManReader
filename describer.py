@@ -106,8 +106,11 @@ class BaseDescriber(ABC):
 
         for attempt in range(max_retries):
             try:
-                return call_fn()
+                result = call_fn()
+                print(f"  [debug _retry] call_fn returned: {repr(result[:80]) if isinstance(result, str) else repr(result)}")
+                return result
             except Exception as e:
+                print(f"  [debug _retry] call_fn raised: {type(e).__name__}: {str(e)[:120]}")
                 err = str(e).lower()
 
                 if any(s in err for s in AUTH_SIGNALS):
