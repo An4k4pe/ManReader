@@ -233,7 +233,7 @@ def main():
         filter_repeated=not args.no_filter,
         header_footer_zone=args.header_zone,
         repetition_threshold=args.repeat_threshold,
-        output_dir=args.output,
+        output_dir=str(Path(args.output) / book_name),
         book_name=book_name,
     )
 
@@ -276,7 +276,7 @@ def main():
         print("  Colonne: 1 (singola, forzata)")
     print(f"  Tabelle: {'sì' if config.extract_tables else 'no'}")
     print(f"  Descrizioni AI: {'sì (' + args.vision_backend + ')' if config.describe_with_ai else 'no'}")
-    print(f"  Output: {Path(args.output).resolve()}")
+    print(f"  Output: {(Path(args.output) / book_name).resolve()}")
     print(f"{'='*50}\n")
 
     # Estrazione
@@ -336,7 +336,8 @@ def main():
     img_count = sum(len(p.images)  for p in pages_data)
     vec_count = sum(len(p.vectors) for p in pages_data)
     tbl_count = sum(len(p.tables)  for p in pages_data)
-    extracted = Path(args.output) / f"{book_name}_extracted"
+    # Struttura: output/NomePDF/NomePDF.epub + output/NomePDF/extracted/
+    extracted = Path(config.output_dir) / "extracted"
 
     print(f"\n{'='*50}")
     print(f"  ✓ EPUB:      {epub_path}")
@@ -348,5 +349,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
