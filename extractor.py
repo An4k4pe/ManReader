@@ -476,7 +476,11 @@ class PDFExtractor:
                 print(f"  [debug] p{page_num+1} img{idx+1}: is_bg={is_bg}, describer={describer is not None}, bbox_area={bbox_area:.0f}, page_area={page_area:.0f}, ratio={bbox_area/page_area:.2f}")
                 if describer and not is_bg:
                     print(f"  [debug] → chiamo describer per img{idx+1}")
-                    description = describer.describe_image(img_bytes, ext)
+                    try:
+                        description = describer.describe_image(img_bytes, ext)
+                    except Exception as de:
+                        print(f"  [debug] → ECCEZIONE in describe_image: {type(de).__name__}: {de}")
+                        description = None
                     print(f"  [debug] → descrizione: {repr(description[:60]) if description else 'None'}")
                     # Rinomina il file usando le prime 4 parole della descrizione
                     if description:
