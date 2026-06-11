@@ -64,7 +64,7 @@ class EPUBBuilder:
         self.out_dir = Path(config.output_dir)
         self.out_dir.mkdir(parents=True, exist_ok=True)
         # Nome cartella estratti (solo il nome, non il path completo)
-        self.extracted_dir = f"{config.book_name}_extracted"
+        self.extracted_dir = "extracted"
 
     # -----------------------------------------------------------------------
     # Entry point
@@ -211,6 +211,15 @@ class EPUBBuilder:
         chapter_file: str = "",
     ) -> str:
         parts = []
+        # note_entries: lista di (note_id, fname, descrizione) per le note a fine capitolo
+        note_entries = []
+        note_counter = [0]  # lista per mutabilità nel loop
+
+        def _next_note_id(fname: str) -> str:
+            note_counter[0] += 1
+            slug = fname.replace(".", "-").replace("_", "-")[:30]
+            return f"{slug}-{note_counter[0]}"
+
         for page in pages:
             # Unifica tutti gli elementi per Y-position
             elements = []
@@ -233,13 +242,41 @@ class EPUBBuilder:
                         elem, threshold, heading_map, chapter_file
                     ))
                 elif kind == "image":
-                    parts.append(self._render_image(elem))
+                    fname = Path(elem.saved_path).name if elem.saved_path else f"img_{elem.index+1}"
+                    note_id = None
+                    if elem.description:
+                        note_id = _next_note_id(fname)
+                        note_entries.append((note_id, fname, elem.description))
+                    parts.append(self._render_image(elem, note_id=note_id))
                 elif kind == "vector":
-                    parts.append(self._render_vector(elem))
+                    fname = Path(elem.saved_path).name if elem.saved_path else f"vec_{elem.index+1}"
+                    note_id = None
+                    if elem.description:
+                        note_id = _next_note_id(fname)
+                        note_entries.append((note_id, fname, elem.description))
+                    parts.append(self._render_vector(elem, note_id=note_id))
                 elif kind == "table":
                     parts.append(self._render_table(elem))
 
-        return "\n".join(p for p in parts if p)
+        body = "\n".join(p for p in parts if p)
+
+        # Aggiungi sezione note a fine capitolo se ci sono descrizioni
+        if note_entries:
+            notes_html = ['<div class="notes-section"><h4>Note alle illustrazioni</h4><ol>']
+            for note_id, fname, desc in note_entries:
+                esc_desc = html.escape(desc)
+                esc_fname = html.escape(fname)
+                notes_html.append(
+                    f'<li id="note-{note_id}">'
+                    f'<span class="note-fname"><code>{esc_fname}</code></span> '
+                    f'<a href="#ref-{note_id}" class="note-backref">↩</a><br/>'
+                    f'{esc_desc}'
+                    f'</li>'
+                )
+            notes_html.append('</ol></div>')
+            body = body + "\n" + "\n".join(notes_html)
+
+        return body
 
     def _render_text(
         self,
@@ -281,38 +318,40 @@ class EPUBBuilder:
         else:
             return f'<p>{txt}</p>'
 
-    def _render_image(self, img: ImageBlock) -> str:
+    def _render_image(self, img: ImageBlock, note_id: str = None) -> str:
         """
         Blocco di riferimento per immagine raster.
-        Non viene embedded: il file è nella cartella _extracted/images/.
+        Se la descrizione AI è disponibile, aggiunge un link [📷] alla nota a fine capitolo.
         """
         fname = Path(img.saved_path).name if img.saved_path else f"img_{img.index+1}.{img.ext}"
-        desc  = html.escape(img.description or "")
         ref   = html.escape(f"{self.extracted_dir}/images/{fname}")
 
-        desc_line = f'\n  <p class="asset-desc">{desc}</p>' if desc else ""
+        note_link = ""
+        if img.description and note_id:
+            note_link = f' <a href="#note-{note_id}" id="ref-{note_id}" class="note-ref">[&#128444;]</a>'
+
         return (
             f'<div class="asset-ref-block">\n'
-            f'  <p class="asset-label">&#128444; Immagine raster</p>\n'
-            f'  <p class="asset-path"><code>{ref}</code></p>'
-            f'{desc_line}\n'
+            f'  <p class="asset-label">&#128444; Immagine raster{note_link}</p>\n'
+            f'  <p class="asset-path"><code>{ref}</code></p>\n'
             f'</div>'
         )
 
-    def _render_vector(self, vec: VectorBlock) -> str:
+    def _render_vector(self, vec: VectorBlock, note_id: str = None) -> str:
         """
         Blocco di riferimento per illustrazione vettoriale (SVG).
         """
         fname = Path(vec.saved_path).name if vec.saved_path else f"vec_{vec.index+1}.svg"
-        desc  = html.escape(vec.description or "")
         ref   = html.escape(f"{self.extracted_dir}/vectors/{fname}")
 
-        desc_line = f'\n  <p class="asset-desc">{desc}</p>' if desc else ""
+        note_link = ""
+        if vec.description and note_id:
+            note_link = f' <a href="#note-{note_id}" id="ref-{note_id}" class="note-ref">[&#9672;]</a>'
+
         return (
             f'<div class="asset-ref-block">\n'
-            f'  <p class="asset-label">&#9672; Illustrazione vettoriale</p>\n'
-            f'  <p class="asset-path"><code>{ref}</code></p>'
-            f'{desc_line}\n'
+            f'  <p class="asset-label">&#9672; Illustrazione vettoriale{note_link}</p>\n'
+            f'  <p class="asset-path"><code>{ref}</code></p>\n'
             f'</div>'
         )
 
@@ -529,6 +568,14 @@ td {
     vertical-align: top;
 }
 tr:nth-child(even) td { background-color: #f2f2f2; }
+/* Note alle illustrazioni */
+a.note-ref { font-size: 0.8em; vertical-align: super; text-decoration: none; color: #2a6ebb; }
+div.notes-section { border-top: 1px solid #ccc; margin-top: 2em; padding-top: 1em; }
+div.notes-section h4 { font-size: 0.9em; color: #666; margin-bottom: 0.5em; }
+div.notes-section ol { font-size: 0.82em; line-height: 1.5; padding-left: 1.5em; }
+div.notes-section li { margin-bottom: 0.8em; }
+span.note-fname { font-size: 0.85em; color: #888; }
+a.note-backref { text-decoration: none; color: #2a6ebb; font-size: 0.85em; }
 """
 
     # -----------------------------------------------------------------------
@@ -548,3 +595,4 @@ tr:nth-child(even) td { background-color: #f2f2f2; }
             f'<body>\n{body}\n</body>\n'
             '</html>'
         )
+
