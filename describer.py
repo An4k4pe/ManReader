@@ -186,7 +186,7 @@ class AnthropicDescriber(BaseDescriber):
 # ---------------------------------------------------------------------------
 
 class OllamaDescriber(BaseDescriber):
-    DEFAULT_MODEL = "llama3.2-vision"
+    DEFAULT_MODEL = "gemma4:12b"
     DEFAULT_HOST  = "http://localhost:11434"
 
     def __init__(self, model: str = None, host: str = None, language: str = "italiano"):
@@ -315,6 +315,7 @@ def create_describer(
 # ---------------------------------------------------------------------------
 
 AIDescriber = AnthropicDescriber
+
 
 
 
