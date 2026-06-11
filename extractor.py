@@ -269,15 +269,27 @@ import re as _re_slug
 
 def _desc_to_slug(description: str, max_words: int = 4) -> str:
     """
-    Converte le prime max_words parole di una descrizione in uno slug
-    per nome file: minuscolo, solo alfanumerici e trattini.
-    Esempio: "Un sovrano su un trono" → "un-sovrano-su-un"
+    Estrae parole contenutistiche dalla descrizione, saltando le aperture
+    generiche dei modelli AI ("Questa illustrazione mostra un...").
+    Esempio: "Questa illustrazione mostra un emblema lunare" → "emblema-lunare"
     """
-    words = description.strip().split()[:max_words]
-    slug = "-".join(words)
-    slug = _re_slug.sub(r"[^\w\-]", "", slug, flags=_re_slug.UNICODE)
+    SKIP = {
+        "questa", "questo", "quest", "l", "la", "lo", "le", "il", "i",
+        "un", "una", "uno", "immagine", "illustrazione", "foto", "figura",
+        "disegno", "mostra", "raffigura", "rappresenta", "ritrae",
+        "e", "di", "del", "della", "dello", "dei", "degli", "delle",
+        "con", "che", "in", "da", "per", "su", "al", "alla",
+    }
+    clean = []
+    for w in description.strip().split():
+        w_norm = _re_slug.sub(r"[^\w]", "", w, flags=_re_slug.UNICODE).lower()
+        if w_norm and w_norm not in SKIP:
+            clean.append(w_norm)
+        if len(clean) >= max_words:
+            break
+    slug = "-".join(clean)
     slug = _re_slug.sub(r"-+", "-", slug).strip("-")
-    return slug.lower() or "img"
+    return slug or "img"
 
 _NONSTANDARD_CHAR_RE = _noise_re.compile(
     r'^[\x00-\x1f\x7f-\x9f\ue000-\uf8ff\u2000-\u206f\u2400-\u27ff]+$'
@@ -329,8 +341,8 @@ class PDFExtractor:
         self.doc = fitz.open(str(pdf_path))
         self.page_count = len(self.doc)
 
-        # Cartella estratti: output/{book_name}_extracted/
-        extracted = Path(config.output_dir) / f"{config.book_name}_extracted"
+        # Cartella estratti: output/NomePDF/extracted/
+        extracted = Path(config.output_dir) / "extracted"
         self.images_dir = extracted / "images"
         self.vectors_dir = extracted / "vectors"
         self.tables_dir  = extracted / "tables"
@@ -468,7 +480,7 @@ class PDFExtractor:
                     continue
 
                 # Nome provvisorio: verrà rinominato dopo la descrizione AI
-                fname_tmp = f"{book}_p{page_num+1}_img{idx+1}.{ext}"
+                fname_tmp = f"p{page_num+1}_img{idx+1}.{ext}"
                 save_path = self.images_dir / fname_tmp
                 save_path.write_bytes(img_bytes)
 
@@ -478,12 +490,12 @@ class PDFExtractor:
                     # Rinomina il file usando le prime 4 parole della descrizione
                     if description:
                         slug = _desc_to_slug(description, max_words=4)
-                        fname = f"{book}_p{page_num+1}_{slug}.{ext}"
+                        fname = f"p{page_num+1}_{slug}.{ext}"
                         new_path = self.images_dir / fname
                         # Evita collisioni aggiungendo suffisso numerico
                         counter = 1
                         while new_path.exists():
-                            fname = f"{book}_p{page_num+1}_{slug}_{counter}.{ext}"
+                            fname = f"p{page_num+1}_{slug}_{counter}.{ext}"
                             new_path = self.images_dir / fname
                             counter += 1
                         save_path.rename(new_path)
@@ -609,7 +621,7 @@ class PDFExtractor:
             # (verifica fatta a posteriori nell'_extract_page, qui non abbiamo
             # ancora quella lista — la gestione overlap è nel chiamante)
 
-            fname = f"{book}_p{page_num+1}_vec{vec_idx+1}.svg"
+            fname = f"p{page_num+1}_vec{vec_idx+1}.svg"
             save_path = self.vectors_dir / fname
             bbox_tuple = (merged.x0, merged.y0, merged.x1, merged.y1)
 
@@ -702,7 +714,7 @@ class PDFExtractor:
                 ]
                 bbox = tuple(tbl_obj.bbox)
 
-                fname = f"{book}_p{page_num+1}_tbl{idx+1}.csv"
+                fname = f"p{page_num+1}_tbl{idx+1}.csv"
                 save_path = self.tables_dir / fname
                 with open(save_path, "w", encoding="utf-8") as f:
                     for row in rows:
@@ -891,5 +903,6 @@ class PDFExtractor:
                 self.doc.close()
             except Exception:
                 pass
+
 
 
