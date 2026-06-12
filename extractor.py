@@ -621,8 +621,8 @@ class PDFExtractor:
             # (verifica fatta a posteriori nell'_extract_page, qui non abbiamo
             # ancora quella lista — la gestione overlap è nel chiamante)
 
-            fname = f"p{page_num+1}_vec{vec_idx+1}.svg"
-            save_path = self.vectors_dir / fname
+            fname_tmp = f"p{page_num+1}_vec{vec_idx+1}.svg"
+            save_path = self.vectors_dir / fname_tmp
             bbox_tuple = (merged.x0, merged.y0, merged.x1, merged.y1)
 
             ok = self._export_region_as_svg(page_num, merged, save_path)
@@ -635,7 +635,18 @@ class PDFExtractor:
                 thumb = self._render_region_as_png(page_num, merged)
                 if thumb:
                     description = describer.describe_image(thumb, "png")
-                    save_path.with_suffix(".txt").write_text(description, encoding="utf-8")
+                    if description:
+                        slug = _desc_to_slug(description, max_words=4)
+                        fname = f"p{page_num+1}_{slug}.svg"
+                        new_path = self.vectors_dir / fname
+                        counter = 1
+                        while new_path.exists():
+                            fname = f"p{page_num+1}_{slug}_{counter}.svg"
+                            new_path = self.vectors_dir / fname
+                            counter += 1
+                        save_path.rename(new_path)
+                        save_path = new_path
+                        save_path.with_suffix(".txt").write_text(description, encoding="utf-8")
 
             results.append(VectorBlock(
                 bbox=bbox_tuple,
@@ -903,6 +914,7 @@ class PDFExtractor:
                 self.doc.close()
             except Exception:
                 pass
+
 
 
 
