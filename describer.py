@@ -213,6 +213,87 @@ class AnthropicDescriber(BaseDescriber):
 # Factory function — punto di ingresso unico per main.py
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Backend Ollama (inferenza locale, nessuna API key)
+# Documentazione: https://github.com/ollama/ollama/blob/main/docs/api.md
+# Modello consigliato: gemma4:12b (vision, gira su 16GB VRAM)
+# ---------------------------------------------------------------------------
+
+class OllamaDescriber(BaseDescriber):
+    DEFAULT_MODEL = "gemma4:12b"
+    DEFAULT_HOST  = "http://localhost:11434"
+
+    def __init__(self, model: str = None, host: str = None, language: str = "italiano"):
+        super().__init__(language)
+        try:
+            import requests
+            self._requests = requests
+        except ImportError:
+            raise ImportError("Libreria requests non installata: pip install requests")
+        self.model = model or self.DEFAULT_MODEL
+        self.host  = (host or self.DEFAULT_HOST).rstrip("/")
+        self._check_connection()
+
+    def _check_connection(self):
+        """Verifica che Ollama sia raggiungibile e il modello sia disponibile."""
+        try:
+            r = self._requests.get(f"{self.host}/api/tags", timeout=5)
+            r.raise_for_status()
+            available = [m["name"] for m in r.json().get("models", [])]
+            matches = [m for m in available if self.model.split(":")[0] in m]
+            if not matches:
+                print(
+                    f"\n  [ollama] Modello '{self.model}' non trovato tra i modelli installati.\n"
+                    f"  Modelli disponibili: {', '.join(available) or 'nessuno'}\n"
+                    f"  Installa con: ollama pull {self.model}"
+                )
+        except Exception as e:
+            print(
+                f"\n  [ollama] Impossibile connettersi a {self.host}: {e}\n"
+                f"  Assicurati che Ollama sia in esecuzione: ollama serve"
+            )
+
+    def describe_image(self, image_data: bytes, ext: str) -> tuple:
+        """Ritorna (titolo, descrizione). titolo può essere None se il parsing fallisce."""
+        b64 = base64.standard_b64encode(image_data).decode("utf-8")
+        payload = {
+            "model":  self.model,
+            "prompt": self._image_prompt(),
+            "images": [b64],
+            "stream": False,
+        }
+
+        def call():
+            r = self._requests.post(
+                f"{self.host}/api/generate", json=payload, timeout=180
+            )
+            r.raise_for_status()
+            return r.json()["response"].strip()
+
+        raw = self._retry(call)
+        if raw.startswith("["):  # messaggio di errore da _retry
+            return None, raw
+        return self._parse_title_description(raw)
+
+    def describe_table(self, rows: List[List[str]]) -> str:
+        if not rows:
+            return "[Tabella vuota]"
+        payload = {
+            "model":  self.model,
+            "prompt": self._table_prompt(rows),
+            "stream": False,
+        }
+
+        def call():
+            r = self._requests.post(
+                f"{self.host}/api/generate", json=payload, timeout=120
+            )
+            r.raise_for_status()
+            return r.json()["response"].strip()
+
+        return self._retry(call)
+
+
 SUPPORTED_BACKENDS = ("anthropic", "ollama")
 
 def create_describer(
@@ -265,6 +346,7 @@ def create_describer(
 # ---------------------------------------------------------------------------
 
 AIDescriber = AnthropicDescriber
+
 
 
 
