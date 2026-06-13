@@ -56,6 +56,8 @@ Backend Gemini rimosso: free tier Google tagliato a dicembre 2025, quota effetti
 - PyMuPDF, pdfplumber, ebooklib, anthropic, Pillow, requests
 
 ## Prossimi step
-- Setup ROCm + Ollama su CachyOS per backend locale
+- rimuovere la scritta p1 dai nomi file, intanto è numerata sbagliata
+- nel file pdf rimuovere le diciture del tipo file: imm vettoriale....
+- aggiungere modalità per modificare a mano i titoli o le descrizioni e uploadarle nei file
 - Test llama3.2-vision su manuali reali
 - Valutare qualità descrizioni rispetto ad Anthropic
