@@ -310,29 +310,6 @@ def _desc_to_slug(description: str, max_words: int = 4) -> str:
     return slug or "img"
 
 
-def _slug_from_description(describer, description: str) -> str:
-    """
-    Genera lo slug per il nome file: prova generate_title() sul describer
-    (titolo breve mirato), con fallback su _desc_to_slug() se non disponibile
-    o se ritorna una stringa vuota/non valida.
-    """
-    title = None
-    if describer is not None and hasattr(describer, "generate_title"):
-        try:
-            title = describer.generate_title(description)
-        except Exception:
-            title = None
-    if title:
-        slug = _title_to_slug(title)
-        if slug:
-            return slug
-    return _desc_to_slug(description)
-
-_NONSTANDARD_CHAR_RE = _noise_re.compile(
-    r'^[\x00-\x1f\x7f-\x9f\ue000-\uf8ff\u2000-\u206f\u2400-\u27ff]+$'
-)
-
-
 def _is_noise_block(spans: list) -> bool:
     """
     Restituisce True se il blocco e quasi certamente rumore decorativo:
@@ -523,10 +500,12 @@ class PDFExtractor:
 
                 description = None
                 if describer and not is_bg:
-                    description = describer.describe_image(img_bytes, ext)
+                    title, description = describer.describe_image(img_bytes, ext)
                     # Rinomina il file usando le prime 4 parole della descrizione
                     if description:
-                        slug = _slug_from_description(describer, description)
+                        slug = _title_to_slug(title) if title else None
+                        if not slug:
+                            slug = _desc_to_slug(description)
                         fname = f"p{page_num+1}_{slug}.{ext}"
                         new_path = self.images_dir / fname
                         # Evita collisioni aggiungendo suffisso numerico
@@ -671,9 +650,11 @@ class PDFExtractor:
             if describer:
                 thumb = self._render_region_as_png(page_num, merged)
                 if thumb:
-                    description = describer.describe_image(thumb, "png")
+                    title, description = describer.describe_image(thumb, "png")
                     if description:
-                        slug = _slug_from_description(describer, description)
+                        slug = _title_to_slug(title) if title else None
+                        if not slug:
+                            slug = _desc_to_slug(description)
                         fname = f"p{page_num+1}_{slug}.svg"
                         new_path = self.vectors_dir / fname
                         counter = 1
@@ -951,6 +932,7 @@ class PDFExtractor:
                 self.doc.close()
             except Exception:
                 pass
+
 
 
 
