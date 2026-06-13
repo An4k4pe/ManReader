@@ -267,40 +267,39 @@ import re as _noise_re
 
 import re as _re_slug
 
+def _title_to_slug(title: str, max_words: int = 3) -> str:
+    """
+    Converte un titolo breve (generato dall'AI tramite generate_title)
+    in uno slug per nome file: minuscolo, solo alfanumerici e trattini.
+    Esempio: "Luna Crescente Ornata" → "luna-crescente-ornata"
+    """
+    clean = []
+    for w in title.strip().split():
+        w_norm = _re_slug.sub(r"[^\w]", "", w, flags=_re_slug.UNICODE).lower()
+        if w_norm:
+            clean.append(w_norm)
+        if len(clean) >= max_words:
+            break
+    slug = "-".join(clean)
+    slug = _re_slug.sub(r"-+", "-", slug).strip("-")
+    return slug
+
+
 def _desc_to_slug(description: str, max_words: int = 4) -> str:
     """
-    Estrae parole contenutistiche dalla descrizione, saltando le aperture
-    generiche dei modelli AI ("Questa è un'illustrazione artistica di...").
-    Esempio: "Questa è un'illustrazione artistica di una luna crescente" → "luna-crescente"
+    Fallback: estrae parole contenutistiche dalla descrizione completa,
+    usato solo se generate_title() non è disponibile o ritorna vuoto.
     """
-    # Frasi introduttive complete da rimuovere (con apostrofi e contrazioni)
-    INTRO_PATTERNS = [
-        r"^questa\s+è\s+un[\'’]illustrazione\s+artistica\s+di\s+",
-        r"^questa\s+è\s+un[\'’]illustrazione\s+di\s+",
-        r"^questa\s+immagine\s+è\s+un[\'’]illustrazione\s+di\s+",
-        r"^questa\s+immagine\s+è\s+",
-        r"^questa\s+illustrazione\s+(mostra|raffigura|rappresenta|ritrae)\s+",
-        r"^questa\s+immagine\s+(mostra|raffigura|rappresenta|ritrae)\s+",
-        r"^l[\'’]immagine\s+mostra\s+",
-        r"^l[\'’]illustrazione\s+(mostra|raffigura)\s+",
-    ]
-    text = description.strip()
-    for pat in INTRO_PATTERNS:
-        new_text = _re_slug.sub(pat, "", text, flags=_re_slug.IGNORECASE)
-        if new_text != text:
-            text = new_text
-            break
-
     SKIP = {
         "questa", "questo", "quest", "l", "la", "lo", "le", "il", "i",
-        "un", "una", "uno", "un'", "l'", "immagine", "illustrazione",
+        "un", "una", "uno", "immagine", "illustrazione",
         "foto", "figura", "disegno", "mostra", "raffigura", "rappresenta",
         "ritrae", "è", "e", "di", "del", "della", "dello", "dei", "degli",
         "delle", "con", "che", "in", "da", "per", "su", "al", "alla",
         "probabilmente", "forse",
     }
     clean = []
-    for w in text.split():
+    for w in description.strip().split():
         w_norm = _re_slug.sub(r"[^\w]", "", w, flags=_re_slug.UNICODE).lower()
         if w_norm and w_norm not in SKIP:
             clean.append(w_norm)
@@ -309,6 +308,25 @@ def _desc_to_slug(description: str, max_words: int = 4) -> str:
     slug = "-".join(clean)
     slug = _re_slug.sub(r"-+", "-", slug).strip("-")
     return slug or "img"
+
+
+def _slug_from_description(describer, description: str) -> str:
+    """
+    Genera lo slug per il nome file: prova generate_title() sul describer
+    (titolo breve mirato), con fallback su _desc_to_slug() se non disponibile
+    o se ritorna una stringa vuota/non valida.
+    """
+    title = None
+    if describer is not None and hasattr(describer, "generate_title"):
+        try:
+            title = describer.generate_title(description)
+        except Exception:
+            title = None
+    if title:
+        slug = _title_to_slug(title)
+        if slug:
+            return slug
+    return _desc_to_slug(description)
 
 _NONSTANDARD_CHAR_RE = _noise_re.compile(
     r'^[\x00-\x1f\x7f-\x9f\ue000-\uf8ff\u2000-\u206f\u2400-\u27ff]+$'
@@ -508,7 +526,7 @@ class PDFExtractor:
                     description = describer.describe_image(img_bytes, ext)
                     # Rinomina il file usando le prime 4 parole della descrizione
                     if description:
-                        slug = _desc_to_slug(description, max_words=4)
+                        slug = _slug_from_description(describer, description)
                         fname = f"p{page_num+1}_{slug}.{ext}"
                         new_path = self.images_dir / fname
                         # Evita collisioni aggiungendo suffisso numerico
@@ -655,7 +673,7 @@ class PDFExtractor:
                 if thumb:
                     description = describer.describe_image(thumb, "png")
                     if description:
-                        slug = _desc_to_slug(description, max_words=4)
+                        slug = _slug_from_description(describer, description)
                         fname = f"p{page_num+1}_{slug}.svg"
                         new_path = self.vectors_dir / fname
                         counter = 1
