@@ -47,6 +47,11 @@ class BaseDescriber(ABC):
         """Ritorna una descrizione testuale della tabella."""
         ...
 
+    @abstractmethod
+    def generate_title(self, description: str) -> str:
+        """Genera un titolo breve (max 3 parole) da una descrizione già prodotta."""
+        ...
+
     # Utility condivisa: costruisce il prompt immagine
     def _image_prompt(self) -> str:
         return (
@@ -56,6 +61,16 @@ class BaseDescriber(ABC):
             f"personaggio, creatura, equipaggiamento, scenario, ecc.), "
             f"il suo probabile scopo nel manuale, e qualsiasi informazione "
             f"rilevante per un giocatore/master che ne abbia bisogno come riferimento."
+        )
+
+    # Utility condivisa: prompt per generare un titolo breve da una descrizione
+    def _title_prompt(self, description: str) -> str:
+        return (
+            f"Genera un titolo breve di massimo 3 parole in {self.language} "
+            f"che riassuma il soggetto principale di questa descrizione. "
+            f"Rispondi SOLO con il titolo, senza punteggiatura, virgolette, "
+            f"articoli (il/la/un/una) o spiegazioni aggiuntive.\n\n"
+            f"Descrizione: {description}"
         )
 
     # Utility condivisa: costruisce il prompt tabella
@@ -170,6 +185,15 @@ class AnthropicDescriber(BaseDescriber):
             messages=[{"role": "user", "content": prompt}],
         ).content[0].text.strip())
 
+    def generate_title(self, description: str) -> str:
+        """Genera un titolo breve (max 3 parole) da una descrizione già prodotta."""
+        prompt = self._title_prompt(description)
+        return self._retry(lambda: self.client.messages.create(
+            model=self.MODEL,
+            max_tokens=20,
+            messages=[{"role": "user", "content": prompt}],
+        ).content[0].text.strip())
+
 
 # ---------------------------------------------------------------------------
 # Backend Google Gemini — RIMOSSO
@@ -256,6 +280,23 @@ class OllamaDescriber(BaseDescriber):
 
         return self._retry(call)
 
+    def generate_title(self, description: str) -> str:
+        """Genera un titolo breve (max 3 parole) da una descrizione già prodotta."""
+        payload = {
+            "model":  self.model,
+            "prompt": self._title_prompt(description),
+            "stream": False,
+        }
+
+        def call():
+            r = self._requests.post(
+                f"{self.host}/api/generate", json=payload, timeout=60
+            )
+            r.raise_for_status()
+            return r.json()["response"].strip()
+
+        return self._retry(call)
+
 
 # ---------------------------------------------------------------------------
 # Factory function — punto di ingresso unico per main.py
@@ -313,6 +354,7 @@ def create_describer(
 # ---------------------------------------------------------------------------
 
 AIDescriber = AnthropicDescriber
+
 
 
 
