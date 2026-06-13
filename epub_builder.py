@@ -328,7 +328,7 @@ class EPUBBuilder:
 
         note_link = ""
         if img.description and note_id:
-            note_link = f' <a href="#note-{note_id}" id="ref-{note_id}" class="note-ref">[&#128444;]</a>'
+            note_link = f' <a href="#note-{note_id}" id="ref-{note_id}" class="note-ref">[nota]</a>'
 
         return (
             f'<div class="asset-ref-block">\n'
@@ -346,7 +346,7 @@ class EPUBBuilder:
 
         note_link = ""
         if vec.description and note_id:
-            note_link = f' <a href="#note-{note_id}" id="ref-{note_id}" class="note-ref">[&#9672;]</a>'
+            note_link = f' <a href="#note-{note_id}" id="ref-{note_id}" class="note-ref">[nota]</a>'
 
         return (
             f'<div class="asset-ref-block">\n'
@@ -595,4 +595,5 @@ a.note-backref { text-decoration: none; color: #2a6ebb; font-size: 0.85em; }
             f'<body>\n{body}\n</body>\n'
             '</html>'
         )
+
 
