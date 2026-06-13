@@ -270,18 +270,37 @@ import re as _re_slug
 def _desc_to_slug(description: str, max_words: int = 4) -> str:
     """
     Estrae parole contenutistiche dalla descrizione, saltando le aperture
-    generiche dei modelli AI ("Questa illustrazione mostra un...").
-    Esempio: "Questa illustrazione mostra un emblema lunare" → "emblema-lunare"
+    generiche dei modelli AI ("Questa è un'illustrazione artistica di...").
+    Esempio: "Questa è un'illustrazione artistica di una luna crescente" → "luna-crescente"
     """
+    # Frasi introduttive complete da rimuovere (con apostrofi e contrazioni)
+    INTRO_PATTERNS = [
+        r"^questa\s+è\s+un[\'’]illustrazione\s+artistica\s+di\s+",
+        r"^questa\s+è\s+un[\'’]illustrazione\s+di\s+",
+        r"^questa\s+immagine\s+è\s+un[\'’]illustrazione\s+di\s+",
+        r"^questa\s+immagine\s+è\s+",
+        r"^questa\s+illustrazione\s+(mostra|raffigura|rappresenta|ritrae)\s+",
+        r"^questa\s+immagine\s+(mostra|raffigura|rappresenta|ritrae)\s+",
+        r"^l[\'’]immagine\s+mostra\s+",
+        r"^l[\'’]illustrazione\s+(mostra|raffigura)\s+",
+    ]
+    text = description.strip()
+    for pat in INTRO_PATTERNS:
+        new_text = _re_slug.sub(pat, "", text, flags=_re_slug.IGNORECASE)
+        if new_text != text:
+            text = new_text
+            break
+
     SKIP = {
         "questa", "questo", "quest", "l", "la", "lo", "le", "il", "i",
-        "un", "una", "uno", "immagine", "illustrazione", "foto", "figura",
-        "disegno", "mostra", "raffigura", "rappresenta", "ritrae",
-        "e", "di", "del", "della", "dello", "dei", "degli", "delle",
-        "con", "che", "in", "da", "per", "su", "al", "alla",
+        "un", "una", "uno", "un'", "l'", "immagine", "illustrazione",
+        "foto", "figura", "disegno", "mostra", "raffigura", "rappresenta",
+        "ritrae", "è", "e", "di", "del", "della", "dello", "dei", "degli",
+        "delle", "con", "che", "in", "da", "per", "su", "al", "alla",
+        "probabilmente", "forse",
     }
     clean = []
-    for w in description.strip().split():
+    for w in text.split():
         w_norm = _re_slug.sub(r"[^\w]", "", w, flags=_re_slug.UNICODE).lower()
         if w_norm and w_norm not in SKIP:
             clean.append(w_norm)
@@ -914,6 +933,7 @@ class PDFExtractor:
                 self.doc.close()
             except Exception:
                 pass
+
 
 
 
