@@ -506,12 +506,12 @@ class PDFExtractor:
                         slug = _title_to_slug(title) if title else None
                         if not slug:
                             slug = _desc_to_slug(description)
-                        fname = f"p{page_num+1}_{slug}.{ext}"
+                        fname = f"{slug}.{ext}"
                         new_path = self.images_dir / fname
                         # Evita collisioni aggiungendo suffisso numerico
                         counter = 1
                         while new_path.exists():
-                            fname = f"p{page_num+1}_{slug}_{counter}.{ext}"
+                            fname = f"{slug}_{counter}.{ext}"
                             new_path = self.images_dir / fname
                             counter += 1
                         save_path.rename(new_path)
@@ -655,11 +655,11 @@ class PDFExtractor:
                         slug = _title_to_slug(title) if title else None
                         if not slug:
                             slug = _desc_to_slug(description)
-                        fname = f"p{page_num+1}_{slug}.svg"
+                        fname = f"{slug}.svg"
                         new_path = self.vectors_dir / fname
                         counter = 1
                         while new_path.exists():
-                            fname = f"p{page_num+1}_{slug}_{counter}.svg"
+                            fname = f"{slug}_{counter}.svg"
                             new_path = self.vectors_dir / fname
                             counter += 1
                         save_path.rename(new_path)
@@ -932,6 +932,7 @@ class PDFExtractor:
                 self.doc.close()
             except Exception:
                 pass
+
 
 
 
