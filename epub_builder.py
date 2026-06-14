@@ -246,14 +246,16 @@ class EPUBBuilder:
                     note_id = None
                     if elem.description:
                         note_id = _next_note_id(fname)
-                        note_entries.append((note_id, fname, elem.description, "Immagine raster"))
+                        path_ref = f"{self.extracted_dir}/images/{fname}"
+                        note_entries.append((note_id, fname, path_ref, elem.description, "Immagine raster"))
                     parts.append(self._render_image(elem, note_id=note_id))
                 elif kind == "vector":
                     fname = Path(elem.saved_path).name if elem.saved_path else f"vec_{elem.index+1}"
                     note_id = None
                     if elem.description:
                         note_id = _next_note_id(fname)
-                        note_entries.append((note_id, fname, elem.description, "Illustrazione vettoriale"))
+                        path_ref = f"{self.extracted_dir}/vectors/{fname}"
+                        note_entries.append((note_id, fname, path_ref, elem.description, "Illustrazione vettoriale"))
                     parts.append(self._render_vector(elem, note_id=note_id))
                 elif kind == "table":
                     parts.append(self._render_table(elem))
@@ -263,12 +265,12 @@ class EPUBBuilder:
         # Aggiungi sezione note a fine capitolo se ci sono descrizioni
         if note_entries:
             notes_html = ['<div class="notes-section"><h4>Note alle illustrazioni</h4><ol>']
-            for note_id, fname, desc, kind_label in note_entries:
+            for note_id, fname, path_ref, desc, kind_label in note_entries:
                 esc_desc = html.escape(desc)
-                esc_fname = html.escape(fname)
+                esc_path = html.escape(path_ref)
                 notes_html.append(
                     f'<li id="note-{note_id}">'
-                    f'<span class="note-fname">{kind_label} — <code>{esc_fname}</code></span> '
+                    f'<span class="note-fname">{kind_label} — <code>{esc_path}</code></span> '
                     f'<a href="#ref-{note_id}" class="note-backref">↩</a><br/>'
                     f'{esc_desc}'
                     f'</li>'
@@ -320,44 +322,37 @@ class EPUBBuilder:
 
     def _render_image(self, img: ImageBlock, note_id: str = None) -> str:
         """
-        Blocco di riferimento per immagine raster.
-        Se la descrizione AI è disponibile, aggiunge un link [📷] alla nota a fine capitolo.
+        Riferimento inline a immagine raster: una riga compatta.
+        Se la descrizione AI è disponibile, il nome è un link alla nota
+        a fine capitolo (che contiene path completo e descrizione).
+        Senza descrizione, mostra solo icona + nome file (nessun link).
         """
         fname = Path(img.saved_path).name if img.saved_path else f"img_{img.index+1}.{img.ext}"
-        ref   = html.escape(f"{self.extracted_dir}/images/{fname}")
+        short = Path(fname).stem
 
         if img.description and note_id:
-            short = Path(fname).stem
             label = f'<a href="#note-{note_id}" id="ref-{note_id}" class="note-ref">&#128444; {html.escape(short)}</a>'
         else:
-            label = f"&#128444; {html.escape(Path(fname).stem)}"
+            label = f"&#128444; {html.escape(short)}"
 
-        return (
-            f'<div class="asset-ref-block">\n'
-            f'  <p class="asset-label">{label}</p>\n'
-            f'  <p class="asset-path"><code>{ref}</code></p>\n'
-            f'</div>'
-        )
+        return f'<p class="asset-ref">{label}</p>'
 
     def _render_vector(self, vec: VectorBlock, note_id: str = None) -> str:
         """
-        Blocco di riferimento per illustrazione vettoriale (SVG).
+        Riferimento inline a illustrazione vettoriale: una riga compatta.
+        Se la descrizione AI è disponibile, il nome è un link alla nota
+        a fine capitolo (che contiene path completo e descrizione).
+        Senza descrizione, mostra solo icona + nome file (nessun link).
         """
         fname = Path(vec.saved_path).name if vec.saved_path else f"vec_{vec.index+1}.svg"
-        ref   = html.escape(f"{self.extracted_dir}/vectors/{fname}")
+        short = Path(fname).stem
 
         if vec.description and note_id:
-            short = Path(fname).stem
             label = f'<a href="#note-{note_id}" id="ref-{note_id}" class="note-ref">&#9672; {html.escape(short)}</a>'
         else:
-            label = f"&#9672; {html.escape(Path(fname).stem)}"
+            label = f"&#9672; {html.escape(short)}"
 
-        return (
-            f'<div class="asset-ref-block">\n'
-            f'  <p class="asset-label">{label}</p>\n'
-            f'  <p class="asset-path"><code>{ref}</code></p>\n'
-            f'</div>'
-        )
+        return f'<p class="asset-ref">{label}</p>'
 
     def _render_table(self, tbl: TableBlock) -> str:
         """
@@ -516,36 +511,17 @@ p.toc-l2 { margin: 0.2em 0 0.2em 1.5em; font-size: 0.95em; }
 p.toc-l3 { margin: 0.1em 0 0.1em 3em; font-size: 0.9em; color: #444; }
 p.toc-l1 a, p.toc-l2 a, p.toc-l3 a { text-decoration: none; color: inherit; }
 
-/* Blocchi di riferimento asset */
-div.asset-ref-block {
-    margin: 1em 0;
-    padding: 0.5em 0.8em;
-    border-left: 3px solid #999;
-    background: transparent;
-    page-break-inside: avoid;
-}
-p.asset-label {
-    font-size: 0.8em;
-    font-weight: bold;
-    color: #555;
-    margin: 0 0 0.2em;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-p.asset-path {
-    margin: 0.1em 0;
+/* Riferimenti inline ad asset (immagini/vettoriali): una riga compatta */
+p.asset-ref {
+    margin: 0.3em 0;
     font-size: 0.85em;
+    color: #555;
 }
-p.asset-path code {
-    font-family: "Courier New", monospace;
-    font-size: 0.9em;
-    word-break: break-all;
-}
-p.asset-desc {
-    margin: 0.3em 0 0;
-    font-size: 0.88em;
-    font-style: italic;
-    color: #333;
+p.asset-ref a.note-ref {
+    text-decoration: none;
+    color: #2a6ebb;
+    vertical-align: baseline;
+    font-size: 1em;
 }
 
 /* Tabelle */
@@ -573,7 +549,6 @@ td {
 }
 tr:nth-child(even) td { background-color: #f2f2f2; }
 /* Note alle illustrazioni */
-a.note-ref { font-size: 0.8em; vertical-align: super; text-decoration: none; color: #2a6ebb; }
 div.notes-section { border-top: 1px solid #ccc; margin-top: 2em; padding-top: 1em; }
 div.notes-section h4 { font-size: 0.9em; color: #666; margin-bottom: 0.5em; }
 div.notes-section ol { font-size: 0.82em; line-height: 1.5; padding-left: 1.5em; }
@@ -599,6 +574,7 @@ a.note-backref { text-decoration: none; color: #2a6ebb; font-size: 0.85em; }
             f'<body>\n{body}\n</body>\n'
             '</html>'
         )
+
 
 
 
