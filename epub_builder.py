@@ -246,14 +246,14 @@ class EPUBBuilder:
                     note_id = None
                     if elem.description:
                         note_id = _next_note_id(fname)
-                        note_entries.append((note_id, fname, elem.description))
+                        note_entries.append((note_id, fname, elem.description, "Immagine raster"))
                     parts.append(self._render_image(elem, note_id=note_id))
                 elif kind == "vector":
                     fname = Path(elem.saved_path).name if elem.saved_path else f"vec_{elem.index+1}"
                     note_id = None
                     if elem.description:
                         note_id = _next_note_id(fname)
-                        note_entries.append((note_id, fname, elem.description))
+                        note_entries.append((note_id, fname, elem.description, "Illustrazione vettoriale"))
                     parts.append(self._render_vector(elem, note_id=note_id))
                 elif kind == "table":
                     parts.append(self._render_table(elem))
@@ -263,12 +263,12 @@ class EPUBBuilder:
         # Aggiungi sezione note a fine capitolo se ci sono descrizioni
         if note_entries:
             notes_html = ['<div class="notes-section"><h4>Note alle illustrazioni</h4><ol>']
-            for note_id, fname, desc in note_entries:
+            for note_id, fname, desc, kind_label in note_entries:
                 esc_desc = html.escape(desc)
                 esc_fname = html.escape(fname)
                 notes_html.append(
                     f'<li id="note-{note_id}">'
-                    f'<span class="note-fname"><code>{esc_fname}</code></span> '
+                    f'<span class="note-fname">{kind_label} — <code>{esc_fname}</code></span> '
                     f'<a href="#ref-{note_id}" class="note-backref">↩</a><br/>'
                     f'{esc_desc}'
                     f'</li>'
@@ -326,14 +326,15 @@ class EPUBBuilder:
         fname = Path(img.saved_path).name if img.saved_path else f"img_{img.index+1}.{img.ext}"
         ref   = html.escape(f"{self.extracted_dir}/images/{fname}")
 
-        note_link = ""
         if img.description and note_id:
             short = Path(fname).stem
-            note_link = f' <a href="#note-{note_id}" id="ref-{note_id}" class="note-ref">[{html.escape(short)}]</a>'
+            label = f'<a href="#note-{note_id}" id="ref-{note_id}" class="note-ref">&#128444; {html.escape(short)}</a>'
+        else:
+            label = f"&#128444; {html.escape(Path(fname).stem)}"
 
         return (
             f'<div class="asset-ref-block">\n'
-            f'  <p class="asset-label">&#128444; Immagine raster{note_link}</p>\n'
+            f'  <p class="asset-label">{label}</p>\n'
             f'  <p class="asset-path"><code>{ref}</code></p>\n'
             f'</div>'
         )
@@ -345,14 +346,15 @@ class EPUBBuilder:
         fname = Path(vec.saved_path).name if vec.saved_path else f"vec_{vec.index+1}.svg"
         ref   = html.escape(f"{self.extracted_dir}/vectors/{fname}")
 
-        note_link = ""
         if vec.description and note_id:
             short = Path(fname).stem
-            note_link = f' <a href="#note-{note_id}" id="ref-{note_id}" class="note-ref">[{html.escape(short)}]</a>'
+            label = f'<a href="#note-{note_id}" id="ref-{note_id}" class="note-ref">&#9672; {html.escape(short)}</a>'
+        else:
+            label = f"&#9672; {html.escape(Path(fname).stem)}"
 
         return (
             f'<div class="asset-ref-block">\n'
-            f'  <p class="asset-label">&#9672; Illustrazione vettoriale{note_link}</p>\n'
+            f'  <p class="asset-label">{label}</p>\n'
             f'  <p class="asset-path"><code>{ref}</code></p>\n'
             f'</div>'
         )
@@ -597,6 +599,7 @@ a.note-backref { text-decoration: none; color: #2a6ebb; font-size: 0.85em; }
             f'<body>\n{body}\n</body>\n'
             '</html>'
         )
+
 
 
 
