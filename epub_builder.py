@@ -57,7 +57,8 @@ def _anchor_id(text: str) -> str:
 
 
 class EPUBBuilder:
-    def __init__(self, config: LayoutConfig, title: str, author: str = ""):
+    def __init__(self, config: LayoutConfig, title: str, author: str = "",
+                 asset_index=None):
         self.config = config
         self.title = title
         self.author = author
@@ -65,6 +66,8 @@ class EPUBBuilder:
         self.out_dir.mkdir(parents=True, exist_ok=True)
         # Nome cartella estratti (solo il nome, non il path completo)
         self.extracted_dir = "extracted"
+        # Asset index opzionale: se presente, usa titoli leggibili nell'inline
+        self._asset_index = asset_index
 
     # -----------------------------------------------------------------------
     # Entry point
@@ -323,34 +326,55 @@ class EPUBBuilder:
     def _render_image(self, img: ImageBlock, note_id: str = None) -> str:
         """
         Riferimento inline a immagine raster: una riga compatta.
-        Se la descrizione AI è disponibile, il nome è un link alla nota
-        a fine capitolo (che contiene path completo e descrizione).
-        Senza descrizione, mostra solo icona + nome file (nessun link).
+        Il testo visibile usa il titolo leggibile dall'asset_index (se disponibile),
+        altrimenti cade back allo stem del filename.
+        Il nome del file appare solo nella footnote.
         """
         fname = Path(img.saved_path).name if img.saved_path else f"img_{img.index+1}.{img.ext}"
-        short = Path(fname).stem
+
+        # Preferisce il titolo leggibile dall'index rispetto allo stem del file
+        display_title = None
+        if self._asset_index and img.saved_path:
+            import hashlib as _hl
+            try:
+                sha = _hl.md5(Path(img.saved_path).read_bytes()).hexdigest()
+                display_title = self._asset_index.get_title(sha)
+            except Exception:
+                pass
+        if not display_title:
+            display_title = Path(fname).stem
 
         if img.description and note_id:
-            label = f'<a href="#note-{note_id}" id="ref-{note_id}" class="note-ref">&#128444; {html.escape(short)}</a>'
+            label = f'<a href="#note-{note_id}" id="ref-{note_id}" class="note-ref">&#128444; {html.escape(display_title)}</a>'
         else:
-            label = f"&#128444; {html.escape(short)}"
+            label = f"&#128444; {html.escape(display_title)}"
 
         return f'<p class="asset-ref">{label}</p>'
 
     def _render_vector(self, vec: VectorBlock, note_id: str = None) -> str:
         """
         Riferimento inline a illustrazione vettoriale: una riga compatta.
-        Se la descrizione AI è disponibile, il nome è un link alla nota
-        a fine capitolo (che contiene path completo e descrizione).
-        Senza descrizione, mostra solo icona + nome file (nessun link).
+        Il testo visibile usa il titolo leggibile dall'asset_index (se disponibile),
+        altrimenti cade back allo stem del filename.
+        Il nome del file appare solo nella footnote.
         """
         fname = Path(vec.saved_path).name if vec.saved_path else f"vec_{vec.index+1}.svg"
-        short = Path(fname).stem
+
+        display_title = None
+        if self._asset_index and vec.saved_path:
+            import hashlib as _hl
+            try:
+                sha = _hl.md5(Path(vec.saved_path).read_bytes()).hexdigest()
+                display_title = self._asset_index.get_title(sha)
+            except Exception:
+                pass
+        if not display_title:
+            display_title = Path(fname).stem
 
         if vec.description and note_id:
-            label = f'<a href="#note-{note_id}" id="ref-{note_id}" class="note-ref">&#9672; {html.escape(short)}</a>'
+            label = f'<a href="#note-{note_id}" id="ref-{note_id}" class="note-ref">&#9672; {html.escape(display_title)}</a>'
         else:
-            label = f"&#9672; {html.escape(short)}"
+            label = f"&#9672; {html.escape(display_title)}"
 
         return f'<p class="asset-ref">{label}</p>'
 
@@ -574,6 +598,7 @@ a.note-backref { text-decoration: none; color: #2a6ebb; font-size: 0.85em; }
             f'<body>\n{body}\n</body>\n'
             '</html>'
         )
+
 
 
 
