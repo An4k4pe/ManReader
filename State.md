@@ -80,3 +80,5 @@ Backend Anthropic rimosso in sessione precedente.
 - Test asset_manager su EPUB reale con rename
 - Aggiungere epub:type alle footnote (standard EPUB)
 - Valutare qualità descrizioni gemma4:12b su manuali reali
+- gestire i box o simili, se non sono già gestiti come callout o note in linea
+- creare una versione markdown del manuale strippato con link alle immagini e/o descrizione 
