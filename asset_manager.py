@@ -1,33 +1,40 @@
 """
-asset_manager.py — Applica le modifiche manuali dell'asset_index.csv all'EPUB.
+ManReader — asset_manager: applica modifiche dall'asset_index.csv all'EPUB.
 
-Uso:
+USO
   python asset_manager.py <cartella_output>
 
-Dove <cartella_output> è la directory che contiene l'EPUB e la cartella
-extracted/, es:
+ESEMPI
   python asset_manager.py output/NomePDF/
+  python asset_manager.py output/DnD5e_Players_Handbook/
 
-Flusso:
-  1. Legge extracted/asset_index.csv
-  2. Trova le entry con modificato=si
-  3. Per i rename (nome_file diverso dal file attuale su disco):
-     - Rinomina il file fisico nella sottocartella giusta (images/, vectors/, tables/)
-  4. Apre i file .xhtml dell'EPUB e aggiorna:
-     - Il testo visibile inline (titolo leggibile)
-     - Il path nella footnote (nome file aggiornato)
-  5. Resetta modificato=no nelle entry già applicate
+FLUSSO
+  1. Legge extracted/asset_index.csv nella cartella indicata.
+  2. Trova le entry con  modificato=si  (modificate manualmente nel CSV).
+  3. Rinomina i file fisici nella sottocartella corretta (images/vectors/tables/).
+  4. Aggiorna i file .xhtml dell'EPUB: titolo visibile inline e path in footnote.
+  5. Resetta  modificato=no  nelle entry applicate e salva il CSV.
 
-Il CSV usa il SHA come chiave stabile: il rename non rompe il tracciamento.
+COME MODIFICARE UN ASSET
+  1. Apri  extracted/asset_index.csv  con qualsiasi editor o foglio di calcolo.
+  2. Modifica  nome_file  e/o  titolo  nella riga dell'asset da rinominare.
+  3. Imposta  modificato=si  su quella riga.
+  4. Salva il CSV ed esegui questo script.
+
+NOTE
+  - Il campo  sha  è la chiave stabile: il rename non lo modifica.
+  - La ricerca del file su disco avviene per SHA, non per nome:
+    funziona anche se il file era già stato rinominato a mano.
+  - Le entry con  modificato=no  vengono ignorate.
 """
 
+import argparse
 import csv
 import re
-import shutil
 import sys
 import zipfile
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 
 # ---------------------------------------------------------------------------
@@ -181,12 +188,35 @@ def _replace_in_asset_context(html_text: str, old_title: str, new_title: str) ->
 # ---------------------------------------------------------------------------
 
 def main():
-    if len(sys.argv) < 2:
-        print("Uso: python asset_manager.py <cartella_output>")
-        print("  Es: python asset_manager.py output/NomePDF/")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        prog="asset_manager",
+        description="Applica modifiche dall'asset_index.csv all'EPUB già buildato.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+        add_help=False,
+    )
+    parser.add_argument(
+        "-h", "--help", action="help", default=argparse.SUPPRESS,
+        help="Mostra questo messaggio ed esci.",
+    )
+    parser.add_argument(
+        "output_dir", metavar="CARTELLA",
+        help=(
+            "Cartella di output che contiene l'EPUB e la sottocartella extracted/. "
+            "Esempio: output/NomePDF/"
+        ),
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true",
+        help=(
+            "Mostra cosa verrebbe fatto senza applicare nessuna modifica. "
+            "Utile per verificare prima di procedere."
+        ),
+    )
 
-    out_dir = Path(sys.argv[1])
+    args = parser.parse_args()
+
+    out_dir = Path(args.output_dir)
     extracted_dir = out_dir / "extracted"
     index_path = extracted_dir / "asset_index.csv"
 
@@ -198,6 +228,9 @@ def main():
     if len(epub_files) > 1:
         print(f"  [warn] Trovati più EPUB, uso il primo: {epub_files[0].name}")
     epub_path = epub_files[0]
+
+    if args.dry_run:
+        print(f"\n  [dry-run] Nessuna modifica verrà applicata.\n")
 
     print(f"\n  EPUB:  {epub_path}")
     print(f"  Index: {index_path}")
@@ -215,9 +248,9 @@ def main():
     errors = 0
 
     for entry in protected:
-        sha      = entry["sha"].strip()
-        new_name = entry["nome_file"].strip()
-        tipo     = entry["tipo"].strip()
+        sha       = entry["sha"].strip()
+        new_name  = entry["nome_file"].strip()
+        tipo      = entry["tipo"].strip()
         new_title = entry["titolo"].strip() or Path(new_name).stem
 
         subdir = extracted_dir / _SUBDIR.get(tipo, "images")
@@ -230,12 +263,14 @@ def main():
             continue
 
         old_name  = current_file.name
-        old_title = Path(old_name).stem  # il titolo precedente era lo stem del file
+        old_title = Path(old_name).stem
 
         # --- Rename fisico se il nome è cambiato ---
         if old_name != new_name:
             new_path = subdir / new_name
-            if new_path.exists() and new_path != current_file:
+            if args.dry_run:
+                print(f"  [dry-run] Rinominerebbe: {old_name} → {new_name}")
+            elif new_path.exists() and new_path != current_file:
                 print(f"  [warn] {new_name} già esiste su disco, skip rename fisico")
             else:
                 current_file.rename(new_path)
@@ -244,22 +279,32 @@ def main():
             print(f"  · Nome invariato: {old_name}")
 
         # --- Patch EPUB ---
-        n = patch_epub(epub_path, old_name, new_name, old_title, new_title, tipo)
-        if n > 0:
-            print(f"    ✓ EPUB aggiornato ({n} capitoli modificati)")
+        if args.dry_run:
+            print(f"    [dry-run] Aggiornerebbe EPUB: '{old_title}' → '{new_title}', "
+                  f"path {old_name} → {new_name}")
         else:
-            print(f"    · Nessuna occorrenza trovata nell'EPUB (normale se l'asset non aveva descrizione AI)")
+            n = patch_epub(epub_path, old_name, new_name, old_title, new_title, tipo)
+            if n > 0:
+                print(f"    ✓ EPUB aggiornato ({n} capitoli modificati)")
+            else:
+                print(f"    · Nessuna occorrenza trovata nell'EPUB "
+                      f"(normale se l'asset non aveva descrizione AI)")
 
-        # Resetta il flag: modifica applicata
-        entry["modificato"] = "no"
+        # Resetta il flag solo se non dry-run
+        if not args.dry_run:
+            entry["modificato"] = "no"
         applied += 1
 
     # Salva il CSV aggiornato
-    save_index(index_path, entries)
+    if not args.dry_run:
+        save_index(index_path, entries)
 
     print(f"\n{'='*50}")
-    print(f"  Applicate: {applied}  Errori: {errors}")
-    print(f"  asset_index.csv aggiornato.")
+    if args.dry_run:
+        print(f"  [dry-run] Sarebbero state applicate: {applied}  Errori: {errors}")
+    else:
+        print(f"  Applicate: {applied}  Errori: {errors}")
+        print(f"  asset_index.csv aggiornato.")
     print(f"{'='*50}\n")
 
 
