@@ -37,7 +37,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).parent))
 
 from config import LayoutConfig
-from extractor import PDFExtractor
+from extractor import PDFExtractor, AssetIndex
 from epub_builder import EPUBBuilder
 
 
@@ -283,6 +283,28 @@ def main():
     extractor = PDFExtractor(pdf_path, config)
     total_pages = extractor.page_count
 
+    # Controlla se esiste già un asset_index.csv con modifiche manuali
+    index_status = extractor.check_existing_index()
+    if index_status == "protected":
+        print("\n  [!] asset_index.csv esistente contiene entry modificate manualmente.")
+        print("      Opzioni:")
+        print("      [m] Merge — mantieni le entry modificate, aggiorna le altre (consigliato)")
+        print("      [s] Sovrascrivi — ricrea l'index da zero (perdi le modifiche manuali)")
+        print("      [q] Esci senza procedere")
+        choice = input("  Scelta [m/s/q]: ").strip().lower()
+        if choice == "q":
+            print("  Operazione annullata.")
+            return
+        elif choice == "s":
+            # Resetta l'index: non caricare nulla, verrà riscritto da zero
+            extractor.asset_index = AssetIndex(extractor.asset_index.path)
+            print("  Index verrà sovrascritto.")
+        else:
+            # Merge: l'index è già caricato con le entry protette da check_existing_index
+            print("  Merge: le entry con modificato=si saranno preservate.")
+    elif index_status == "clean":
+        print("  asset_index.csv esistente senza modifiche manuali: verrà aggiornato.")
+
     # Gestione --pages
     page_start, page_end = 0, total_pages
     if args.pages:
@@ -328,8 +350,12 @@ def main():
             print(f"  Rimosse {removed} pagine indice dal corpo (disponibili come TOC navigabile)")
 
     # Build EPUB
+    print("\n  Salvataggio asset index...")
+    extractor.save_index()
+
     print("\n  Costruzione EPUB...")
-    builder = EPUBBuilder(config, title, args.author)
+    builder = EPUBBuilder(config, title, args.author,
+                          asset_index=extractor.asset_index)
     epub_path = builder.build(pages_data, toc=toc)
 
     # Riepilogo finale
@@ -349,6 +375,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
