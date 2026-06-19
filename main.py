@@ -1,28 +1,31 @@
 """
-main.py — CLI per la conversione PDF→EPUB di manuali GDR.
+ManReader — converte PDF di manuali GDR in EPUB per e-reader.
 
-Uso base:
+USO BASE
   python main.py manuale.pdf
 
-Esempi pratici:
-  # Manuale doppia colonna, con descrizioni AI
-  python main.py dnd5e.pdf --columns 2 --title "D&D 5e - Player's Handbook"
+ESEMPI
+  # Conversione standard, layout rilevato automaticamente
+  python main.py dnd5e.pdf --title "D&D 5e - Player's Handbook"
 
-  # Singola colonna, senza AI (più veloce)
-  python main.py pathfinder.pdf --no-ai --title "Pathfinder 2e"
+  # Forza doppia colonna, senza AI (più veloce)
+  python main.py pathfinder.pdf --columns 2 --no-ai
 
-  # Doppia colonna con divisione manuale (0.52 = divisione al 52% della larghezza)
+  # Doppia colonna con divisore manuale al 52% della larghezza pagina
   python main.py manuale.pdf --columns 2 --column-split 0.52
 
-  # Test su prime 10 pagine
+  # Solo prime 10 pagine (test rapido)
   python main.py manuale.pdf --pages 1-10 --no-ai
 
-Variabili d'ambiente:
-  ANTHROPIC_API_KEY=sk-ant-...   (backend anthropic, alternativa a --api-key)
+  # Descrizioni AI via Ollama locale
+  python main.py manuale.pdf --vision-backend ollama --ollama-model gemma4:12b
 
-Backend vision disponibili (--vision-backend):
-  anthropic  — Claude via API Anthropic (a pagamento)
-  ollama     — inferenza locale, nessuna API key (richiede Ollama in esecuzione)
+STRUMENTI COLLEGATI
+  asset_manager.py  — applica rename e modifiche dall'asset_index.csv all'EPUB già buildato
+                      python asset_manager.py output/NomePDF/
+
+VARIABILI D'AMBIENTE
+  ANTHROPIC_API_KEY  — API key Anthropic (alternativa a --api-key)
 """
 
 import argparse
@@ -56,139 +59,158 @@ def _column_type(value: str):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Converti PDF di manuali GDR in EPUB ottimizzato per e-reader",
+        prog="manreader",
+        description="Converti PDF di manuali GDR in EPUB ottimizzato per e-reader.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
+        add_help=False,  # gestiamo -h manualmente per avere sia -h che --help
     )
 
-    parser.add_argument("pdf", help="Path al file PDF da convertire")
+    # Help esplicito: -h e --help
+    parser.add_argument(
+        "-h", "--help", action="help", default=argparse.SUPPRESS,
+        help="Mostra questo messaggio ed esci.",
+    )
 
-    # Metadati
-    meta = parser.add_argument_group("Metadati libro")
-    meta.add_argument("--title", help="Titolo (default: nome file senza estensione)")
-    meta.add_argument("--author", default="", help="Autore del manuale")
+    parser.add_argument("pdf", help="Path al file PDF da convertire.")
 
-    # Layout
-    layout = parser.add_argument_group("Layout pagina")
+    # ── Metadati ────────────────────────────────────────────────────────────
+    meta = parser.add_argument_group("metadati libro")
+    meta.add_argument(
+        "--title",
+        help="Titolo del libro (default: nome file senza estensione).",
+    )
+    meta.add_argument(
+        "--author", default="",
+        help="Autore del manuale (default: vuoto).",
+    )
+
+    # ── Layout ──────────────────────────────────────────────────────────────
+    layout = parser.add_argument_group("layout pagina")
     layout.add_argument(
         "--columns", type=_column_type, default=None, metavar="auto|1|2",
         help=(
-            "Numero di colonne: 1 (forza singola), 2 (forza doppia), "
-            "auto (rileva pagina per pagina). Default: auto."
+            "Colonne di testo: 1 = singola (forza), 2 = doppia (forza), "
+            "auto = rileva pagina per pagina (default)."
         ),
     )
     layout.add_argument(
-        "--column-gap", type=float, default=0.08, metavar="0.0-1.0",
+        "--column-gap", type=float, default=0.08, metavar="N",
         help=(
-            "Soglia gap colonne in modalita auto: frazione della larghezza "
-            "pagina. Default 0.08. Aumenta se rileva doppie colonne per errore; "
-            "abbassa se non rileva doppie colonne reali."
+            "Gap minimo tra colonne in modalità auto, come frazione della "
+            "larghezza pagina (default: 0.08). "
+            "Aumenta se rileva doppie colonne per errore."
         ),
     )
     layout.add_argument(
-        "--column-split", type=float, default=None, metavar="0.0-1.0",
+        "--column-split", type=float, default=None, metavar="N",
         help=(
-            "Posizione manuale del divisore tra colonne, come frazione della "
-            "larghezza pagina. Esempio: 0.5 = metà pagina. "
-            "Se non specificato, viene rilevato automaticamente (solo con --columns 2)."
+            "Punto di divisione manuale tra le colonne (0.0–1.0). "
+            "Esempio: 0.5 = metà pagina. Solo con --columns 2. "
+            "Default: rilevamento automatico."
         ),
     )
     layout.add_argument(
-        "--heading-threshold", type=float, default=1.3, metavar="MULT",
+        "--heading-threshold", type=float, default=1.3, metavar="N",
         help=(
-            "Moltiplicatore font per rilevare i titoli. "
-            "Default 1.3 = font ≥ 130%% della mediana. "
-            "Abbassa se i tuoi titoli sono piccoli; aumenta se rileva troppi falsi titoli."
+            "Moltiplicatore font per identificare i titoli di capitolo. "
+            "Default: 1.3 (= font ≥ 130%% della dimensione mediana). "
+            "Abbassa se i titoli non vengono rilevati; aumenta per ridurre i falsi positivi."
         ),
     )
     layout.add_argument(
         "--min-image-size", type=int, default=80, metavar="PX",
-        help="Dimensione minima (pixel) per includere un'immagine (default: 80)",
+        help="Ignora immagini più piccole di PX pixel (larghezza o altezza). Default: 80.",
     )
 
-    # Funzionalità
-    feat = parser.add_argument_group("Funzionalità")
+    # ── Funzionalità ────────────────────────────────────────────────────────
+    feat = parser.add_argument_group("funzionalità")
     feat.add_argument(
         "--no-tables", action="store_true",
-        help="Non estrarre tabelle (più veloce, utile per test)",
+        help="Non estrarre tabelle.",
     )
     feat.add_argument(
         "--no-vectors", action="store_true",
-        help="Non estrarre illustrazioni vettoriali",
+        help="Non estrarre illustrazioni vettoriali.",
     )
     feat.add_argument(
         "--no-ai", action="store_true",
-        help="Non usare l'AI per descrivere immagini e tabelle",
+        help="Non usare l'AI per descrivere immagini e tabelle. Più veloce.",
     )
     feat.add_argument(
-        "--ai-language", default="italiano",
-        help="Lingua per le descrizioni AI (default: italiano)",
+        "--ai-language", default="italiano", metavar="LINGUA",
+        help="Lingua per le descrizioni AI (default: italiano).",
     )
     feat.add_argument(
         "--no-filter", action="store_true",
-        help="Non rimuovere intestazioni/piè di pagina/filigrane ripetute",
+        help="Non rimuovere header, footer e filigrane ripetute.",
     )
     feat.add_argument(
-        "--header-zone", type=float, default=0.08, metavar="0.0-1.0",
+        "--header-zone", type=float, default=0.08, metavar="N",
         help=(
-            "Altezza della zona header/footer come frazione della pagina. "
-            "Default 0.08 = top e bottom 8%%. Aumenta se le intestazioni "
-            "sono alte; abbassa se i titoli di capitolo venissero rimossi."
+            "Altezza della zona header/footer come frazione della pagina "
+            "(default: 0.08 = top e bottom 8%%). "
+            "Aumenta se le intestazioni sono alte."
         ),
     )
     feat.add_argument(
-        "--repeat-threshold", type=float, default=0.25, metavar="0.0-1.0",
+        "--repeat-threshold", type=float, default=0.25, metavar="N",
         help=(
-            "Soglia ripetizione: testo presente su più di questa frazione "
-            "di pagine viene rimosso. Default 0.25 = >25%% delle pagine."
+            "Soglia ripetizione header/footer: testo presente su più di questa "
+            "frazione di pagine viene rimosso (default: 0.25 = >25%% delle pagine)."
         ),
     )
     feat.add_argument(
         "--keep-toc-pages", action="store_true",
         help=(
-            "Non rimuovere le pagine di indice/sommario dal corpo EPUB. "
-            "Di default vengono rimosse e sostituite con una pagina TOC navigabile."
+            "Mantieni le pagine di indice/sommario nel corpo EPUB. "
+            "Di default vengono rimosse e sostituite con una TOC navigabile."
         ),
     )
     feat.add_argument(
+        "--no-dedup", action="store_true",
+        help="Non eseguire la deduplicazione degli asset grafici ripetuti.",
+    )
+    feat.add_argument(
+        "--auto-background", action="store_true",
+        help="Classifica automaticamente come sfondo gli asset ripetuti (senza prompt interattivo).",
+    )
+    feat.add_argument(
         "--pages", metavar="N o N-M",
-        help="Elabora solo queste pagine, es: '1-20' o '5'. Utile per test.",
+        help="Elabora solo un intervallo di pagine. Esempi: '5', '1-20'. Utile per test.",
     )
 
-    # Output
-    out = parser.add_argument_group("Output")
+    # ── Output ──────────────────────────────────────────────────────────────
+    out = parser.add_argument_group("output")
     out.add_argument(
-        "--output", default="output",
-        help="Cartella di output (default: ./output)",
+        "--output", default="output", metavar="DIR",
+        help="Cartella di destinazione (default: ./output).",
     )
 
-    # AI Vision backend
-    api = parser.add_argument_group("AI Vision backend")
+    # ── AI Vision backend ───────────────────────────────────────────────────
+    api = parser.add_argument_group("AI vision backend")
     api.add_argument(
-        "--vision-backend", default="anthropic",
+        "--vision-backend", default="ollama",
         choices=["anthropic", "ollama"],
         metavar="BACKEND",
         help=(
             "Backend per le descrizioni AI: "
-            "anthropic (default, richiede ANTHROPIC_API_KEY), "
-            "ollama (locale, nessuna API key, richiede Ollama in esecuzione). "
-            "Ignorato se --no-ai è attivo."
+            "ollama (default, locale, nessuna API key), "
+            "anthropic (richiede ANTHROPIC_API_KEY). "
+            "Ignorato con --no-ai."
         ),
     )
     api.add_argument(
-        "--api-key",
-        help=(
-            "API key Anthropic. "
-            "Alternativa alla variabile d'ambiente ANTHROPIC_API_KEY."
-        ),
+        "--api-key", metavar="KEY",
+        help="API key Anthropic (alternativa alla variabile d'ambiente ANTHROPIC_API_KEY).",
     )
     api.add_argument(
-        "--ollama-model", default=None, metavar="NOME",
-        help="Modello Ollama da usare (default: llama3.2-vision). Esempi: llava, bakllava",
+        "--ollama-model", default=None, metavar="MODELLO",
+        help="Modello Ollama da usare (default: gemma4:12b). Esempi: llava, llama3.2-vision.",
     )
     api.add_argument(
         "--ollama-host", default=None, metavar="URL",
-        help="URL server Ollama (default: http://localhost:11434)",
+        help="URL del server Ollama (default: http://localhost:11434).",
     )
 
     return parser.parse_args()
