@@ -22,13 +22,14 @@ Struttura cartelle output:
       tables/    ← tabelle (CSV)
 """
 
+import csv
 import io
 import re as _re
 import statistics
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import hashlib
 import fitz  # PyMuPDF
@@ -122,6 +123,116 @@ class PageData:
     tables: List[TableBlock]
     width: float
     height: float
+
+
+# ---------------------------------------------------------------------------
+# Asset Index — registro CSV di tutti gli asset estratti
+# ---------------------------------------------------------------------------
+
+_INDEX_FIELDS = ["sha", "nome_file", "tipo", "pagina", "titolo", "descrizione", "modificato"]
+
+class AssetIndex:
+    """
+    Registro centrale degli asset estratti, salvato come CSV in
+    _extracted/asset_index.csv.
+
+    Logica di merge su build esistente:
+    - Se il CSV non esiste: creato da zero.
+    - Se esiste e nessuna entry ha modificato=si: sovrascritto senza chiedere.
+    - Se esiste con almeno una entry modificato=si: le entry marcate sono
+      protette; le entry nuove (SHA non presente) vengono aggiunte; le entry
+      con modificato=no vengono aggiornate.
+
+    Il SHA è calcolato sul contenuto binario dell'asset (MD5 hex, già usato
+    per la dedup inline). È la chiave stabile che sopravvive ai rename.
+    """
+
+    def __init__(self, index_path: Path):
+        self.path = index_path
+        # sha -> dict con i campi del CSV
+        self._entries: Dict[str, dict] = {}
+        self._protected: set = set()  # SHA con modificato=si
+        self._loaded = False
+
+    def load(self) -> bool:
+        """
+        Carica il CSV esistente. Restituisce True se esisteva almeno
+        una entry con modificato=si (build protetta).
+        """
+        if not self.path.exists():
+            return False
+        try:
+            with open(self.path, newline="", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    sha = row.get("sha", "").strip()
+                    if not sha:
+                        continue
+                    self._entries[sha] = dict(row)
+                    if row.get("modificato", "no").strip().lower() == "si":
+                        self._protected.add(sha)
+            self._loaded = True
+            return bool(self._protected)
+        except Exception as e:
+            print(f"  [warn] asset_index.csv: errore lettura ({e}), ricreo da zero")
+            return False
+
+    def has_protected(self) -> bool:
+        return bool(self._protected)
+
+    def is_protected(self, sha: str) -> bool:
+        return sha in self._protected
+
+    def get(self, sha: str) -> Optional[dict]:
+        return self._entries.get(sha)
+
+    def add_or_update(self, sha: str, nome_file: str, tipo: str, pagina: int,
+                      titolo: Optional[str], descrizione: Optional[str]) -> None:
+        """
+        Aggiunge una nuova entry o aggiorna una esistente non protetta.
+        Le entry con modificato=si non vengono toccate.
+        """
+        if sha in self._protected:
+            return
+        self._entries[sha] = {
+            "sha": sha,
+            "nome_file": nome_file,
+            "tipo": tipo,
+            "pagina": str(pagina + 1),  # 1-based per leggibilità
+            "titolo": titolo or "",
+            "descrizione": descrizione or "",
+            "modificato": "no",
+        }
+
+    def get_title(self, sha: str) -> Optional[str]:
+        """Restituisce il titolo leggibile (eventualmente modificato dall'utente)."""
+        entry = self._entries.get(sha)
+        if not entry:
+            return None
+        return entry.get("titolo") or None
+
+    def get_description(self, sha: str) -> Optional[str]:
+        """Restituisce la descrizione (eventualmente modificata dall'utente)."""
+        entry = self._entries.get(sha)
+        if not entry:
+            return None
+        return entry.get("descrizione") or None
+
+    def get_current_name(self, sha: str) -> Optional[str]:
+        """Restituisce il nome file corrente (eventualmente rinominato dall'utente)."""
+        entry = self._entries.get(sha)
+        if not entry:
+            return None
+        return entry.get("nome_file") or None
+
+    def save(self) -> None:
+        """Scrive il CSV su disco."""
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with open(self.path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=_INDEX_FIELDS)
+            writer.writeheader()
+            for entry in self._entries.values():
+                writer.writerow(entry)
 
 
 # ---------------------------------------------------------------------------
@@ -370,6 +481,28 @@ class PDFExtractor:
         # Evita di salvare piu volte lo stesso sfondo/texture su pagine diverse
         self._seen_image_hashes: dict = {}
 
+        # Asset index: registro CSV degli asset estratti
+        self.asset_index = AssetIndex(extracted / "asset_index.csv")
+
+    def check_existing_index(self) -> str:
+        """
+        Controlla se esiste già un asset_index.csv con entry protette.
+        Restituisce:
+          'none'      — nessun CSV esistente
+          'clean'     — CSV esiste, nessuna entry modificato=si
+          'protected' — CSV esiste con entry modificato=si (richiede conferma)
+        """
+        if not self.asset_index.path.exists():
+            return "none"
+        has_protected = self.asset_index.load()
+        if has_protected:
+            return "protected"
+        return "clean"
+
+    def save_index(self) -> None:
+        """Salva l'asset_index.csv a fine estrazione."""
+        self.asset_index.save()
+
     def extract_all(self, describer=None) -> List[PageData]:
         pages = []
         with pdfplumber.open(str(self.pdf_path)) as plumb:
@@ -476,14 +609,8 @@ class PDFExtractor:
                 img_hash = hashlib.md5(img_bytes).hexdigest()
                 if img_hash in self._seen_image_hashes:
                     existing_path = self._seen_image_hashes[img_hash]
-                    # Recupera la descrizione già salvata dal .txt della prima occorrenza
-                    cached_desc = None
-                    try:
-                        txt_path = Path(existing_path).with_suffix(".txt")
-                        if txt_path.exists():
-                            cached_desc = txt_path.read_text(encoding="utf-8").strip() or None
-                    except Exception:
-                        pass
+                    # Recupera la descrizione già salvata dall'index
+                    cached_desc = self.asset_index.get_description(img_hash)
                     results.append(ImageBlock(
                         image_data=b"", ext=ext, bbox=bbox,
                         page_num=page_num, index=idx,
@@ -498,6 +625,7 @@ class PDFExtractor:
                 save_path = self.images_dir / fname_tmp
                 save_path.write_bytes(img_bytes)
 
+                title = None
                 description = None
                 if describer and not is_bg:
                     title, description = describer.describe_image(img_bytes, ext)
@@ -516,11 +644,20 @@ class PDFExtractor:
                             counter += 1
                         save_path.rename(new_path)
                         save_path = new_path
-                        save_path.with_suffix(".txt").write_text(description, encoding="utf-8")
                     else:
                         fname = fname_tmp  # mantieni nome numerico se no descrizione
 
                 self._seen_image_hashes[img_hash] = str(save_path)
+
+                # Registra nell'index (non sovrascrive entry protette)
+                self.asset_index.add_or_update(
+                    sha=img_hash,
+                    nome_file=save_path.name,
+                    tipo="image",
+                    pagina=page_num,
+                    titolo=title,
+                    descrizione=description,
+                )
 
                 results.append(ImageBlock(
                     image_data=img_bytes, ext=ext, bbox=bbox,
@@ -646,13 +783,14 @@ class PDFExtractor:
                 continue
 
             # Descrizione AI: renderizza come PNG e invia all'API
+            vec_title = None
             description = None
             if describer:
                 thumb = self._render_region_as_png(page_num, merged)
                 if thumb:
-                    title, description = describer.describe_image(thumb, "png")
+                    vec_title, description = describer.describe_image(thumb, "png")
                     if description:
-                        slug = _title_to_slug(title) if title else None
+                        slug = _title_to_slug(vec_title) if vec_title else None
                         if not slug:
                             slug = _desc_to_slug(description)
                         fname = f"{slug}.svg"
@@ -664,7 +802,17 @@ class PDFExtractor:
                             counter += 1
                         save_path.rename(new_path)
                         save_path = new_path
-                        save_path.with_suffix(".txt").write_text(description, encoding="utf-8")
+
+            # Calcola SHA sul contenuto SVG salvato
+            vec_sha = hashlib.md5(save_path.read_bytes()).hexdigest()
+            self.asset_index.add_or_update(
+                sha=vec_sha,
+                nome_file=save_path.name,
+                tipo="vector",
+                pagina=page_num,
+                titolo=vec_title,
+                descrizione=description,
+            )
 
             results.append(VectorBlock(
                 bbox=bbox_tuple,
@@ -752,7 +900,18 @@ class PDFExtractor:
                 description = None
                 if describer:
                     description = describer.describe_table(rows)
-                    save_path.with_suffix(".txt").write_text(description, encoding="utf-8")
+
+                # SHA sul contenuto CSV
+                csv_bytes = open(save_path, "rb").read()
+                tbl_sha = hashlib.md5(csv_bytes).hexdigest()
+                self.asset_index.add_or_update(
+                    sha=tbl_sha,
+                    nome_file=save_path.name,
+                    tipo="table",
+                    pagina=page_num,
+                    titolo=None,
+                    descrizione=description,
+                )
 
                 results.append(TableBlock(
                     rows=rows, bbox=bbox,
@@ -932,6 +1091,7 @@ class PDFExtractor:
                 self.doc.close()
             except Exception:
                 pass
+
 
 
 
