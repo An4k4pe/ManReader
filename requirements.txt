@@ -1,10 +1,8 @@
 PyMuPDF>=1.23.0
 pdfplumber>=0.10.0
 EbookLib>=0.18
-anthropic>=0.25.0
 Pillow>=10.0.0
 requests>=2.31.0
 
 # Backend vision opzionali — installa solo quello che usi:
 # requests è già incluso sopra per il backend ollama
-# Per il backend anthropic: anthropic è già incluso sopra

@@ -1,0 +1,16 @@
+[
+  {
+    "label": "Debug: main.py",
+    "adapter": "Debugpy",
+    "program": "$ZED_WORKTREE_ROOT/main.py",
+    "request": "launch",
+    "cwd": "$ZED_WORKTREE_ROOT"
+  },
+  {
+    "label": "Debug: current file",
+    "adapter": "Debugpy",
+    "program": "$ZED_FILE",
+    "request": "launch",
+    "cwd": "$ZED_WORKTREE_ROOT"
+  }
+]
