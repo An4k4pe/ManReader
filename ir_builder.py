@@ -50,25 +50,46 @@ def _build_page_ir(page) -> PageIR:
     )
 
 
+def _sort_position(item: object) -> tuple[float, float]:
+    bbox = _bbox_tuple(getattr(item, "bbox", None))
+    if bbox is None:
+        return (0.0, 0.0)
+
+    # Ordine di lettura base: prima dall'alto verso il basso,
+    # poi da sinistra verso destra per frammenti sulla stessa riga.
+    return (bbox[1], bbox[0])
+
+
 def _build_blocks(page) -> list[BlockIR]:
     page_num = int(page.page_num)
     elements = []
 
     for index, block in enumerate(getattr(page, "text_blocks", []), start=1):
-        elements.append((getattr(block, "bbox", (0.0, 0.0, 0.0, 0.0))[1], "text", index, block))
+        y, x = _sort_position(block)
+        elements.append((y, x, "text", index, block))
+
     for index, asset in enumerate(getattr(page, "images", []), start=1):
-        elements.append((getattr(asset, "bbox", (0.0, 0.0, 0.0, 0.0))[1], "image", index, asset))
+        y, x = _sort_position(asset)
+        elements.append((y, x, "image", index, asset))
+
     for index, asset in enumerate(getattr(page, "vectors", []), start=1):
-        elements.append((getattr(asset, "bbox", (0.0, 0.0, 0.0, 0.0))[1], "vector", index, asset))
+        y, x = _sort_position(asset)
+        elements.append((y, x, "vector", index, asset))
+
     for index, asset in enumerate(getattr(page, "tables", []), start=1):
-        elements.append((getattr(asset, "bbox", (0.0, 0.0, 0.0, 0.0))[1], "table", index, asset))
+        y, x = _sort_position(asset)
+        elements.append((y, x, "table", index, asset))
 
     blocks = []
-    for order, (_, kind, index, item) in enumerate(sorted(elements, key=lambda e: e[0]), start=1):
+    for order, (_, _, kind, index, item) in enumerate(
+        sorted(elements, key=lambda e: (e[0], e[1])),
+        start=1,
+    ):
         if kind == "text":
             blocks.append(_build_text_block(item, page_num, index, order))
         else:
             blocks.append(_build_asset_block(item, kind, page_num, index, order))
+
     return blocks
 
 
