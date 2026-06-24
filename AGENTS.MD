@@ -99,3 +99,13 @@ La IR deve preservare:
 
 I builder Markdown/EPUB non devono reinterpretare il PDF:
 devono consumare la IR.
+
+# Asset ricorrenti e reading flow
+
+Il riconoscimento di sfondi, decorazioni e immagini duplicate deve avvenire in extractor.py/deduplicator.py tramite euristiche deterministiche, non AI.
+
+ir_builder.py non deve riclassificare gli asset: deve solo rispettare i flag prodotti dall’estrazione.
+
+Gli asset con is_background=True o is_duplicate=True non devono entrare nel flusso leggibile principale della IR.
+
+In futuro, gli asset duplicati dovranno essere tracciati tramite asset canonico e lista occorrenze/pagine, così che eventuali note o link puntino sempre alla prima occorrenza.

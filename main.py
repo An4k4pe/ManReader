@@ -42,6 +42,7 @@ from extractor import AssetIndex, PDFExtractor
 from ir_builder import build_document_ir
 from ir_store import save_document_ir
 from ir_validate import validate_document_ir
+from markdown_builder import build_markdown
 
 
 def _column_type(value: str):
@@ -223,6 +224,12 @@ def parse_args():
         metavar="DIR",
         help="Cartella di destinazione (default: ./output).",
     )
+    out.add_argument(
+        "--format",
+        choices=["epub", "markdown", "both"],
+        default="epub",
+        help="Formato di output: epub, markdown o both (default: epub).",
+    )
 
     # ── AI Vision backend ───────────────────────────────────────────────────
     api = parser.add_argument_group("AI vision backend")
@@ -265,7 +272,8 @@ def main():
         sys.exit(1)
 
     title = args.title or pdf_path.stem
-    book_name = title.replace(" ", "_").replace("/", "-")[:60]
+    safe_title = title.replace(" ", "_").replace("/", "-")[:60]
+    book_name = safe_title
 
     config = LayoutConfig(
         columns=args.columns,
@@ -412,13 +420,21 @@ def main():
         for issue in ir_issues[:5]:
             print(f"    - {issue.reason}: {issue.message}")
 
-    # Build EPUB
+    markdown_path = None
+    if args.format in {"markdown", "both"}:
+        markdown = build_markdown(document_ir)
+        markdown_path = Path(config.output_dir) / f"{safe_title}.md"
+        markdown_path.write_text(markdown, encoding="utf-8")
+        print(f"  ✓ Markdown: {markdown_path}")
+
     print("\n  Salvataggio asset index...")
     extractor.save_index()
 
-    print("\n  Costruzione EPUB...")
-    builder = EPUBBuilder(config, title, args.author, asset_index=extractor.asset_index)
-    epub_path = builder.build(pages_data, toc=toc)
+    epub_path = None
+    if args.format in {"epub", "both"}:
+        print("\n  Costruzione EPUB...")
+        builder = EPUBBuilder(config, title, args.author, asset_index=extractor.asset_index)
+        epub_path = builder.build(pages_data, toc=toc)
 
     # Riepilogo finale
     img_count = sum(len(p.images) for p in pages_data)
@@ -428,7 +444,10 @@ def main():
     extracted = Path(config.output_dir) / "extracted"
 
     print(f"\n{'=' * 50}")
-    print(f"  ✓ EPUB:      {epub_path}")
+    if epub_path is not None:
+        print(f"  ✓ EPUB:      {epub_path}")
+    if markdown_path is not None:
+        print(f"  ✓ Markdown:  {markdown_path}")
     print(f"  ✓ Immagini:  {img_count} → {extracted / 'images'}")
     print(f"  ✓ Vettoriali:{vec_count} → {extracted / 'vectors'}")
     print(f"  ✓ Tabelle:   {tbl_count} → {extracted / 'tables'}")
