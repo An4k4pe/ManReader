@@ -23,25 +23,25 @@ Struttura cartelle output:
 """
 
 import csv
+import hashlib
 import io
 import re as _re
 import statistics
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
-import hashlib
 import fitz  # PyMuPDF
 import pdfplumber
 from PIL import Image
 
 from config import LayoutConfig
 
-
+_NONSTANDARD_CHAR_RE = re.compile(r"^[^\w\s]+$")
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class TextSpan:
@@ -50,13 +50,13 @@ class TextSpan:
     size: float
     bold: bool
     italic: bool
-    bbox: Tuple[float, float, float, float]
+    bbox: tuple[float, float, float, float]
 
 
 @dataclass
 class TextBlock:
-    spans: List[TextSpan]
-    bbox: Tuple[float, float, float, float]
+    spans: list[TextSpan]
+    bbox: tuple[float, float, float, float]
 
     @property
     def text(self) -> str:
@@ -79,13 +79,14 @@ class TextBlock:
 @dataclass
 class ImageBlock:
     """Immagine raster embedded nel PDF."""
+
     image_data: bytes
     ext: str
-    bbox: Tuple[float, float, float, float]
+    bbox: tuple[float, float, float, float]
     page_num: int
     index: int
-    saved_path: Optional[str] = None
-    description: Optional[str] = None
+    saved_path: str | None = None
+    description: str | None = None
     is_background: bool = False
     """True se l'immagine copre >60% della pagina (sfondo/texture).
     Non viene aggiunta a excluded_bboxes: il testo soprastante viene conservato."""
@@ -97,30 +98,31 @@ class ImageBlock:
 @dataclass
 class VectorBlock:
     """Gruppo di path vettoriali che formano un'illustrazione."""
-    bbox: Tuple[float, float, float, float]
+
+    bbox: tuple[float, float, float, float]
     page_num: int
     index: int
-    saved_path: Optional[str] = None
-    description: Optional[str] = None
+    saved_path: str | None = None
+    description: str | None = None
 
 
 @dataclass
 class TableBlock:
-    rows: List[List[str]]
-    bbox: Tuple[float, float, float, float]
+    rows: list[list[str]]
+    bbox: tuple[float, float, float, float]
     page_num: int
     index: int
-    saved_path: Optional[str] = None
-    description: Optional[str] = None
+    saved_path: str | None = None
+    description: str | None = None
 
 
 @dataclass
 class PageData:
     page_num: int
-    text_blocks: List[TextBlock]
-    images: List[ImageBlock]
-    vectors: List[VectorBlock]
-    tables: List[TableBlock]
+    text_blocks: list[TextBlock]
+    images: list[ImageBlock]
+    vectors: list[VectorBlock]
+    tables: list[TableBlock]
     width: float
     height: float
 
@@ -130,6 +132,7 @@ class PageData:
 # ---------------------------------------------------------------------------
 
 _INDEX_FIELDS = ["sha", "nome_file", "tipo", "pagina", "titolo", "descrizione", "modificato"]
+
 
 class AssetIndex:
     """
@@ -150,7 +153,7 @@ class AssetIndex:
     def __init__(self, index_path: Path):
         self.path = index_path
         # sha -> dict con i campi del CSV
-        self._entries: Dict[str, dict] = {}
+        self._entries: dict[str, dict] = {}
         self._protected: set = set()  # SHA con modificato=si
         self._loaded = False
 
@@ -183,11 +186,18 @@ class AssetIndex:
     def is_protected(self, sha: str) -> bool:
         return sha in self._protected
 
-    def get(self, sha: str) -> Optional[dict]:
+    def get(self, sha: str) -> dict | None:
         return self._entries.get(sha)
 
-    def add_or_update(self, sha: str, nome_file: str, tipo: str, pagina: int,
-                      titolo: Optional[str], descrizione: Optional[str]) -> None:
+    def add_or_update(
+        self,
+        sha: str,
+        nome_file: str,
+        tipo: str,
+        pagina: int,
+        titolo: str | None,
+        descrizione: str | None,
+    ) -> None:
         """
         Aggiunge una nuova entry o aggiorna una esistente non protetta.
         Le entry con modificato=si non vengono toccate.
@@ -204,21 +214,21 @@ class AssetIndex:
             "modificato": "no",
         }
 
-    def get_title(self, sha: str) -> Optional[str]:
+    def get_title(self, sha: str) -> str | None:
         """Restituisce il titolo leggibile (eventualmente modificato dall'utente)."""
         entry = self._entries.get(sha)
         if not entry:
             return None
         return entry.get("titolo") or None
 
-    def get_description(self, sha: str) -> Optional[str]:
+    def get_description(self, sha: str) -> str | None:
         """Restituisce la descrizione (eventualmente modificata dall'utente)."""
         entry = self._entries.get(sha)
         if not entry:
             return None
         return entry.get("descrizione") or None
 
-    def get_current_name(self, sha: str) -> Optional[str]:
+    def get_current_name(self, sha: str) -> str | None:
         """Restituisce il nome file corrente (eventualmente rinominato dall'utente)."""
         entry = self._entries.get(sha)
         if not entry:
@@ -239,10 +249,10 @@ class AssetIndex:
 # Rilevamento pagine sommario / indice
 # ---------------------------------------------------------------------------
 
-_TOC_LINE_RE = _re.compile(r'.{3,}\s+\d{1,3}\s*$')
+_TOC_LINE_RE = _re.compile(r".{3,}\s+\d{1,3}\s*$")
 
 
-def is_toc_page(page: "PageData") -> bool:
+def is_toc_page(page: PageData) -> bool:
     """
     Rileva se una pagina e un sommario/indice stampato.
 
@@ -254,10 +264,7 @@ def is_toc_page(page: "PageData") -> bool:
     """
     if len(page.text_blocks) < 3:
         return False
-    matches = sum(
-        1 for b in page.text_blocks
-        if _TOC_LINE_RE.search(b.text.strip())
-    )
+    matches = sum(1 for b in page.text_blocks if _TOC_LINE_RE.search(b.text.strip()))
     return (matches / len(page.text_blocks)) > 0.40
 
 
@@ -265,16 +272,17 @@ def is_toc_page(page: "PageData") -> bool:
 # Filtro intestazioni / piè di pagina / filigrane
 # ---------------------------------------------------------------------------
 
+
 def _normalize_text(text: str) -> str:
     """Rimuove cifre e normalizza per confronto. 'Pagina 42' == 'Pagina 103'."""
-    return _re.sub(r'\d+', '', text).strip().lower()
+    return _re.sub(r"\d+", "", text).strip().lower()
 
 
 def filter_repeated_blocks(
-    pages: List[PageData],
+    pages: list[PageData],
     header_footer_zone: float = 0.08,
     repetition_threshold: float = 0.25,
-) -> List[PageData]:
+) -> list[PageData]:
     """
     Rimuove blocchi di testo che si ripetono alla stessa posizione Y su molte
     pagine (intestazioni, piè di pagina, filigrane, watermark testuali).
@@ -327,8 +335,10 @@ def filter_repeated_blocks(
         for block in page.text_blocks:
             y_norm = block.bbox[1] / h
             zone = (
-                "header" if y_norm < header_footer_zone
-                else "footer" if y_norm > (1.0 - header_footer_zone)
+                "header"
+                if y_norm < header_footer_zone
+                else "footer"
+                if y_norm > (1.0 - header_footer_zone)
                 else "body"
             )
             norm = _normalize_text(block.text)
@@ -336,15 +346,17 @@ def filter_repeated_blocks(
                 removed += 1
             else:
                 clean.append(block)
-        result.append(PageData(
-            page_num=page.page_num,
-            text_blocks=clean,
-            images=page.images,
-            vectors=page.vectors,
-            tables=page.tables,
-            width=page.width,
-            height=page.height,
-        ))
+        result.append(
+            PageData(
+                page_num=page.page_num,
+                text_blocks=clean,
+                images=page.images,
+                vectors=page.vectors,
+                tables=page.tables,
+                width=page.width,
+                height=page.height,
+            )
+        )
 
     unique = len(to_remove)
     print(f"  Filtro ripetizioni: {unique} pattern rimossi ({removed} blocchi totali)")
@@ -357,26 +369,34 @@ def filter_repeated_blocks(
 
 # Font simbolici/icona noti: i loro glifi vengono estratti come lettere
 # normali ma rappresentano bullets, ornamenti, frecce ecc.
-_SYMBOL_FONT_KEYWORDS = frozenset([
-    'symbol', 'dingbat', 'wingding', 'zapf', 'webding',
-    'icon', 'ornament', 'glyph', 'bullet', 'arrow',
-])
+_SYMBOL_FONT_KEYWORDS = frozenset(
+    [
+        "symbol",
+        "dingbat",
+        "wingding",
+        "zapf",
+        "webding",
+        "icon",
+        "ornament",
+        "glyph",
+        "bullet",
+        "arrow",
+    ]
+)
 
 # Singole lettere che non sono mai parole standalone in italiano/inglese
 # (tipicamente glifi di font icona mappati su lettere ASCII)
 # Escluse le vocali e 'I': possono essere articoli/congiunzioni reali
 _LONE_GLYPH_CHARS = frozenset(
-    'bcdfghjklmnpqrstuvwxyz'   # consonanti minuscole
-    'BCDFGHJKLMNPQRSTUVWXYZ'   # consonanti maiuscole
-    '0123456789'                # cifre standalone gia coperte dal check numerico
+    "bcdfghjklmnpqrstuvwxyz"  # consonanti minuscole
+    "BCDFGHJKLMNPQRSTUVWXYZ"  # consonanti maiuscole
+    "0123456789"  # cifre standalone gia coperte dal check numerico
 )
 
 # Regex per caratteri non-standard che compaiono spesso come glifi decorativi:
 # caratteri di controllo, PUA Unicode, simboli non comuni
-import re as _noise_re
-
-
 import re as _re_slug
+
 
 def _title_to_slug(title: str, max_words: int = 3) -> str:
     """
@@ -402,12 +422,46 @@ def _desc_to_slug(description: str, max_words: int = 4) -> str:
     usato solo se generate_title() non è disponibile o ritorna vuoto.
     """
     SKIP = {
-        "questa", "questo", "quest", "l", "la", "lo", "le", "il", "i",
-        "un", "una", "uno", "immagine", "illustrazione",
-        "foto", "figura", "disegno", "mostra", "raffigura", "rappresenta",
-        "ritrae", "è", "e", "di", "del", "della", "dello", "dei", "degli",
-        "delle", "con", "che", "in", "da", "per", "su", "al", "alla",
-        "probabilmente", "forse",
+        "questa",
+        "questo",
+        "quest",
+        "l",
+        "la",
+        "lo",
+        "le",
+        "il",
+        "i",
+        "un",
+        "una",
+        "uno",
+        "immagine",
+        "illustrazione",
+        "foto",
+        "figura",
+        "disegno",
+        "mostra",
+        "raffigura",
+        "rappresenta",
+        "ritrae",
+        "è",
+        "e",
+        "di",
+        "del",
+        "della",
+        "dello",
+        "dei",
+        "degli",
+        "delle",
+        "con",
+        "che",
+        "in",
+        "da",
+        "per",
+        "su",
+        "al",
+        "alla",
+        "probabilmente",
+        "forse",
     }
     clean = []
     for w in description.strip().split():
@@ -431,13 +485,10 @@ def _is_noise_block(spans: list) -> bool:
     if not spans:
         return True
 
-    full_text = ' '.join(s.text for s in spans).strip()
+    full_text = " ".join(s.text for s in spans).strip()
 
     # Tutti gli span usano font simbolici?
-    if all(
-        any(kw in s.font.lower() for kw in _SYMBOL_FONT_KEYWORDS)
-        for s in spans
-    ):
+    if all(any(kw in s.font.lower() for kw in _SYMBOL_FONT_KEYWORDS) for s in spans):
         return True
 
     # Singolo carattere consonante = quasi sicuramente glifo decorativo
@@ -459,6 +510,7 @@ def _is_noise_block(spans: list) -> bool:
 # Estrattore principale
 # ---------------------------------------------------------------------------
 
+
 class PDFExtractor:
     def __init__(self, pdf_path: Path, config: LayoutConfig):
         self.pdf_path = pdf_path
@@ -470,7 +522,7 @@ class PDFExtractor:
         extracted = Path(config.output_dir) / "extracted"
         self.images_dir = extracted / "images"
         self.vectors_dir = extracted / "vectors"
-        self.tables_dir  = extracted / "tables"
+        self.tables_dir = extracted / "tables"
         for d in (self.images_dir, self.vectors_dir, self.tables_dir):
             d.mkdir(parents=True, exist_ok=True)
 
@@ -503,11 +555,11 @@ class PDFExtractor:
         """Salva l'asset_index.csv a fine estrazione."""
         self.asset_index.save()
 
-    def extract_all(self, describer=None) -> List[PageData]:
+    def extract_all(self, describer=None) -> list[PageData]:
         pages = []
         with pdfplumber.open(str(self.pdf_path)) as plumb:
             for i in range(self.page_count):
-                print(f"  Pagina {i+1}/{self.page_count}...", end="\r", flush=True)
+                print(f"  Pagina {i + 1}/{self.page_count}...", end="\r", flush=True)
                 pages.append(self._extract_page(i, plumb.pages[i], describer))
         print(f"  Estratte {self.page_count} pagine.             ")
         if self.config.columns is None:
@@ -516,7 +568,7 @@ class PDFExtractor:
             print(f"  Layout rilevato: {p1} pag. singola colonna, {p2} pag. doppia colonna")
         return pages
 
-    def get_toc(self) -> List[Tuple[int, str, int]]:
+    def get_toc(self) -> list[tuple[int, str, int]]:
         """
         Legge l'outline (bookmarks) del PDF.
         Restituisce [(livello, titolo, pagina_0based), ...].
@@ -535,10 +587,10 @@ class PDFExtractor:
 
     def _extract_page(self, page_num: int, plumb_page, describer) -> PageData:
         fitz_page = self.doc[page_num]
-        width  = fitz_page.rect.width
+        width = fitz_page.rect.width
         height = fitz_page.rect.height
 
-        images  = self._extract_images(fitz_page, page_num, describer)
+        images = self._extract_images(fitz_page, page_num, describer)
         vectors = []
         if self.config.extract_vectors:
             vectors = self._extract_vectors(fitz_page, page_num, describer)
@@ -570,7 +622,7 @@ class PDFExtractor:
     # Immagini raster
     # -----------------------------------------------------------------------
 
-    def _extract_images(self, page, page_num: int, describer) -> List[ImageBlock]:
+    def _extract_images(self, page, page_num: int, describer) -> list[ImageBlock]:
         results = []
         book = self.config.book_name
 
@@ -601,7 +653,7 @@ class PDFExtractor:
                 # Rileva se e uno sfondo: copre >60% della pagina
                 page_area = page.rect.width * page.rect.height
                 x0, y0, x1, y1 = bbox
-                bbox_area = max((x1-x0) * (y1-y0), 1)
+                bbox_area = max((x1 - x0) * (y1 - y0), 1)
                 is_bg = (bbox_area / page_area) > 0.60
 
                 # Dedup inline: se questa immagine e gia stata salvata
@@ -611,17 +663,23 @@ class PDFExtractor:
                     existing_path = self._seen_image_hashes[img_hash]
                     # Recupera la descrizione già salvata dall'index
                     cached_desc = self.asset_index.get_description(img_hash)
-                    results.append(ImageBlock(
-                        image_data=b"", ext=ext, bbox=bbox,
-                        page_num=page_num, index=idx,
-                        saved_path=existing_path, description=cached_desc,
-                        is_background=is_bg,
-                        is_duplicate=True,
-                    ))
+                    results.append(
+                        ImageBlock(
+                            image_data=b"",
+                            ext=ext,
+                            bbox=bbox,
+                            page_num=page_num,
+                            index=idx,
+                            saved_path=existing_path,
+                            description=cached_desc,
+                            is_background=is_bg,
+                            is_duplicate=True,
+                        )
+                    )
                     continue
 
                 # Nome provvisorio: verrà rinominato dopo la descrizione AI
-                fname_tmp = f"p{page_num+1}_img{idx+1}.{ext}"
+                fname_tmp = f"p{page_num + 1}_img{idx + 1}.{ext}"
                 save_path = self.images_dir / fname_tmp
                 save_path.write_bytes(img_bytes)
 
@@ -659,18 +717,24 @@ class PDFExtractor:
                     descrizione=description,
                 )
 
-                results.append(ImageBlock(
-                    image_data=img_bytes, ext=ext, bbox=bbox,
-                    page_num=page_num, index=idx,
-                    saved_path=str(save_path), description=description,
-                    is_background=is_bg,
-                ))
+                results.append(
+                    ImageBlock(
+                        image_data=img_bytes,
+                        ext=ext,
+                        bbox=bbox,
+                        page_num=page_num,
+                        index=idx,
+                        saved_path=str(save_path),
+                        description=description,
+                        is_background=is_bg,
+                    )
+                )
             except Exception as e:
-                print(f"\n  [warn] immagine p{page_num+1} #{idx}: {e}")
+                print(f"\n  [warn] immagine p{page_num + 1} #{idx}: {e}")
 
         return results
 
-    def _get_image_bbox(self, page, xref: int) -> Tuple[float, float, float, float]:
+    def _get_image_bbox(self, page, xref: int) -> tuple[float, float, float, float]:
         try:
             rects = list(page.get_image_rects(xref))
             if rects:
@@ -684,7 +748,7 @@ class PDFExtractor:
     # Illustrazioni vettoriali
     # -----------------------------------------------------------------------
 
-    def _extract_vectors(self, page, page_num: int, describer) -> List[VectorBlock]:
+    def _extract_vectors(self, page, page_num: int, describer) -> list[VectorBlock]:
         """
         Rileva gruppi di path vettoriali che formano illustrazioni, li esporta
         come SVG ritagliando la regione dal PDF.
@@ -740,10 +804,12 @@ class PDFExtractor:
 
         # Espandi i bbox di un margine prima di confrontarli
         expanded = [
-            fitz.Rect(fitz.Rect(d["rect"]).x0 - margin,
-                      fitz.Rect(d["rect"]).y0 - margin,
-                      fitz.Rect(d["rect"]).x1 + margin,
-                      fitz.Rect(d["rect"]).y1 + margin)
+            fitz.Rect(
+                fitz.Rect(d["rect"]).x0 - margin,
+                fitz.Rect(d["rect"]).y0 - margin,
+                fitz.Rect(d["rect"]).x1 + margin,
+                fitz.Rect(d["rect"]).y1 + margin,
+            )
             for d in relevant
         ]
 
@@ -774,7 +840,7 @@ class PDFExtractor:
             # (verifica fatta a posteriori nell'_extract_page, qui non abbiamo
             # ancora quella lista — la gestione overlap è nel chiamante)
 
-            fname_tmp = f"p{page_num+1}_vec{vec_idx+1}.svg"
+            fname_tmp = f"p{page_num + 1}_vec{vec_idx + 1}.svg"
             save_path = self.vectors_dir / fname_tmp
             bbox_tuple = (merged.x0, merged.y0, merged.x1, merged.y1)
 
@@ -814,13 +880,15 @@ class PDFExtractor:
                 descrizione=description,
             )
 
-            results.append(VectorBlock(
-                bbox=bbox_tuple,
-                page_num=page_num,
-                index=vec_idx,
-                saved_path=str(save_path),
-                description=description,
-            ))
+            results.append(
+                VectorBlock(
+                    bbox=bbox_tuple,
+                    page_num=page_num,
+                    index=vec_idx,
+                    saved_path=str(save_path),
+                    description=description,
+                )
+            )
             vec_idx += 1
 
         return results
@@ -851,10 +919,10 @@ class PDFExtractor:
             save_path.write_text(svg, encoding="utf-8")
             return True
         except Exception as e:
-            print(f"\n  [warn] SVG export p{page_num+1}: {e}")
+            print(f"\n  [warn] SVG export p{page_num + 1}: {e}")
             return False
 
-    def _render_region_as_png(self, page_num: int, clip: fitz.Rect) -> Optional[bytes]:
+    def _render_region_as_png(self, page_num: int, clip: fitz.Rect) -> bytes | None:
         """
         Renderizza una regione come PNG (per le descrizioni AI).
         Non serve alta risoluzione: 2x è sufficiente per la comprensione.
@@ -871,7 +939,7 @@ class PDFExtractor:
     # Tabelle
     # -----------------------------------------------------------------------
 
-    def _extract_tables(self, plumb_page, page_num: int, describer) -> List[TableBlock]:
+    def _extract_tables(self, plumb_page, page_num: int, describer) -> list[TableBlock]:
         results = []
         book = self.config.book_name
         try:
@@ -886,12 +954,11 @@ class PDFExtractor:
                     continue
 
                 rows = [
-                    [(cell or "").replace("\n", " ").strip() for cell in row]
-                    for row in raw_rows
+                    [(cell or "").replace("\n", " ").strip() for cell in row] for row in raw_rows
                 ]
                 bbox = tuple(tbl_obj.bbox)
 
-                fname = f"p{page_num+1}_tbl{idx+1}.csv"
+                fname = f"p{page_num + 1}_tbl{idx + 1}.csv"
                 save_path = self.tables_dir / fname
                 with open(save_path, "w", encoding="utf-8") as f:
                     for row in rows:
@@ -913,13 +980,18 @@ class PDFExtractor:
                     descrizione=description,
                 )
 
-                results.append(TableBlock(
-                    rows=rows, bbox=bbox,
-                    page_num=page_num, index=idx,
-                    saved_path=str(save_path), description=description,
-                ))
+                results.append(
+                    TableBlock(
+                        rows=rows,
+                        bbox=bbox,
+                        page_num=page_num,
+                        index=idx,
+                        saved_path=str(save_path),
+                        description=description,
+                    )
+                )
             except Exception as e:
-                print(f"\n  [warn] tabella p{page_num+1} #{idx}: {e}")
+                print(f"\n  [warn] tabella p{page_num + 1} #{idx}: {e}")
 
         return results
 
@@ -931,10 +1003,10 @@ class PDFExtractor:
         self,
         page,
         width: float,
-        excluded_bboxes: List[Tuple],
-    ) -> List[TextBlock]:
+        excluded_bboxes: list[tuple],
+    ) -> list[TextBlock]:
         raw = page.get_text("dict")
-        text_blocks: List[TextBlock] = []
+        text_blocks: list[TextBlock] = []
 
         for block in raw.get("blocks", []):
             if block.get("type") != 0:
@@ -943,21 +1015,23 @@ class PDFExtractor:
             if self._overlaps_any(bbox, excluded_bboxes):
                 continue
 
-            spans: List[TextSpan] = []
+            spans: list[TextSpan] = []
             for line in block.get("lines", []):
                 for span in line.get("spans", []):
                     txt = span.get("text", "").strip()
                     if not txt:
                         continue
                     flags = span.get("flags", 0)
-                    spans.append(TextSpan(
-                        text=txt,
-                        font=span.get("font", ""),
-                        size=span.get("size", 10.0),
-                        bold=bool(flags & 16),
-                        italic=bool(flags & 2),
-                        bbox=tuple(span["bbox"]),
-                    ))
+                    spans.append(
+                        TextSpan(
+                            text=txt,
+                            font=span.get("font", ""),
+                            size=span.get("size", 10.0),
+                            bold=bool(flags & 16),
+                            italic=bool(flags & 2),
+                            bbox=tuple(span["bbox"]),
+                        )
+                    )
 
             if spans:
                 if not _is_noise_block(spans):
@@ -983,9 +1057,7 @@ class PDFExtractor:
 
         return text_blocks
 
-    def _detect_page_columns(
-        self, blocks: List[TextBlock], width: float
-    ) -> Tuple[int, float]:
+    def _detect_page_columns(self, blocks: list[TextBlock], width: float) -> tuple[int, float]:
         """
         Rileva se una pagina e a singola o doppia colonna.
 
@@ -1006,7 +1078,7 @@ class PDFExtractor:
         split_ratio = self._find_split_ratio(content_blocks, width)
         split_x = width * split_ratio
 
-        left_count  = sum(1 for b in content_blocks if b.bbox[0] < split_x)
+        left_count = sum(1 for b in content_blocks if b.bbox[0] < split_x)
         right_count = sum(1 for b in content_blocks if b.bbox[0] >= split_x)
         if left_count < 2 or right_count < 2:
             return 1, 0.5
@@ -1019,13 +1091,13 @@ class PDFExtractor:
         if len(centers) < 2:
             return 1, 0.5
 
-        max_gap = max(centers[i+1] - centers[i] for i in range(len(centers)-1))
+        max_gap = max(centers[i + 1] - centers[i] for i in range(len(centers) - 1))
 
         if max_gap >= self.config.column_gap_threshold * width:
             return 2, split_ratio
         return 1, 0.5
 
-    def _find_split_ratio(self, blocks: List[TextBlock], width: float) -> float:
+    def _find_split_ratio(self, blocks: list[TextBlock], width: float) -> float:
         """Posizione X del gap piu ampio nella zona centrale della pagina."""
         centers = sorted(
             (b.bbox[0] + b.bbox[2]) / 2
@@ -1036,15 +1108,15 @@ class PDFExtractor:
             return 0.5
         max_gap, split_x = 0.0, width / 2
         for i in range(len(centers) - 1):
-            gap = centers[i+1] - centers[i]
+            gap = centers[i + 1] - centers[i]
             if gap > max_gap:
                 max_gap = gap
-                split_x = (centers[i] + centers[i+1]) / 2
+                split_x = (centers[i] + centers[i + 1]) / 2
         return split_x / width
 
     def _sort_double_column(
-        self, blocks: List[TextBlock], split_x: float, page_width: float
-    ) -> List[TextBlock]:
+        self, blocks: list[TextBlock], split_x: float, page_width: float
+    ) -> list[TextBlock]:
         """
         Ordina blocchi per doppia colonna separando quelli a piena larghezza
         (titoli, intestazioni di sezione) dai blocchi di colonna veri.
@@ -1054,27 +1126,28 @@ class PDFExtractor:
         alla loro posizione Y relativa alla zona colonnata.
         """
         fw_limit = page_width * 0.60
-        full_w = sorted([b for b in blocks if (b.bbox[2]-b.bbox[0]) >= fw_limit],
-                        key=lambda b: b.bbox[1])
-        col_b  = [b for b in blocks if (b.bbox[2]-b.bbox[0]) < fw_limit]
+        full_w = sorted(
+            [b for b in blocks if (b.bbox[2] - b.bbox[0]) >= fw_limit], key=lambda b: b.bbox[1]
+        )
+        col_b = [b for b in blocks if (b.bbox[2] - b.bbox[0]) < fw_limit]
 
         if not col_b:
             return full_w
 
-        col_top    = min(b.bbox[1] for b in col_b)
+        col_top = min(b.bbox[1] for b in col_b)
         col_bottom = max(b.bbox[3] for b in col_b)
 
-        fw_above  = [b for b in full_w if b.bbox[3] <= col_top]
-        fw_below  = [b for b in full_w if b.bbox[1] >= col_bottom]
+        fw_above = [b for b in full_w if b.bbox[3] <= col_top]
+        fw_below = [b for b in full_w if b.bbox[1] >= col_bottom]
         fw_inside = [b for b in full_w if b not in fw_above and b not in fw_below]
 
-        left  = sorted([b for b in col_b if b.bbox[0] <  split_x], key=lambda b: b.bbox[1])
+        left = sorted([b for b in col_b if b.bbox[0] < split_x], key=lambda b: b.bbox[1])
         right = sorted([b for b in col_b if b.bbox[0] >= split_x], key=lambda b: b.bbox[1])
 
         return fw_above + fw_inside + left + right + fw_below
 
     @staticmethod
-    def _overlaps_any(bbox: Tuple, excluded: List[Tuple], threshold: float = 0.3) -> bool:
+    def _overlaps_any(bbox: tuple, excluded: list[tuple], threshold: float = 0.3) -> bool:
         x0, y0, x1, y1 = bbox
         area = max((x1 - x0) * (y1 - y0), 1)
         for ex in excluded:
@@ -1091,11 +1164,3 @@ class PDFExtractor:
                 self.doc.close()
             except Exception:
                 pass
-
-
-
-
-
-
-
-
