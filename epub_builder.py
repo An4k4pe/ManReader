@@ -121,15 +121,11 @@ class EPUBBuilder:
             book.add_item(ch)
             epub_chapters.append(ch)
 
-        # Pagina TOC navigabile in cima all'EPUB
-        toc_ch = self._build_toc_chapter(toc, epub_chapters, heading_map, css)
-        book.add_item(toc_ch)
-
-        # Nested book.toc per e-reader (usa livelli PDF se disponibili)
+        # La navigazione standard EPUB evita una pagina Indice duplicata nel corpo.
         book.toc = self._build_epub_toc(toc, epub_chapters, heading_map)
         book.add_item(epub.EpubNcx())
         book.add_item(epub.EpubNav())
-        book.spine = ["nav", toc_ch] + epub_chapters
+        book.spine = ["nav"] + epub_chapters
 
         out_path = self.out_dir / f"{self.config.book_name}.epub"
         epub.write_epub(str(out_path), book)
