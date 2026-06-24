@@ -18,7 +18,7 @@ ESEMPI
   python main.py manuale.pdf --pages 1-10 --no-ai
 
   # Descrizioni AI via Ollama locale
-  python main.py manuale.pdf --vision-backend ollama --ollama-model gemma4:12b
+  python main.py manuale.pdf --ollama-model gemma4:12b
 
 STRUMENTI COLLEGATI
   asset_manager.py  — applica rename e modifiche dall'asset_index.csv all'EPUB già buildato
@@ -39,6 +39,8 @@ _sys.path.insert(0, str(_Path(__file__).parent))
 from config import LayoutConfig
 from epub_builder import EPUBBuilder
 from extractor import AssetIndex, PDFExtractor
+from ir_builder import build_document_ir
+from ir_store import save_document_ir
 
 
 def _column_type(value: str):
@@ -388,6 +390,17 @@ def main():
         removed = before - len(pages_data)
         if removed:
             print(f"  Rimosse {removed} pagine indice dal corpo (disponibili come TOC navigabile)")
+
+    ir_path = Path(config.output_dir) / "ir" / "document_ir.json"
+    document_ir = build_document_ir(
+        pages == list(pages_data),
+        source_path=str(pdf_path),
+        title=title,
+        author=args.author,
+        toc=toc,
+    )
+    save_document_ir(document_ir, ir_path)
+    print(f"  ✓ IR: {ir_path}")
 
     # Build EPUB
     print("\n  Salvataggio asset index...")
