@@ -14,6 +14,17 @@ from ir_model import AssetIR, BlockIR, DocumentIR, PageIR
 SCHEMA_VERSION = "1.0"
 
 
+class _MergedText:
+    """Small adapter that exposes the TextBlock attributes used by _build_text_block."""
+
+    def __init__(self, source: object, bbox: tuple[float, float, float, float], text: str | None):
+        self.bbox = bbox
+        self.text = text
+        self.avg_font_size = getattr(source, "avg_font_size", "")
+        self.is_bold = getattr(source, "is_bold", False)
+        self.is_italic = getattr(source, "is_italic", False)
+
+
 def build_document_ir(
     pages: list[object],
     source_path: str,
@@ -80,9 +91,12 @@ def _build_blocks(page) -> list[BlockIR]:
         y, x = _sort_position(asset)
         elements.append((y, x, "table", index, asset))
 
+    sorted_elements = sorted(elements, key=lambda e: (e[0], e[1]))
+    merged_elements = _merge_adjacent_text_elements(sorted_elements)
+
     blocks = []
     for order, (_, _, kind, index, item) in enumerate(
-        sorted(elements, key=lambda e: (e[0], e[1])),
+        merged_elements,
         start=1,
     ):
         if kind == "text":
@@ -91,6 +105,95 @@ def _build_blocks(page) -> list[BlockIR]:
             blocks.append(_build_asset_block(item, kind, page_num, index, order))
 
     return blocks
+
+
+def _merge_adjacent_text_elements(
+    elements: list[tuple[float, float, str, int, object]],
+) -> list[tuple[float, float, str, int, object]]:
+    merged: list[tuple[float, float, str, int, object]] = []
+
+    for element in elements:
+        if not merged:
+            merged.append(element)
+            continue
+
+        previous = merged[-1]
+        if _can_merge_text_elements(previous, element):
+            merged[-1] = _merge_text_elements(previous, element)
+        else:
+            merged.append(element)
+
+    return merged
+
+
+def _can_merge_text_elements(
+    first: tuple[float, float, str, int, object],
+    second: tuple[float, float, str, int, object],
+) -> bool:
+    if first[2] != "text" or second[2] != "text":
+        return False
+
+    first_bbox = _bbox_tuple(getattr(first[4], "bbox", None))
+    second_bbox = _bbox_tuple(getattr(second[4], "bbox", None))
+    if first_bbox is None or second_bbox is None:
+        return False
+
+    horizontal_gap = second_bbox[0] - first_bbox[2]
+    return (
+        abs(first_bbox[1] - second_bbox[1]) <= 2.0
+        and second_bbox[0] >= first_bbox[2]
+        and horizontal_gap <= 12.0
+    )
+
+
+def _merge_text_elements(
+    first: tuple[float, float, str, int, object],
+    second: tuple[float, float, str, int, object],
+) -> tuple[float, float, str, int, object]:
+    first_bbox = _bbox_tuple(getattr(first[4], "bbox", None))
+    second_bbox = _bbox_tuple(getattr(second[4], "bbox", None))
+    if first_bbox is None or second_bbox is None:
+        return first
+
+    merged_bbox = _union_bbox(first_bbox, second_bbox)
+    horizontal_gap = second_bbox[0] - first_bbox[2]
+    merged_text = _join_text_fragments(
+        getattr(first[4], "text", None),
+        getattr(second[4], "text", None),
+        horizontal_gap,
+    )
+    merged_item = _MergedText(first[4], merged_bbox, merged_text)
+    return (merged_bbox[1], merged_bbox[0], "text", first[3], merged_item)
+
+
+def _union_bbox(
+    first: tuple[float, float, float, float],
+    second: tuple[float, float, float, float],
+) -> tuple[float, float, float, float]:
+    return (
+        min(first[0], second[0]),
+        min(first[1], second[1]),
+        max(first[2], second[2]),
+        max(first[3], second[3]),
+    )
+
+
+def _join_text_fragments(first: str | None, second: str | None, horizontal_gap: float) -> str:
+    left = (first or "").strip()
+    right = (second or "").strip()
+    if not left:
+        return right
+    if not right:
+        return left
+
+    if right[0] in ",.;:!?)]»":
+        return left + right
+    if left[-1] in "’'":
+        return left + right
+    if left[-1].isalnum() and right[0].isalnum() and horizontal_gap <= 1.5:
+        return left + right
+
+    return f"{left} {right}"
 
 
 def _build_text_block(block: object, page_num: int, index: int, order: int) -> BlockIR:
