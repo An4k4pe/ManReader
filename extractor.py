@@ -25,7 +25,7 @@ Struttura cartelle output:
 import csv
 import hashlib
 import io
-import re
+import re as _re
 import statistics
 from collections import defaultdict
 from dataclasses import dataclass
@@ -37,7 +37,7 @@ from PIL import Image
 
 from config import LayoutConfig
 
-_NONSTANDARD_CHAR_RE = re.compile(r"^[^\w\s]+$")
+_NONSTANDARD_CHAR_RE = _re.compile(r"^[^\w\s]+$")
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
