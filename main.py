@@ -23,25 +23,22 @@ ESEMPI
 STRUMENTI COLLEGATI
   asset_manager.py  — applica rename e modifiche dall'asset_index.csv all'EPUB già buildato
                       python asset_manager.py output/NomePDF/
-
-VARIABILI D'AMBIENTE
-  ANTHROPIC_API_KEY  — API key Anthropic (alternativa a --api-key)
 """
 
 import argparse
-import os
 import sys
-from pathlib import Path
 
 # Permette di eseguire main.py da qualsiasi directory:
 # aggiunge la cartella dello script al Python path
 import sys as _sys
+from pathlib import Path
 from pathlib import Path as _Path
+
 _sys.path.insert(0, str(_Path(__file__).parent))
 
 from config import LayoutConfig
-from extractor import PDFExtractor, AssetIndex
 from epub_builder import EPUBBuilder
+from extractor import AssetIndex, PDFExtractor
 
 
 def _column_type(value: str):
@@ -190,22 +187,9 @@ def parse_args():
     # ── AI Vision backend ───────────────────────────────────────────────────
     api = parser.add_argument_group("AI vision backend")
     api.add_argument(
-        "--vision-backend", default="ollama",
-        choices=["anthropic", "ollama"],
-        metavar="BACKEND",
-        help=(
-            "Backend per le descrizioni AI: "
-            "ollama (default, locale, nessuna API key), "
-            "anthropic (richiede ANTHROPIC_API_KEY). "
-            "Ignorato con --no-ai."
-        ),
-    )
-    api.add_argument(
-        "--api-key", metavar="KEY",
-        help="API key Anthropic (alternativa alla variabile d'ambiente ANTHROPIC_API_KEY).",
-    )
-    api.add_argument(
-        "--ollama-model", default=None, metavar="MODELLO",
+        "--ollama-model",
+        default=None,
+        metavar="MODELLO",
         help="Modello Ollama da usare (default: gemma4:12b). Esempi: llava, llama3.2-vision.",
     )
     api.add_argument(
@@ -262,20 +246,12 @@ def main():
     # Setup AI describer
     describer = None
     if config.describe_with_ai:
-        backend = args.vision_backend  # argparse converte i trattini in underscore
         from describer import create_describer
-
-        # API key: prima --api-key, poi variabile d'ambiente specifica del backend
-        api_key = args.api_key
-        if not api_key and backend == "anthropic":
-            api_key = os.environ.get("ANTHROPIC_API_KEY")
-        # ollama non usa api_key
 
         try:
             describer = create_describer(
-                backend=backend,
+                backend="ollama",
                 language=config.ai_language,
-                api_key=api_key,
                 ollama_model=args.ollama_model,
                 ollama_host=args.ollama_host,
             )
@@ -297,7 +273,7 @@ def main():
     else:
         print("  Colonne: 1 (singola, forzata)")
     print(f"  Tabelle: {'sì' if config.extract_tables else 'no'}")
-    print(f"  Descrizioni AI: {'sì (' + args.vision_backend + ')' if config.describe_with_ai else 'no'}")
+    print(f"  Descrizioni AI: {'sì (ollama)' if config.describe_with_ai else 'no'}")
     print(f"  Output: {(Path(args.output) / book_name).resolve()}")
     print(f"{'='*50}\n")
 
