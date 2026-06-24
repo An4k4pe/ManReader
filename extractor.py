@@ -25,7 +25,7 @@ Struttura cartelle output:
 import csv
 import hashlib
 import io
-import re as _re
+import re
 import statistics
 from collections import defaultdict
 from dataclasses import dataclass
