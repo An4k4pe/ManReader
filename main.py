@@ -41,6 +41,7 @@ from epub_builder import EPUBBuilder
 from extractor import AssetIndex, PDFExtractor
 from ir_builder import build_document_ir
 from ir_store import save_document_ir
+from ir_validate import validate_document_ir
 
 
 def _column_type(value: str):
@@ -49,8 +50,8 @@ def _column_type(value: str):
         return None
     try:
         v = int(value)
-    except ValueError:
-        raise argparse.ArgumentTypeError(f"valore non valido: {value!r}. Usa auto, 1 o 2.")
+    except ValueError as err:
+        raise argparse.ArgumentTypeError(f"valore non valido: {value!r}. Usa auto, 1 o 2.") from err
     if v not in (1, 2):
         raise argparse.ArgumentTypeError("deve essere 1, 2 o auto")
     return v
@@ -353,7 +354,9 @@ def main():
     # Estrazione TOC (outline/bookmarks embedded nel PDF)
     toc = extractor.get_toc()
     if toc:
-        print(f"  TOC trovata: {len(toc)} voci (livelli: {sorted(set(l for l, _, _ in toc))})")
+        print(
+            f"  TOC trovata: {len(toc)} voci (livelli: {sorted(set(level for level, _, _ in toc))})"
+        )
     else:
         print("  TOC non trovata: userò euristica font per i capitoli")
 
@@ -401,6 +404,13 @@ def main():
     )
     save_document_ir(document_ir, ir_path)
     print(f"  ✓ IR: {ir_path}")
+    ir_issues = validate_document_ir(document_ir)
+    if not ir_issues:
+        print("  ✓ IR validata: nessun problema")
+    else:
+        print(f"  ⚠ IR: {len(ir_issues)} problemi rilevati")
+        for issue in ir_issues[:5]:
+            print(f"    - {issue.reason}: {issue.message}")
 
     # Build EPUB
     print("\n  Salvataggio asset index...")
