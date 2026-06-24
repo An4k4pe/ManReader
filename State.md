@@ -23,6 +23,30 @@
 - Generazione EPUB via ebooklib
 - Deduplicazione asset ripetuti via MD5
 
+## Milestone IR + Markdown
+
+Stato attuale:
+
+- Dataclass IR create: `DocumentIR`, `PageIR`, `BlockIR`, `AssetIR`, `AIProposal`, `ReviewItem`, `HumanOverride`, `Issue`, `EntityIR`
+- Persistenza JSON della IR tramite `ir_store.py`
+- Validatore leggero della IR tramite `ir_validate.py`
+- `document_ir.json` esportato sempre in `output/<book>/ir/document_ir.json`
+- Builder Markdown da IR tramite `markdown_builder.py`
+- CLI `--format epub|markdown|both`
+- Default ancora `epub`
+- Asset `is_background=True` o `is_duplicate=True` esclusi dal reading flow della IR
+
+Problemi noti:
+
+- `extractor.py` produce ancora frammenti testuali separati in alcuni casi
+- Il merge testo attuale è euristico e non sostituisce un refactor di `extractor.py`
+- Gestione canonica asset/occurrences/pages ancora da implementare
+- AI enrichment ancora da separare pienamente dalla fase estrattiva
+
+Prossimo step consigliato:
+
+- Introdurre test minimi per `ir_builder.py` e `markdown_builder.py`, oppure iniziare un refactor controllato di `extractor.py`/`deduplicator.py`
+
 ## Asset Index (v2.0)
 
 Registro centrale `extracted/asset_index.csv` con campi:
