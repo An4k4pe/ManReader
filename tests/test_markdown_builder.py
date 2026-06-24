@@ -80,6 +80,110 @@ class MarkdownBuilderTest(unittest.TestCase):
 
         self.assertIn("<!-- page: 1 -->", markdown)
 
+    def test_heading_is_not_merged_with_following_paragraph(self):
+        document = _document(
+            [
+                _text("b1", "Capitolo Uno", style={"avg_font_size": "16"}),
+                _text("b2", "Primo paragrafo"),
+            ]
+        )
+
+        markdown = build_markdown(document)
+
+        self.assertIn("## Capitolo Uno\n\nPrimo paragrafo", markdown)
+        self.assertNotIn("Capitolo Uno Primo paragrafo", markdown)
+
+    def test_scena_heading_becomes_markdown_heading(self):
+        document = _document([_text("b1", "Scena 1: Briefing")])
+
+        markdown = build_markdown(document)
+
+        self.assertIn("## Scena 1: Briefing", markdown)
+
+    def test_uppercase_text_becomes_markdown_heading(self):
+        document = _document([_text("b1", "DOMANDE")])
+
+        markdown = build_markdown(document)
+
+        self.assertIn("## DOMANDE", markdown)
+
+    def test_normal_text_stays_paragraph(self):
+        document = _document(
+            [
+                _text("b1", "Questo è testo normale"),
+                _text("b2", "con un secondo frammento"),
+            ]
+        )
+
+        markdown = build_markdown(document)
+
+        self.assertIn("Questo è testo normale con un secondo frammento", markdown)
+        self.assertNotIn("## Questo è testo normale", markdown)
+
+    def test_bold_inline_text_uses_markdown_strong(self):
+        document = _document([_text("b1", "testo", style={"bold": "true"})])
+
+        markdown = build_markdown(document)
+
+        self.assertIn("**testo**", markdown)
+        self.assertNotIn("## **testo**", markdown)
+
+    def test_bold_italic_inline_text_uses_markdown_strong_emphasis(self):
+        document = _document([_text("b1", "testo", style={"bold": "true", "italic": "true"})])
+
+        markdown = build_markdown(document)
+
+        self.assertIn("***testo***", markdown)
+
+    def test_bold_heading_does_not_get_inline_formatting(self):
+        document = _document([_text("b1", "Scena 1: Briefing", style={"bold": "true"})])
+
+        markdown = build_markdown(document)
+
+        self.assertIn("## Scena 1: Briefing", markdown)
+        self.assertNotIn("## **Scena 1: Briefing**", markdown)
+
+    def test_bold_inline_text_is_not_heading(self):
+        document = _document(
+            [
+                _text("b1", "Arufex Vladaghast", style={"bold": "true"}),
+                _text("b2", ", un botanico"),
+            ]
+        )
+
+        markdown = build_markdown(document)
+
+        self.assertIn("**Arufex Vladaghast**, un botanico", markdown)
+        self.assertNotIn("## Arufex Vladaghast", markdown)
+
+    def test_long_styled_text_is_not_wrapped_in_emphasis(self):
+        long_text = (
+            "Questo è un frammento molto lungo che rappresenta una riga di corpo "
+            "estratta dal PDF e non deve diventare corsivo interamente"
+        )
+        document = _document([_text("b1", long_text, style={"italic": "true"})])
+
+        markdown = build_markdown(document)
+
+        self.assertIn(long_text, markdown)
+        self.assertNotIn(f"*{long_text}*", markdown)
+
+    def test_short_split_fragment_is_not_emphasized(self):
+        document = _document([_text("b1", "o", style={"italic": "true"})])
+
+        markdown = build_markdown(document)
+
+        self.assertIn("o", markdown)
+        self.assertNotIn("*o*", markdown)
+
+    def test_italic_only_text_is_not_emphasized_until_extraction_is_reliable(self):
+        document = _document([_text("b1", "testo", style={"italic": "true"})])
+
+        markdown = build_markdown(document)
+
+        self.assertIn("testo", markdown)
+        self.assertNotIn("*testo*", markdown)
+
 
 def _document(blocks: list[BlockIR]) -> DocumentIR:
     return DocumentIR(
@@ -90,13 +194,14 @@ def _document(blocks: list[BlockIR]) -> DocumentIR:
     )
 
 
-def _text(block_id: str, text: str) -> BlockIR:
+def _text(block_id: str, text: str, style: dict[str, str] | None = None) -> BlockIR:
     return BlockIR(
         id=block_id,
         type="text",
         page_num=1,
         order=1,
         text=text,
+        style=style or {},
     )
 
 

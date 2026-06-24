@@ -23,7 +23,15 @@ def build_markdown(document: DocumentIR) -> str:
 
         for block in page.blocks:
             if block.type == "text" and block.text:
-                current_paragraph = _join_text_fragments(current_paragraph, block.text)
+                if _is_heading_text(block.text, block.style):
+                    if current_paragraph:
+                        parts.append(current_paragraph)
+                        current_paragraph = ""
+                    level = _heading_level(block.text, block.style)
+                    parts.append(f"{'#' * level} {block.text.strip()}")
+                else:
+                    text = _format_inline_text(block.text, block.style)
+                    current_paragraph = _join_text_fragments(current_paragraph, text)
             elif block.type in {"image", "vector", "table"} and block.asset is not None:
                 if current_paragraph:
                     parts.append(current_paragraph)
@@ -34,6 +42,60 @@ def build_markdown(document: DocumentIR) -> str:
         parts.append(current_paragraph)
 
     return "\n\n".join(part for part in parts if part).rstrip() + "\n"
+
+
+def _is_heading_text(text: str, style: dict[str, str]) -> bool:
+    stripped = text.strip()
+    if not stripped:
+        return False
+    if len(stripped) > 90:
+        return False
+    if stripped.endswith((".", ",", ";")):
+        return False
+    if stripped.startswith("Scena "):
+        return True
+    if stripped.isupper() and len(stripped) <= 40:
+        return True
+
+    try:
+        return float(style.get("avg_font_size", "")) >= 14.0
+    except ValueError:
+        return False
+
+
+def _heading_level(text: str, style: dict[str, str]) -> int:
+    stripped = text.strip()
+    if stripped.startswith("Scena "):
+        return 2
+    if stripped.isupper() and len(stripped) <= 40:
+        return 2
+
+    try:
+        font_size = float(style.get("avg_font_size", ""))
+    except ValueError:
+        return 2
+
+    return 1 if font_size >= 18.0 else 2
+
+
+def _format_inline_text(text: str, style: dict[str, str]) -> str:
+    stripped = text.strip()
+    if not stripped:
+        return ""
+
+    if not _can_render_inline_style(stripped):
+        return stripped
+
+    is_bold = style.get("bold") == "true"
+    is_italic = style.get("italic") == "true"
+
+    if is_bold and is_italic:
+        return f"***{stripped}***"
+    if is_bold:
+        return f"**{stripped}**"
+
+    # Italic extraction is still too noisy for body text in current PDFs.
+    return stripped
 
 
 def _join_text_fragments(first: str, second: str) -> str:
@@ -69,6 +131,19 @@ def _render_asset(asset: AssetIR, page_num: int, block_type: str) -> str:
         lines.append(f"\n> Descrizione: {description}")
 
     return "\n".join(lines)
+
+
+def _can_render_inline_style(text: str) -> bool:
+    stripped = text.strip()
+    if len(stripped) < 4:
+        return False
+    if len(stripped) > 60:
+        return False
+    if stripped[-1].isalnum() and " " not in stripped and len(stripped) <= 4:
+        return False
+    if stripped.endswith(("’", "'", ",")):
+        return False
+    return stripped[0] not in ",.;:!?)]»"
 
 
 def _asset_label(kind: str) -> str:
