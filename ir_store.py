@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """JSON persistence helpers for ManReader's document IR.
 
 The IR stays plain dataclasses so it can remain local, inspectable, and easy to
@@ -7,6 +5,8 @@ revise without introducing validation frameworks or storage services.
 deserialization is explicit, this avoid dependancies like pydantic
 and make the scheme readable and verifiable.
 """
+
+from __future__ import annotations
 
 import json
 from dataclasses import asdict
