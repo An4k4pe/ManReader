@@ -71,6 +71,12 @@ def _sort_position(item: object) -> tuple[float, float]:
     return (bbox[1], bbox[0])
 
 
+def _is_reading_flow_asset(asset: object) -> bool:
+    # Background, decorations, and duplicates can stay in the asset index,
+    # but they should not enter the IR reading flow.
+    return not (getattr(asset, "is_background", False) or getattr(asset, "is_duplicate", False))
+
+
 def _build_blocks(page) -> list[BlockIR]:
     page_num = int(page.page_num)
     elements = []
@@ -80,16 +86,19 @@ def _build_blocks(page) -> list[BlockIR]:
         elements.append((y, x, "text", index, block))
 
     for index, asset in enumerate(getattr(page, "images", []), start=1):
-        y, x = _sort_position(asset)
-        elements.append((y, x, "image", index, asset))
+        if _is_reading_flow_asset(asset):
+            y, x = _sort_position(asset)
+            elements.append((y, x, "image", index, asset))
 
     for index, asset in enumerate(getattr(page, "vectors", []), start=1):
-        y, x = _sort_position(asset)
-        elements.append((y, x, "vector", index, asset))
+        if _is_reading_flow_asset(asset):
+            y, x = _sort_position(asset)
+            elements.append((y, x, "vector", index, asset))
 
     for index, asset in enumerate(getattr(page, "tables", []), start=1):
-        y, x = _sort_position(asset)
-        elements.append((y, x, "table", index, asset))
+        if _is_reading_flow_asset(asset):
+            y, x = _sort_position(asset)
+            elements.append((y, x, "table", index, asset))
 
     sorted_elements = sorted(elements, key=lambda e: (e[0], e[1]))
     merged_elements = _merge_adjacent_text_elements(sorted_elements)
