@@ -143,10 +143,11 @@ class IRBuilderTest(unittest.TestCase):
 
         self.assertEqual(len(ir_page.blocks), 1)
         self.assertEqual(ir_page.blocks[0].type, "image")
-        self.assertIsNotNone(ir_page.blocks[0].asset)
-        self.assertEqual(ir_page.blocks[0].asset.sha, "kept-sha")
-        self.assertFalse(ir_page.blocks[0].asset.is_background)
-        self.assertFalse(ir_page.blocks[0].asset.is_duplicate)
+        asset = ir_page.blocks[0].asset
+        assert asset is not None
+        self.assertEqual(asset.sha, "kept-sha")
+        self.assertFalse(asset.is_background)
+        self.assertFalse(asset.is_duplicate)
 
 
 if __name__ == "__main__":
