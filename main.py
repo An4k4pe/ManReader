@@ -393,7 +393,7 @@ def main():
 
     ir_path = Path(config.output_dir) / "ir" / "document_ir.json"
     document_ir = build_document_ir(
-        pages == list(pages_data),
+        pages=list(pages_data),
         source_path=str(pdf_path),
         title=title,
         author=args.author,
