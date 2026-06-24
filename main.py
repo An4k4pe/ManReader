@@ -65,7 +65,10 @@ def parse_args():
 
     # Help esplicito: -h e --help
     parser.add_argument(
-        "-h", "--help", action="help", default=argparse.SUPPRESS,
+        "-h",
+        "--help",
+        action="help",
+        default=argparse.SUPPRESS,
         help="Mostra questo messaggio ed esci.",
     )
 
@@ -78,21 +81,28 @@ def parse_args():
         help="Titolo del libro (default: nome file senza estensione).",
     )
     meta.add_argument(
-        "--author", default="",
+        "--author",
+        default="",
         help="Autore del manuale (default: vuoto).",
     )
 
     # ── Layout ──────────────────────────────────────────────────────────────
     layout = parser.add_argument_group("layout pagina")
     layout.add_argument(
-        "--columns", type=_column_type, default=None, metavar="auto|1|2",
+        "--columns",
+        type=_column_type,
+        default=None,
+        metavar="auto|1|2",
         help=(
             "Colonne di testo: 1 = singola (forza), 2 = doppia (forza), "
             "auto = rileva pagina per pagina (default)."
         ),
     )
     layout.add_argument(
-        "--column-gap", type=float, default=0.08, metavar="N",
+        "--column-gap",
+        type=float,
+        default=0.08,
+        metavar="N",
         help=(
             "Gap minimo tra colonne in modalità auto, come frazione della "
             "larghezza pagina (default: 0.08). "
@@ -100,7 +110,10 @@ def parse_args():
         ),
     )
     layout.add_argument(
-        "--column-split", type=float, default=None, metavar="N",
+        "--column-split",
+        type=float,
+        default=None,
+        metavar="N",
         help=(
             "Punto di divisione manuale tra le colonne (0.0–1.0). "
             "Esempio: 0.5 = metà pagina. Solo con --columns 2. "
@@ -108,7 +121,10 @@ def parse_args():
         ),
     )
     layout.add_argument(
-        "--heading-threshold", type=float, default=1.3, metavar="N",
+        "--heading-threshold",
+        type=float,
+        default=1.3,
+        metavar="N",
         help=(
             "Moltiplicatore font per identificare i titoli di capitolo. "
             "Default: 1.3 (= font ≥ 130%% della dimensione mediana). "
@@ -116,34 +132,46 @@ def parse_args():
         ),
     )
     layout.add_argument(
-        "--min-image-size", type=int, default=80, metavar="PX",
+        "--min-image-size",
+        type=int,
+        default=80,
+        metavar="PX",
         help="Ignora immagini più piccole di PX pixel (larghezza o altezza). Default: 80.",
     )
 
     # ── Funzionalità ────────────────────────────────────────────────────────
     feat = parser.add_argument_group("funzionalità")
     feat.add_argument(
-        "--no-tables", action="store_true",
+        "--no-tables",
+        action="store_true",
         help="Non estrarre tabelle.",
     )
     feat.add_argument(
-        "--no-vectors", action="store_true",
+        "--no-vectors",
+        action="store_true",
         help="Non estrarre illustrazioni vettoriali.",
     )
     feat.add_argument(
-        "--no-ai", action="store_true",
+        "--no-ai",
+        action="store_true",
         help="Non usare l'AI per descrivere immagini e tabelle. Più veloce.",
     )
     feat.add_argument(
-        "--ai-language", default="italiano", metavar="LINGUA",
+        "--ai-language",
+        default="italiano",
+        metavar="LINGUA",
         help="Lingua per le descrizioni AI (default: italiano).",
     )
     feat.add_argument(
-        "--no-filter", action="store_true",
+        "--no-filter",
+        action="store_true",
         help="Non rimuovere header, footer e filigrane ripetute.",
     )
     feat.add_argument(
-        "--header-zone", type=float, default=0.08, metavar="N",
+        "--header-zone",
+        type=float,
+        default=0.08,
+        metavar="N",
         help=(
             "Altezza della zona header/footer come frazione della pagina "
             "(default: 0.08 = top e bottom 8%%). "
@@ -151,36 +179,45 @@ def parse_args():
         ),
     )
     feat.add_argument(
-        "--repeat-threshold", type=float, default=0.25, metavar="N",
+        "--repeat-threshold",
+        type=float,
+        default=0.25,
+        metavar="N",
         help=(
             "Soglia ripetizione header/footer: testo presente su più di questa "
             "frazione di pagine viene rimosso (default: 0.25 = >25%% delle pagine)."
         ),
     )
     feat.add_argument(
-        "--keep-toc-pages", action="store_true",
+        "--keep-toc-pages",
+        action="store_true",
         help=(
             "Mantieni le pagine di indice/sommario nel corpo EPUB. "
             "Di default vengono rimosse e sostituite con una TOC navigabile."
         ),
     )
     feat.add_argument(
-        "--no-dedup", action="store_true",
+        "--no-dedup",
+        action="store_true",
         help="Non eseguire la deduplicazione degli asset grafici ripetuti.",
     )
     feat.add_argument(
-        "--auto-background", action="store_true",
+        "--auto-background",
+        action="store_true",
         help="Classifica automaticamente come sfondo gli asset ripetuti (senza prompt interattivo).",
     )
     feat.add_argument(
-        "--pages", metavar="N o N-M",
+        "--pages",
+        metavar="N o N-M",
         help="Elabora solo un intervallo di pagine. Esempi: '5', '1-20'. Utile per test.",
     )
 
     # ── Output ──────────────────────────────────────────────────────────────
     out = parser.add_argument_group("output")
     out.add_argument(
-        "--output", default="output", metavar="DIR",
+        "--output",
+        default="output",
+        metavar="DIR",
         help="Cartella di destinazione (default: ./output).",
     )
 
@@ -193,7 +230,9 @@ def parse_args():
         help="Modello Ollama da usare (default: gemma4:12b). Esempi: llava, llama3.2-vision.",
     )
     api.add_argument(
-        "--ollama-host", default=None, metavar="URL",
+        "--ollama-host",
+        default=None,
+        metavar="URL",
         help="URL del server Ollama (default: http://localhost:11434).",
     )
 
@@ -260,7 +299,7 @@ def main():
             config.describe_with_ai = False
 
     # Stampa riepilogo
-    print(f"\n{'='*50}")
+    print(f"\n{'=' * 50}")
     print(f"  PDF   : {pdf_path.name}")
     print(f"  Titolo: {title}")
     if config.columns is None:
@@ -275,7 +314,7 @@ def main():
     print(f"  Tabelle: {'sì' if config.extract_tables else 'no'}")
     print(f"  Descrizioni AI: {'sì (ollama)' if config.describe_with_ai else 'no'}")
     print(f"  Output: {(Path(args.output) / book_name).resolve()}")
-    print(f"{'='*50}\n")
+    print(f"{'=' * 50}\n")
 
     # Estrazione
     extractor = PDFExtractor(pdf_path, config)
@@ -307,23 +346,25 @@ def main():
     page_start, page_end = 0, total_pages
     if args.pages:
         page_start, page_end = parse_page_range(args.pages, total_pages)
-        print(f"  Elaboro pagine {page_start+1}–{page_end} di {total_pages}")
+        print(f"  Elaboro pagine {page_start + 1}–{page_end} di {total_pages}")
 
     # Estrazione TOC (outline/bookmarks embedded nel PDF)
     toc = extractor.get_toc()
     if toc:
-        print(f"  TOC trovata: {len(toc)} voci (livelli: {sorted(set(l for l,_,_ in toc))})")
+        print(f"  TOC trovata: {len(toc)} voci (livelli: {sorted(set(l for l, _, _ in toc))})")
     else:
         print("  TOC non trovata: userò euristica font per i capitoli")
 
     print(f"  Pagine totali: {total_pages}")
 
     import pdfplumber
+
     from extractor import filter_repeated_blocks
+
     pages_data = []
     with pdfplumber.open(str(pdf_path)) as plumb:
         for i in range(page_start, page_end):
-            print(f"  Pagina {i+1}/{page_end}...", end="\r", flush=True)
+            print(f"  Pagina {i + 1}/{page_end}...", end="\r", flush=True)
             pages_data.append(extractor._extract_page(i, plumb.pages[i], describer))
     print(f"  Estratte {len(pages_data)} pagine.            ")
 
@@ -341,6 +382,7 @@ def main():
     # Rimozione pagine sommario/indice dal corpo EPUB
     if not args.keep_toc_pages:
         from extractor import is_toc_page
+
         before = len(pages_data)
         pages_data = [p for p in pages_data if not is_toc_page(p)]
         removed = before - len(pages_data)
@@ -352,28 +394,23 @@ def main():
     extractor.save_index()
 
     print("\n  Costruzione EPUB...")
-    builder = EPUBBuilder(config, title, args.author,
-                          asset_index=extractor.asset_index)
+    builder = EPUBBuilder(config, title, args.author, asset_index=extractor.asset_index)
     epub_path = builder.build(pages_data, toc=toc)
 
     # Riepilogo finale
-    img_count = sum(len(p.images)  for p in pages_data)
+    img_count = sum(len(p.images) for p in pages_data)
     vec_count = sum(len(p.vectors) for p in pages_data)
-    tbl_count = sum(len(p.tables)  for p in pages_data)
+    tbl_count = sum(len(p.tables) for p in pages_data)
     # Struttura: output/NomePDF/NomePDF.epub + output/NomePDF/extracted/
     extracted = Path(config.output_dir) / "extracted"
 
-    print(f"\n{'='*50}")
+    print(f"\n{'=' * 50}")
     print(f"  ✓ EPUB:      {epub_path}")
     print(f"  ✓ Immagini:  {img_count} → {extracted / 'images'}")
     print(f"  ✓ Vettoriali:{vec_count} → {extracted / 'vectors'}")
     print(f"  ✓ Tabelle:   {tbl_count} → {extracted / 'tables'}")
-    print(f"{'='*50}\n")
+    print(f"{'=' * 50}\n")
 
 
 if __name__ == "__main__":
     main()
-
-
-
-

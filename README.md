@@ -17,7 +17,7 @@ pdf_to_epub/
 │                      clustering path vettoriali; filtro ripetizioni testo; lettura TOC
 ├── deduplicator.py  ← rilevamento asset grafici ripetuti (sfondi, ribbon, watermark);
 │                      modalità interattiva e automatica
-├── describer.py     ← descrizioni AI via API Anthropic (immagini e tabelle)
+├── describer.py     ← descrizioni AI via Ollama locale (immagini e tabelle)
 ├── epub_builder.py  ← assemblaggio EPUB; rilevamento capitoli; rendering HTML
 └── requirements.txt
 ```
@@ -63,15 +63,18 @@ pip install -r requirements.txt
 ```
 
 Per rientrare nelle sessioni successive:
+
 ```fish
 cd /percorso/progetto && source venv/bin/activate.fish
 ```
 
-### API Key Anthropic (opzionale)
+### Backend locale Ollama
+
+Per usare le descrizioni AI, avvia Ollama localmente e installa il modello configurato.
 
 ```fish
-set -x ANTHROPIC_API_KEY "sk-ant-..."
-# Per renderla permanente: aggiungila a ~/.config/fish/config.fish
+ollama serve
+ollama pull gemma4:12b
 ```
 
 ---
@@ -97,39 +100,42 @@ python main.py manuale.pdf --columns 2 --title "Nome Manuale" --author "Autore"
 ## Parametri completi
 
 ### Metadati
-| Parametro | Default | Descrizione |
-|-----------|---------|-------------|
-| `--title` | nome file | Titolo nell'EPUB |
-| `--author` | *(vuoto)* | Autore |
+
+| Parametro  | Default   | Descrizione      |
+| ---------- | --------- | ---------------- |
+| `--title`  | nome file | Titolo nell'EPUB |
+| `--author` | _(vuoto)_ | Autore           |
 
 ### Layout pagina
-| Parametro | Default | Descrizione |
-|-----------|---------|-------------|
-| `--columns` | `1` | Colonne: `1` o `2` |
-| `--column-split` | auto | Divisore colonne 0.0–1.0 (es. `0.5`). Auto se omesso |
-| `--heading-threshold` | `1.3` | Moltiplicatore font per titoli (fallback senza TOC) |
-| `--min-image-size` | `80` | Dimensione minima immagini raster in pixel |
+
+| Parametro             | Default | Descrizione                                          |
+| --------------------- | ------- | ---------------------------------------------------- |
+| `--columns`           | `1`     | Colonne: `1` o `2`                                   |
+| `--column-split`      | auto    | Divisore colonne 0.0–1.0 (es. `0.5`). Auto se omesso |
+| `--heading-threshold` | `1.3`   | Moltiplicatore font per titoli (fallback senza TOC)  |
+| `--min-image-size`    | `80`    | Dimensione minima immagini raster in pixel           |
 
 ### Funzionalità
-| Parametro | Default | Descrizione |
-|-----------|---------|-------------|
-| `--no-tables` | False | Salta estrazione tabelle |
-| `--no-vectors` | False | Salta estrazione vettoriali |
-| `--no-ai` | False | Salta descrizioni AI |
-| `--ai-language` | `italiano` | Lingua descrizioni AI |
-| `--no-dedup` | False | Disabilita rilevamento asset ripetuti |
-| `--dedup-threshold` | `0.15` | Soglia ripetizione asset: >X% pagine → presentato come ripetuto |
-| `--auto-background` | False | Salva automaticamente i ripetuti come sfondo (no prompt) |
-| `--no-filter` | False | Disabilita rimozione intestazioni/piè/filigrane testuali |
-| `--header-zone` | `0.08` | Zona header/footer come frazione altezza pagina |
-| `--repeat-threshold` | `0.25` | Soglia ripetizione per rimozione (>X% pagine) |
-| `--pages` | tutte | Sottoinsieme pagine, es. `1-20` o `5` |
+
+| Parametro            | Default    | Descrizione                                                     |
+| -------------------- | ---------- | --------------------------------------------------------------- |
+| `--no-tables`        | False      | Salta estrazione tabelle                                        |
+| `--no-vectors`       | False      | Salta estrazione vettoriali                                     |
+| `--no-ai`            | False      | Salta descrizioni AI                                            |
+| `--ai-language`      | `italiano` | Lingua descrizioni AI                                           |
+| `--no-dedup`         | False      | Disabilita rilevamento asset ripetuti                           |
+| `--dedup-threshold`  | `0.15`     | Soglia ripetizione asset: >X% pagine → presentato come ripetuto |
+| `--auto-background`  | False      | Salva automaticamente i ripetuti come sfondo (no prompt)        |
+| `--no-filter`        | False      | Disabilita rimozione intestazioni/piè/filigrane testuali        |
+| `--header-zone`      | `0.08`     | Zona header/footer come frazione altezza pagina                 |
+| `--repeat-threshold` | `0.25`     | Soglia ripetizione per rimozione (>X% pagine)                   |
+| `--pages`            | tutte      | Sottoinsieme pagine, es. `1-20` o `5`                           |
 
 ### Output / API
-| Parametro | Default | Descrizione |
-|-----------|---------|-------------|
+
+| Parametro  | Default    | Descrizione        |
+| ---------- | ---------- | ------------------ |
 | `--output` | `./output` | Cartella di output |
-| `--api-key` | *(da env)* | Anthropic API key |
 
 ---
 
