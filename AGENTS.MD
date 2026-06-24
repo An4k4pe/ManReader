@@ -81,3 +81,21 @@ Ogni commit deve passare:
 
 ruff check .
 basedpyright
+
+# Layout complessi TTRPG
+
+Molti manuali hanno colonne variabili, box, callout, sfondi, strisce decorative e immagini ripetute.
+
+La logica di estrazione layout esistente non va rimossa durante il refactor IR.
+
+La IR deve preservare:
+
+- ordine di lettura;
+- bbox;
+- numero pagina;
+- classificazione asset;
+- segnalazione di background/decorative/duplicate;
+- eventuali box o blocchi speciali quando saranno riconosciuti.
+
+I builder Markdown/EPUB non devono reinterpretare il PDF:
+devono consumare la IR.
