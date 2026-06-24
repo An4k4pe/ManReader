@@ -132,14 +132,14 @@ def _register_id(
 
 
 def _is_valid_bbox(value: object) -> bool:
-    if not isinstance(value, tuple | list):
+    if not isinstance(value, (tuple, list)):
         return False
 
     if len(value) != 4:
         return False
 
     # bool is an int subclass, but coordinates should be real numeric geometry.
-    return all(isinstance(coord, int | float) and not isinstance(coord, bool) for coord in value)
+    return all(isinstance(coord, (int, float)) and not isinstance(coord, bool) for coord in value)
 
 
 def _issue(
@@ -153,8 +153,8 @@ def _issue(
         id=f"validation:{kind}:{target_id or 'document'}:{page_num or 0}",
         target_id=target_id,
         page_num=page_num,
-        kind=kind,
+        kind="validation",
         path=path,
-        reason="validation",
+        reason=kind,
         message=message,
     )
