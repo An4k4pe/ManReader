@@ -60,7 +60,7 @@ class TextBlock:
 
     @property
     def text(self) -> str:
-        return " ".join(s.text for s in self.spans if s.text.strip())
+        return _join_text_spans(self.spans)
 
     @property
     def avg_font_size(self) -> float:
@@ -74,6 +74,62 @@ class TextBlock:
     @property
     def is_italic(self) -> bool:
         return all(s.italic for s in self.spans if s.text.strip())
+
+
+def _join_text_spans(spans: list[TextSpan]) -> str:
+    clean_spans = [span for span in spans if span.text.strip()]
+    if not clean_spans:
+        return ""
+
+    text = clean_spans[0].text.strip()
+    previous = clean_spans[0]
+
+    for span in clean_spans[1:]:
+        current = span.text.strip()
+        if _should_join_span_without_space(previous, span):
+            text += current
+        else:
+            text += f" {current}"
+        previous = span
+
+    return text
+
+
+def _should_join_span_without_space(first: TextSpan, second: TextSpan) -> bool:
+    left = first.text.strip()
+    right = second.text.strip()
+    if not left or not right:
+        return True
+
+    if right[0] in ",.;:!?)]»":
+        return True
+    if left[-1] in "’'":
+        return True
+
+    if not _spans_are_on_same_line(first, second):
+        return False
+
+    gap = second.bbox[0] - first.bbox[2]
+    if left[-1].isalnum() and right[0].isalnum() and gap <= 1.5:
+        return True
+
+    return len(left) == 1 and left.isupper() and right.isupper() and gap <= 4.0
+
+
+def _spans_are_on_same_line(first: TextSpan, second: TextSpan) -> bool:
+    first_top, first_bottom = first.bbox[1], first.bbox[3]
+    second_top, second_bottom = second.bbox[1], second.bbox[3]
+
+    overlap = min(first_bottom, second_bottom) - max(first_top, second_top)
+    if overlap <= 0:
+        return False
+
+    first_height = max(first_bottom - first_top, 1.0)
+    second_height = max(second_bottom - second_top, 1.0)
+    min_height = min(first_height, second_height)
+    first_center = (first.bbox[1] + first.bbox[3]) / 2
+    second_center = (second.bbox[1] + second.bbox[3]) / 2
+    return overlap >= min_height * 0.5 or abs(first_center - second_center) <= 2.0
 
 
 @dataclass
