@@ -95,6 +95,24 @@ def _join_text_spans(spans: list[TextSpan]) -> str:
     return text
 
 
+def _line_text_from_words(
+    words: list[tuple[float, float, float, float, str, int, int, int]],
+) -> str:
+    clean_words = sorted((word for word in words if word[4].strip()), key=lambda word: word[0])
+    if not clean_words:
+        return ""
+
+    text = clean_words[0][4].strip()
+    for word in clean_words[1:]:
+        current = word[4].strip()
+        if current[0] in ",.;:!?)]»":
+            text += current
+        else:
+            text += f" {current}"
+
+    return text
+
+
 def _should_join_span_without_space(first: TextSpan, second: TextSpan) -> bool:
     left = first.text.strip()
     right = second.text.strip()
