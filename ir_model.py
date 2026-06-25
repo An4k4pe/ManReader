@@ -46,6 +46,8 @@ class BlockIR:
     bbox: tuple[float, float, float, float] | None = None
     text: str | None = None
     style: dict[str, str] = field(default_factory=dict)
+    role: str | None = None
+    metadata: dict[str, str] = field(default_factory=dict)
     asset: AssetIR | None = None
 
 

@@ -67,6 +67,8 @@ def _load_block(data: dict) -> BlockIR:
         bbox=tuple(bbox) if bbox is not None else None,
         text=data.get("text"),
         style=data.get("style", {}),
+        role=data.get("role"),
+        metadata=data.get("metadata", {}),
         asset=_load_asset(data["asset"]) if data.get("asset") else None,
     )
 
