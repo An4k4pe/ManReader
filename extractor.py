@@ -117,6 +117,54 @@ def _text_from_block(block: tuple[float, float, float, float, str, int, int]) ->
     return " ".join(block[4].strip().split())
 
 
+def _bbox_area(bbox: tuple[float, float, float, float]) -> float:
+    width = max(0.0, bbox[2] - bbox[0])
+    height = max(0.0, bbox[3] - bbox[1])
+    return width * height
+
+
+def _bbox_intersection_area(
+    first: tuple[float, float, float, float],
+    second: tuple[float, float, float, float],
+) -> float:
+    x0 = max(first[0], second[0])
+    y0 = max(first[1], second[1])
+    x1 = min(first[2], second[2])
+    y1 = min(first[3], second[3])
+    return _bbox_area((x0, y0, x1, y1))
+
+
+def _overlap_ratio_against_bbox(
+    dict_bbox: tuple[float, float, float, float],
+    candidate_bbox: tuple[float, float, float, float],
+) -> float:
+    area = _bbox_area(dict_bbox)
+    if area == 0.0:
+        return 0.0
+    return _bbox_intersection_area(dict_bbox, candidate_bbox) / area
+
+
+def _best_text_block_for_bbox(
+    dict_bbox: tuple[float, float, float, float],
+    blocks: list[tuple[float, float, float, float, str, int, int]],
+    min_overlap: float = 0.5,
+) -> tuple[float, float, float, float, str, int, int] | None:
+    best_block = None
+    best_overlap = 0.0
+
+    for block in blocks:
+        if block[6] != 0 or not _text_from_block(block):
+            continue
+        overlap = _overlap_ratio_against_bbox(dict_bbox, block[:4])
+        if overlap > best_overlap:
+            best_block = block
+            best_overlap = overlap
+
+    if best_overlap < min_overlap:
+        return None
+    return best_block
+
+
 def _should_join_span_without_space(first: TextSpan, second: TextSpan) -> bool:
     left = first.text.strip()
     right = second.text.strip()
