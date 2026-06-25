@@ -170,6 +170,7 @@ class _DictBlockMatch:
     dict_bbox: tuple[float, float, float, float]
     dict_text: str
     matched_block: tuple[float, float, float, float, str, int, int] | None
+    source_spans: list[TextSpan] | None = None
 
 
 def _group_consecutive_dict_block_matches(
@@ -188,6 +189,51 @@ def _group_consecutive_dict_block_matches(
             groups.append([match])
 
     return groups
+
+
+def _text_block_from_dict_match_group(group: list[_DictBlockMatch]) -> TextBlock | None:
+    if not group:
+        return None
+
+    matched_block = group[0].matched_block
+    if matched_block is None:
+        return None
+    if any(match.matched_block != matched_block for match in group):
+        return None
+
+    text = _text_from_block(matched_block)
+    if not text:
+        return None
+
+    bbox = _union_bboxes([match.dict_bbox for match in group])
+    source_span = _first_source_span(group)
+    span = TextSpan(
+        text=text,
+        font=source_span.font if source_span is not None else "",
+        size=source_span.size if source_span is not None else 10.0,
+        bold=source_span.bold if source_span is not None else False,
+        italic=source_span.italic if source_span is not None else False,
+        bbox=bbox,
+    )
+    return TextBlock(spans=[span], bbox=bbox)
+
+
+def _union_bboxes(
+    bboxes: list[tuple[float, float, float, float]],
+) -> tuple[float, float, float, float]:
+    return (
+        min(bbox[0] for bbox in bboxes),
+        min(bbox[1] for bbox in bboxes),
+        max(bbox[2] for bbox in bboxes),
+        max(bbox[3] for bbox in bboxes),
+    )
+
+
+def _first_source_span(group: list[_DictBlockMatch]) -> TextSpan | None:
+    for match in group:
+        if match.source_spans:
+            return match.source_spans[0]
+    return None
 
 
 def _should_join_span_without_space(first: TextSpan, second: TextSpan) -> bool:
