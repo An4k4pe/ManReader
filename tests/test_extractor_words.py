@@ -49,8 +49,12 @@ def _words(texts: list[str]) -> list[tuple[float, float, float, float, str, int,
     return [_word(text, x0=index * 10.0) for index, text in enumerate(texts)]
 
 
-def _word(text: str, x0: float) -> tuple[float, float, float, float, str, int, int, int]:
-    return (x0, 10.0, x0 + 8.0, 20.0, text, 0, 0, 0)
+def _word(
+    text: str,
+    x0: float,
+    y0: float = 10.0,
+) -> tuple[float, float, float, float, str, int, int, int]:
+    return (x0, y0, x0 + 8.0, y0 + 10.0, text, 0, 0, 0)
 
 
 if __name__ == "__main__":

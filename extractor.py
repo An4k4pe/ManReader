@@ -1108,6 +1108,29 @@ class PDFExtractor:
                         )
                     )
 
+                if line_spans:
+                    line_bbox = tuple(line.get("bbox", line_spans[0].bbox))
+                    fallback_text = _join_text_spans(line_spans)
+                    line_text = _line_text_from_words_in_bbox(
+                        word_hints,
+                        line_bbox,
+                        fallback_text,
+                    )
+                    if line_text == fallback_text:
+                        spans.extend(line_spans)
+                    else:
+                        first_span = line_spans[0]
+                        spans.append(
+                            TextSpan(
+                                text=line_text,
+                                font=first_span.font,
+                                size=first_span.size,
+                                bold=first_span.bold,
+                                italic=first_span.italic,
+                                bbox=line_bbox,
+                            )
+                        )
+
             if spans:
                 if not _is_noise_block(spans):
                     text_blocks.append(TextBlock(spans=spans, bbox=bbox))
