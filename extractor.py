@@ -165,6 +165,31 @@ def _best_text_block_for_bbox(
     return best_block
 
 
+@dataclass
+class _DictBlockMatch:
+    dict_bbox: tuple[float, float, float, float]
+    dict_text: str
+    matched_block: tuple[float, float, float, float, str, int, int] | None
+
+
+def _group_consecutive_dict_block_matches(
+    matches: list[_DictBlockMatch],
+) -> list[list[_DictBlockMatch]]:
+    groups: list[list[_DictBlockMatch]] = []
+
+    for match in matches:
+        if (
+            groups
+            and match.matched_block is not None
+            and groups[-1][-1].matched_block == match.matched_block
+        ):
+            groups[-1].append(match)
+        else:
+            groups.append([match])
+
+    return groups
+
+
 def _should_join_span_without_space(first: TextSpan, second: TextSpan) -> bool:
     left = first.text.strip()
     right = second.text.strip()

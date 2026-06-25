@@ -3,6 +3,8 @@ import unittest
 from extractor import (
     _bbox_intersection_area,
     _best_text_block_for_bbox,
+    _DictBlockMatch,
+    _group_consecutive_dict_block_matches,
     _overlap_ratio_against_bbox,
     _text_from_block,
 )
@@ -100,6 +102,66 @@ class ExtractorBlocksTest(unittest.TestCase):
 
         self.assertEqual(match, better)
 
+    def test_groups_three_consecutive_dict_blocks_with_same_candidate(self):
+        candidate = _block("testo completo")
+        matches = [
+            _match("testo", candidate),
+            _match("com", candidate),
+            _match("pleto", candidate),
+        ]
+
+        groups = _group_consecutive_dict_block_matches(matches)
+
+        self.assertEqual(_group_texts(groups), [["testo", "com", "pleto"]])
+
+    def test_different_candidates_stay_in_separate_groups(self):
+        first = _block("primo", block_no=1)
+        second = _block("secondo", block_no=2)
+        matches = [_match("pri", first), _match("sec", second)]
+
+        groups = _group_consecutive_dict_block_matches(matches)
+
+        self.assertEqual(_group_texts(groups), [["pri"], ["sec"]])
+
+    def test_none_match_interrupts_group(self):
+        candidate = _block("testo completo")
+        matches = [
+            _match("testo", candidate),
+            _match("senza match", None),
+            _match("completo", candidate),
+        ]
+
+        groups = _group_consecutive_dict_block_matches(matches)
+
+        self.assertEqual(_group_texts(groups), [["testo"], ["senza match"], ["completo"]])
+
+    def test_non_consecutive_matches_are_not_merged(self):
+        first = _block("primo", block_no=1)
+        second = _block("secondo", block_no=2)
+        matches = [
+            _match("pri", first),
+            _match("sec", second),
+            _match("mo", first),
+        ]
+
+        groups = _group_consecutive_dict_block_matches(matches)
+
+        self.assertEqual(_group_texts(groups), [["pri"], ["sec"], ["mo"]])
+
+    def test_grouping_preserves_original_order(self):
+        first = _block("primo", block_no=1)
+        second = _block("secondo", block_no=2)
+        matches = [
+            _match("a", first),
+            _match("b", first),
+            _match("c", second),
+            _match("d", second),
+        ]
+
+        groups = _group_consecutive_dict_block_matches(matches)
+
+        self.assertEqual(_group_texts(groups), [["a", "b"], ["c", "d"]])
+
 
 def _block(
     text: str,
@@ -107,9 +169,25 @@ def _block(
     y0: float = 20.0,
     x1: float = 100.0,
     y1: float = 40.0,
+    block_no: int = 0,
     block_type: int = 0,
 ) -> tuple[float, float, float, float, str, int, int]:
-    return (x0, y0, x1, y1, text, 0, block_type)
+    return (x0, y0, x1, y1, text, block_no, block_type)
+
+
+def _match(
+    text: str,
+    matched_block: tuple[float, float, float, float, str, int, int] | None,
+) -> _DictBlockMatch:
+    return _DictBlockMatch(
+        dict_bbox=(10.0, 20.0, 100.0, 40.0),
+        dict_text=text,
+        matched_block=matched_block,
+    )
+
+
+def _group_texts(groups: list[list[_DictBlockMatch]]) -> list[list[str]]:
+    return [[match.dict_text for match in group] for group in groups]
 
 
 if __name__ == "__main__":
