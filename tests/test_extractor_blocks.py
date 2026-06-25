@@ -5,6 +5,7 @@ from extractor import (
     TextSpan,
     _bbox_intersection_area,
     _best_text_block_for_bbox,
+    _best_text_for_dict_match_group,
     _DictBlockMatch,
     _group_consecutive_dict_block_matches,
     _overlap_ratio_against_bbox,
@@ -253,6 +254,115 @@ class ExtractorBlocksTest(unittest.TestCase):
         self.assertEqual(span.size, 10.0)
         self.assertFalse(span.bold)
         self.assertFalse(span.italic)
+
+    def test_best_text_prefers_fallback_when_text_matches_without_fragment_spaces(self):
+        text = _best_text_for_dict_match_group("Subit o Vladaghast", "Subito Vladaghast")
+
+        self.assertEqual(text, "Subito Vladaghast")
+
+    def test_best_text_does_not_prefer_unrelated_fallback_difference(self):
+        text = _best_text_for_dict_match_group("testo corretto", "test ocorretto")
+
+        self.assertEqual(text, "testo corretto")
+
+    def test_best_text_keeps_clean_block_hint_over_fragmented_fallback(self):
+        text = _best_text_for_dict_match_group("resistente", "resistent e")
+
+        self.assertEqual(text, "resistente")
+
+    def test_text_block_fallback_joins_adjacent_subito_fragment(self):
+        candidate = _block("strani effetti iniziarono Subit o")
+
+        text_block = _text_block_from_dict_match_group(
+            [
+                _match("strani effetti iniziarono Subit", candidate, bbox=(10.0, 20.0, 90.0, 40.0)),
+                _match("o", candidate, bbox=(90.5, 20.0, 94.0, 40.0)),
+            ]
+        )
+
+        self.assertIsNotNone(text_block)
+        self.assertEqual(text_block.text, "strani effetti iniziarono Subito")
+
+    def test_text_block_fallback_keeps_space_after_accented_e_with_real_gap(self):
+        candidate = _block("quando Torruk è esploso Subit o")
+
+        text_block = _text_block_from_dict_match_group(
+            [
+                _match("quando Torruk è", candidate, bbox=(10.0, 20.0, 70.0, 40.0)),
+                _match("esploso Subit", candidate, bbox=(74.0, 20.0, 120.0, 40.0)),
+                _match("o", candidate, bbox=(120.5, 20.0, 124.0, 40.0)),
+            ]
+        )
+
+        self.assertIsNotNone(text_block)
+        self.assertEqual(text_block.text, "quando Torruk è esploso Subito")
+
+    def test_text_block_fallback_keeps_space_between_i_and_am_with_real_gap(self):
+        candidate = _block("I am Subit o")
+
+        text_block = _text_block_from_dict_match_group(
+            [
+                _match("I", candidate, bbox=(10.0, 20.0, 14.0, 40.0)),
+                _match("am Subit", candidate, bbox=(18.0, 20.0, 50.0, 40.0)),
+                _match("o", candidate, bbox=(50.5, 20.0, 54.0, 40.0)),
+            ]
+        )
+
+        self.assertIsNotNone(text_block)
+        self.assertEqual(text_block.text, "I am Subito")
+
+    def test_text_block_fallback_joins_adjacent_gl_i_fragment(self):
+        candidate = _block("gl i scoppi")
+
+        text_block = _text_block_from_dict_match_group(
+            [
+                _match("gl", candidate, bbox=(10.0, 20.0, 20.0, 40.0)),
+                _match("i scoppi", candidate, bbox=(20.5, 20.0, 60.0, 40.0)),
+            ]
+        )
+
+        self.assertIsNotNone(text_block)
+        self.assertEqual(text_block.text, "gli scoppi")
+
+    def test_text_block_fallback_joins_adjacent_p_urtroppo_fragment(self):
+        candidate = _block("p urtroppo")
+
+        text_block = _text_block_from_dict_match_group(
+            [
+                _match("p", candidate, bbox=(10.0, 20.0, 14.0, 40.0)),
+                _match("urtroppo", candidate, bbox=(14.5, 20.0, 60.0, 40.0)),
+            ]
+        )
+
+        self.assertIsNotNone(text_block)
+        self.assertEqual(text_block.text, "purtroppo")
+
+    def test_text_block_fallback_joins_adjacent_decimata_fragment(self):
+        candidate = _block("deci mata")
+
+        text_block = _text_block_from_dict_match_group(
+            [
+                _match("deci", candidate, bbox=(10.0, 20.0, 30.0, 40.0)),
+                _match("mata", candidate, bbox=(29.5, 20.0, 55.0, 40.0)),
+            ]
+        )
+
+        self.assertIsNotNone(text_block)
+        self.assertEqual(text_block.text, "decimata")
+
+    def test_text_block_fallback_keeps_space_between_la_and_squadra_with_real_gap(self):
+        candidate = _block("La Squadra Subit o")
+
+        text_block = _text_block_from_dict_match_group(
+            [
+                _match("La", candidate, bbox=(10.0, 20.0, 20.0, 40.0)),
+                _match("Squadra Subit", candidate, bbox=(24.0, 20.0, 80.0, 40.0)),
+                _match("o", candidate, bbox=(80.5, 20.0, 84.0, 40.0)),
+            ]
+        )
+
+        self.assertIsNotNone(text_block)
+        self.assertEqual(text_block.text, "La Squadra Subito")
 
     def test_rebuild_merges_consecutive_text_blocks_with_same_block_hint(self):
         hint = _block("testo corretto ricostruito", x0=10.0, y0=20.0, x1=100.0, y1=40.0)

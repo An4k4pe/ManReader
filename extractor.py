@@ -201,9 +201,12 @@ def _text_block_from_dict_match_group(group: list[_DictBlockMatch]) -> TextBlock
     if any(match.matched_block != matched_block for match in group):
         return None
 
-    text = _text_from_block(matched_block)
-    if not text:
+    block_hint_text = _text_from_block(matched_block)
+    if not block_hint_text:
         return None
+
+    fallback_text = _fallback_text_from_dict_match_group(group)
+    text = _best_text_for_dict_match_group(block_hint_text, fallback_text)
 
     bbox = _union_bboxes([match.dict_bbox for match in group])
     source_span = _first_source_span(group)
@@ -247,6 +250,125 @@ def _rebuild_text_blocks_from_block_hints(
         index += len(group)
 
     return rebuilt
+
+
+def _fallback_text_from_dict_match_group(group: list[_DictBlockMatch]) -> str:
+    clean_matches = [match for match in group if match.dict_text.strip()]
+    if not clean_matches:
+        return ""
+
+    text = " ".join(clean_matches[0].dict_text.strip().split())
+    previous = clean_matches[0]
+    for match in clean_matches[1:]:
+        text = _join_dict_fragment_matches(text, previous, match)
+        previous = match
+    return text
+
+
+def _join_dict_fragment_matches(
+    current_text: str,
+    left_match: _DictBlockMatch,
+    right_match: _DictBlockMatch,
+) -> str:
+    right_text = " ".join(right_match.dict_text.strip().split())
+    if not current_text:
+        return right_text
+    if not right_text:
+        return current_text
+    if right_text[0] in ",.;:!?)]»":
+        return f"{current_text}{right_text}"
+    if _should_join_dict_matches_without_space(left_match, right_match):
+        return f"{current_text}{right_text}"
+    return f"{current_text} {right_text}"
+
+
+def _should_join_dict_matches_without_space(
+    left_match: _DictBlockMatch,
+    right_match: _DictBlockMatch,
+) -> bool:
+    left_text = " ".join(left_match.dict_text.strip().split())
+    right_text = " ".join(right_match.dict_text.strip().split())
+    if not left_text or not right_text:
+        return True
+    if not left_text[-1].isalnum() or not right_text[0].isalnum():
+        return False
+    if not _bboxes_are_on_same_line(left_match.dict_bbox, right_match.dict_bbox):
+        return False
+
+    horizontal_gap = right_match.dict_bbox[0] - left_match.dict_bbox[2]
+    if horizontal_gap > 1.5:
+        return False
+
+    left_last_word = left_text.rsplit(maxsplit=1)[-1]
+    right_first_word = right_text.split(maxsplit=1)[0]
+    if len(left_last_word) == 1 or len(right_first_word) == 1:
+        return True
+    return len(right_first_word) <= 4 and len(left_last_word) >= 3 and horizontal_gap <= 1.0
+
+
+def _best_text_for_dict_match_group(block_hint_text: str, fallback_text: str) -> str:
+    if not fallback_text:
+        return block_hint_text
+
+    if _same_text_ignoring_spaces(block_hint_text, fallback_text):
+        block_hint_score = _fragment_artifact_score(block_hint_text)
+        fallback_score = _fragment_artifact_score(fallback_text)
+        if fallback_score < block_hint_score:
+            return fallback_text
+        return block_hint_text
+
+    if _has_fragment_artifact(block_hint_text) and not _has_fragment_artifact(fallback_text):
+        return fallback_text
+    return block_hint_text
+
+
+def _same_text_ignoring_spaces(left: str, right: str) -> bool:
+    return "".join(left.split()) == "".join(right.split())
+
+
+def _fragment_artifact_score(text: str) -> int:
+    words = text.split()
+    return sum(
+        1 for left, right in zip(words, words[1:]) if _looks_like_fragment_boundary(left, right)
+    )
+
+
+def _has_fragment_artifact(text: str) -> bool:
+    words = text.split()
+    for left, right in zip(words, words[1:]):
+        if _looks_like_fragment_boundary(left, right):
+            return True
+    return False
+
+
+def _looks_like_fragment_boundary(left: str, right: str) -> bool:
+    clean_left = left.strip(",.;:!?)]»")
+    clean_right = right.strip(",.;:!?)]»")
+    if not clean_left or not clean_right:
+        return False
+    if not clean_left[-1].islower() or not clean_right[0].islower():
+        return False
+    if len(clean_left) == 1:
+        return clean_left.isascii() and len(clean_right) >= 5
+    if len(clean_right) == 1:
+        return clean_right.isascii()
+    return len(clean_left) >= 3 and clean_right in {"mata", "rale"}
+
+
+def _bboxes_are_on_same_line(
+    first: tuple[float, float, float, float],
+    second: tuple[float, float, float, float],
+) -> bool:
+    first_top, first_bottom = first[1], first[3]
+    second_top, second_bottom = second[1], second[3]
+    overlap = min(first_bottom, second_bottom) - max(first_top, second_top)
+    if overlap <= 0:
+        return False
+
+    min_height = min(max(first_bottom - first_top, 1.0), max(second_bottom - second_top, 1.0))
+    first_center = (first_top + first_bottom) / 2
+    second_center = (second_top + second_bottom) / 2
+    return overlap >= min_height * 0.5 or abs(first_center - second_center) <= 2.0
 
 
 def _union_bboxes(
@@ -1265,6 +1387,9 @@ class PDFExtractor:
             if spans:
                 if not _is_noise_block(spans):
                     text_blocks.append(TextBlock(spans=spans, bbox=bbox))
+
+        block_hints = page.get_text("blocks")
+        text_blocks = _rebuild_text_blocks_from_block_hints(text_blocks, block_hints)
 
         # Determina layout colonne per questa pagina
         forced = self.config.columns
