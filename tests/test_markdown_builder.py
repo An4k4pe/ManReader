@@ -20,6 +20,78 @@ class MarkdownBuilderTest(unittest.TestCase):
         self.assertIn("Primo frammento secondo frammento", markdown)
         self.assertNotIn("Primo frammento\n\nsecondo frammento", markdown)
 
+    def test_keeps_body_blocks_with_normal_vertical_gap_in_same_paragraph(self):
+        document = _document(
+            [
+                _text(
+                    "b1",
+                    "Prima frase.",
+                    bbox=(10.0, 10.0, 100.0, 20.0),
+                    style={"avg_font_size": "12"},
+                ),
+                _text(
+                    "b2",
+                    "Seconda frase",
+                    bbox=(10.0, 24.0, 100.0, 34.0),
+                    style={"avg_font_size": "12"},
+                ),
+            ]
+        )
+
+        markdown = build_markdown(document)
+
+        self.assertIn("Prima frase. Seconda frase", markdown)
+        self.assertNotIn("Prima frase.\n\nSeconda frase", markdown)
+
+    def test_wide_vertical_gap_after_sentence_starts_new_paragraph(self):
+        document = _document(
+            [
+                _text(
+                    "b1",
+                    "i suoi abitanti ridotti a orrori voraci di carne umana.",
+                    bbox=(10.0, 10.0, 300.0, 20.0),
+                    style={"avg_font_size": "12"},
+                ),
+                _text(
+                    "b2",
+                    "L’Inquisitore Zovyrian stava indagando...",
+                    bbox=(10.0, 40.0, 300.0, 50.0),
+                    style={"avg_font_size": "12"},
+                ),
+            ]
+        )
+
+        markdown = build_markdown(document)
+
+        self.assertIn(
+            "i suoi abitanti ridotti a orrori voraci di carne umana.\n\n"
+            "L’Inquisitore Zovyrian stava indagando...",
+            markdown,
+        )
+
+    def test_wide_vertical_gap_without_strong_punctuation_stays_same_paragraph(self):
+        document = _document(
+            [
+                _text(
+                    "b1",
+                    "Prima parte senza punto",
+                    bbox=(10.0, 10.0, 200.0, 20.0),
+                    style={"avg_font_size": "12"},
+                ),
+                _text(
+                    "b2",
+                    "continua sotto",
+                    bbox=(10.0, 40.0, 200.0, 50.0),
+                    style={"avg_font_size": "12"},
+                ),
+            ]
+        )
+
+        markdown = build_markdown(document)
+
+        self.assertIn("Prima parte senza punto continua sotto", markdown)
+        self.assertNotIn("Prima parte senza punto\n\ncontinua sotto", markdown)
+
     def test_does_not_insert_space_before_punctuation(self):
         document = _document(
             [
@@ -120,6 +192,29 @@ class MarkdownBuilderTest(unittest.TestCase):
         self.assertIn("Questo è testo normale con un secondo frammento", markdown)
         self.assertNotIn("## Questo è testo normale", markdown)
 
+    def test_invalid_font_size_uses_safe_paragraph_gap_fallback(self):
+        document = _document(
+            [
+                _text(
+                    "b1",
+                    "Prima frase.",
+                    bbox=(10.0, 10.0, 100.0, 20.0),
+                    style={"avg_font_size": "0"},
+                ),
+                _text(
+                    "b2",
+                    "Seconda frase",
+                    bbox=(10.0, 24.0, 100.0, 34.0),
+                    style={"avg_font_size": "0"},
+                ),
+            ]
+        )
+
+        markdown = build_markdown(document)
+
+        self.assertIn("Prima frase. Seconda frase", markdown)
+        self.assertNotIn("Prima frase.\n\nSeconda frase", markdown)
+
     def test_bold_inline_text_uses_markdown_strong(self):
         document = _document([_text("b1", "testo", style={"bold": "true"})])
 
@@ -194,12 +289,18 @@ def _document(blocks: list[BlockIR]) -> DocumentIR:
     )
 
 
-def _text(block_id: str, text: str, style: dict[str, str] | None = None) -> BlockIR:
+def _text(
+    block_id: str,
+    text: str,
+    style: dict[str, str] | None = None,
+    bbox: tuple[float, float, float, float] | None = None,
+) -> BlockIR:
     return BlockIR(
         id=block_id,
         type="text",
         page_num=1,
         order=1,
+        bbox=bbox,
         text=text,
         style=style or {},
     )

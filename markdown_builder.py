@@ -6,7 +6,7 @@ enrichment, entity detection, cross-linking, and file persistence.
 
 from __future__ import annotations
 
-from ir_model import AssetIR, DocumentIR
+from ir_model import AssetIR, BlockIR, DocumentIR
 
 
 def build_markdown(document: DocumentIR) -> str:
@@ -19,6 +19,7 @@ def build_markdown(document: DocumentIR) -> str:
             parts.append(current_paragraph)
             current_paragraph = ""
 
+        previous_text_block: BlockIR | None = None
         parts.append(f"<!-- page: {page.page_num} -->")
 
         for block in page.blocks:
@@ -27,21 +28,59 @@ def build_markdown(document: DocumentIR) -> str:
                     if current_paragraph:
                         parts.append(current_paragraph)
                         current_paragraph = ""
+                    previous_text_block = None
                     level = _heading_level(block.text, block.style)
                     parts.append(f"{'#' * level} {block.text.strip()}")
                 else:
+                    if (
+                        current_paragraph
+                        and previous_text_block is not None
+                        and _should_start_new_paragraph(previous_text_block, block)
+                    ):
+                        parts.append(current_paragraph)
+                        current_paragraph = ""
                     text = _format_inline_text(block.text, block.style)
                     current_paragraph = _join_text_fragments(current_paragraph, text)
+                    previous_text_block = block
             elif block.type in {"image", "vector", "table"} and block.asset is not None:
                 if current_paragraph:
                     parts.append(current_paragraph)
                     current_paragraph = ""
+                previous_text_block = None
                 parts.append(_render_asset(block.asset, block.page_num, block.type))
 
     if current_paragraph:
         parts.append(current_paragraph)
 
     return "\n\n".join(part for part in parts if part).rstrip() + "\n"
+
+
+def _should_start_new_paragraph(previous: BlockIR, current: BlockIR) -> bool:
+    if previous.page_num != current.page_num:
+        return False
+    if previous.bbox is None or current.bbox is None:
+        return False
+    if not _ends_with_strong_punctuation(previous.text or ""):
+        return False
+
+    vertical_gap = current.bbox[1] - previous.bbox[3]
+    font_size = _paragraph_font_size(previous.style, current.style)
+    return vertical_gap >= font_size * 1.2
+
+
+def _ends_with_strong_punctuation(text: str) -> bool:
+    return text.strip().endswith((".", "?", "!", "»", ")", "…"))
+
+
+def _paragraph_font_size(first_style: dict[str, str], second_style: dict[str, str]) -> float:
+    for style in (first_style, second_style):
+        try:
+            font_size = float(style.get("avg_font_size", ""))
+        except ValueError:
+            continue
+    if font_size > 0:
+        return font_size
+    return 12.0
 
 
 def _is_heading_text(text: str, style: dict[str, str]) -> bool:
