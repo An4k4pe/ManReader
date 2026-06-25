@@ -124,3 +124,8 @@ Il core CLI espone solo Ollama come backend vision locale.
 - Markdown: supporto heading-like e inline emphasis prudente
 - Nota: italic puro non viene ancora renderizzato perché lo stile estratto è troppo rumoroso
 - Follow-up extractor: preservare enfasi inline quando i gruppi di TextBlock frammentati vengono ricostruiti tramite get_text("blocks"). Il rebuild attuale migliora molto il testo pre-IR e corregge artefatti come resistent e, p urtroppo, gl i, suoam ico, deci mata, ma nei gruppi ricostruiti collassa gli span in un solo TextSpan, quindi può perdere bold/italic inline, per esempio nomi resi prima come enfasi Markdown.
+- Follow-up extractor: preservare enfasi inline quando i gruppi di `TextBlock` vengono ricostruiti da `get_text("blocks")`; il rebuild attuale migliora il testo ma può collassare più span in uno solo.
+- Follow-up extractor/heading: gestire titoli con lettere spaziate o decorative, es. `L’A RRIVO DELL ’O RDA`.
+- Follow-up IR/extractor: classificare blocchi con marker `❖` come liste/question prompts, separando gli item invece di renderli come unico paragrafo continuo.
+- Follow-up IR/extractor: distinguere testo body da label/celle/box/table-like text; casi osservati: `**La piccola cappella uberiana del villaggio**`, `**Un'offerta votiva bruciata davanti alla statua di Uberia**`, `**5 La casa del parroco**`, `**Un sermone incompiuto sul leggio**`.
+- Follow-up IR model: valutare metadati `role`/`subtype` su `BlockIR` per descrivere funzioni semantiche come `question_list`, `table_label`, `caption`, `boxed_text`, senza introdurre per ora una granularità parola-per-parola.
