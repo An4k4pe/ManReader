@@ -218,6 +218,37 @@ def _text_block_from_dict_match_group(group: list[_DictBlockMatch]) -> TextBlock
     return TextBlock(spans=[span], bbox=bbox)
 
 
+def _rebuild_text_blocks_from_block_hints(
+    text_blocks: list[TextBlock],
+    block_hints: list[tuple[float, float, float, float, str, int, int]],
+) -> list[TextBlock]:
+    matches = [
+        _DictBlockMatch(
+            dict_bbox=text_block.bbox,
+            dict_text=text_block.text,
+            matched_block=_best_text_block_for_bbox(text_block.bbox, block_hints),
+            source_spans=text_block.spans,
+        )
+        for text_block in text_blocks
+    ]
+    groups = _group_consecutive_dict_block_matches(matches)
+    rebuilt: list[TextBlock] = []
+    index = 0
+
+    for group in groups:
+        if len(group) > 1:
+            text_block = _text_block_from_dict_match_group(group)
+            if text_block is not None:
+                rebuilt.append(text_block)
+            else:
+                rebuilt.extend(text_blocks[index : index + len(group)])
+        else:
+            rebuilt.append(text_blocks[index])
+        index += len(group)
+
+    return rebuilt
+
+
 def _union_bboxes(
     bboxes: list[tuple[float, float, float, float]],
 ) -> tuple[float, float, float, float]:

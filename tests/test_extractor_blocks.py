@@ -1,12 +1,14 @@
 import unittest
 
 from extractor import (
+    TextBlock,
     TextSpan,
     _bbox_intersection_area,
     _best_text_block_for_bbox,
     _DictBlockMatch,
     _group_consecutive_dict_block_matches,
     _overlap_ratio_against_bbox,
+    _rebuild_text_blocks_from_block_hints,
     _text_block_from_dict_match_group,
     _text_from_block,
 )
@@ -252,6 +254,87 @@ class ExtractorBlocksTest(unittest.TestCase):
         self.assertFalse(span.bold)
         self.assertFalse(span.italic)
 
+    def test_rebuild_merges_consecutive_text_blocks_with_same_block_hint(self):
+        hint = _block("testo corretto ricostruito", x0=10.0, y0=20.0, x1=100.0, y1=40.0)
+        text_blocks = [
+            _text_block("testo", bbox=(10.0, 20.0, 35.0, 40.0)),
+            _text_block("cor", bbox=(35.0, 20.0, 60.0, 40.0)),
+            _text_block("retto", bbox=(60.0, 20.0, 100.0, 40.0)),
+        ]
+
+        rebuilt = _rebuild_text_blocks_from_block_hints(text_blocks, [hint])
+
+        self.assertEqual(len(rebuilt), 1)
+        self.assertEqual(rebuilt[0].text, "testo corretto ricostruito")
+        self.assertEqual(rebuilt[0].bbox, (10.0, 20.0, 100.0, 40.0))
+
+    def test_rebuild_preserves_single_text_block_with_match(self):
+        hint = _block("testo singolo", x0=10.0, y0=20.0, x1=100.0, y1=40.0)
+        original = _text_block("testo singolo", bbox=(10.0, 20.0, 100.0, 40.0))
+
+        rebuilt = _rebuild_text_blocks_from_block_hints([original], [hint])
+
+        self.assertEqual(rebuilt, [original])
+
+    def test_rebuild_preserves_blocks_with_different_matches(self):
+        first_hint = _block("primo", x0=10.0, y0=20.0, x1=50.0, y1=40.0, block_no=1)
+        second_hint = _block("secondo", x0=60.0, y0=20.0, x1=100.0, y1=40.0, block_no=2)
+        originals = [
+            _text_block("pri", bbox=(10.0, 20.0, 50.0, 40.0)),
+            _text_block("sec", bbox=(60.0, 20.0, 100.0, 40.0)),
+        ]
+
+        rebuilt = _rebuild_text_blocks_from_block_hints(originals, [first_hint, second_hint])
+
+        self.assertEqual(rebuilt, originals)
+
+    def test_rebuild_preserves_blocks_without_match(self):
+        original = _text_block("lontano", bbox=(200.0, 200.0, 260.0, 220.0))
+        hint = _block("altro", x0=10.0, y0=20.0, x1=100.0, y1=40.0)
+
+        rebuilt = _rebuild_text_blocks_from_block_hints([original], [hint])
+
+        self.assertEqual(rebuilt, [original])
+
+    def test_rebuild_preserves_original_order(self):
+        first_hint = _block("prima riga completa", x0=10.0, y0=20.0, x1=100.0, y1=40.0, block_no=1)
+        second_hint = _block(
+            "seconda riga completa", x0=10.0, y0=50.0, x1=100.0, y1=70.0, block_no=2
+        )
+        text_blocks = [
+            _text_block("pri", bbox=(10.0, 20.0, 45.0, 40.0)),
+            _text_block("ma", bbox=(45.0, 20.0, 100.0, 40.0)),
+            _text_block("sec", bbox=(10.0, 50.0, 45.0, 70.0)),
+            _text_block("onda", bbox=(45.0, 50.0, 100.0, 70.0)),
+        ]
+
+        rebuilt = _rebuild_text_blocks_from_block_hints(text_blocks, [first_hint, second_hint])
+
+        self.assertEqual(
+            [block.text for block in rebuilt], ["prima riga completa", "seconda riga completa"]
+        )
+
+    def test_rebuild_uses_style_from_first_span_of_first_group_block(self):
+        hint = _block("testo corretto", x0=10.0, y0=20.0, x1=100.0, y1=40.0)
+        text_blocks = [
+            _text_block(
+                "testo",
+                bbox=(10.0, 20.0, 45.0, 40.0),
+                font="Serif-Bold",
+                size=14.0,
+                bold=True,
+            ),
+            _text_block("corretto", bbox=(45.0, 20.0, 100.0, 40.0), font="Sans", size=9.0),
+        ]
+
+        rebuilt = _rebuild_text_blocks_from_block_hints(text_blocks, [hint])
+
+        span = rebuilt[0].spans[0]
+        self.assertEqual(span.font, "Serif-Bold")
+        self.assertEqual(span.size, 14.0)
+        self.assertTrue(span.bold)
+        self.assertFalse(span.italic)
+
 
 def _block(
     text: str,
@@ -279,19 +362,44 @@ def _match(
     )
 
 
+def _text_block(
+    text: str,
+    bbox: tuple[float, float, float, float],
+    font: str = "",
+    size: float = 10.0,
+    bold: bool = False,
+    italic: bool = False,
+) -> TextBlock:
+    return TextBlock(
+        spans=[
+            _span(
+                text=text,
+                bbox=bbox,
+                font=font,
+                size=size,
+                bold=bold,
+                italic=italic,
+            )
+        ],
+        bbox=bbox,
+    )
+
+
 def _span(
+    text: str = "source",
+    bbox: tuple[float, float, float, float] = (10.0, 20.0, 100.0, 40.0),
     font: str = "",
     size: float = 10.0,
     bold: bool = False,
     italic: bool = False,
 ) -> TextSpan:
     return TextSpan(
-        text="source",
+        text=text,
         font=font,
         size=size,
         bold=bold,
         italic=italic,
-        bbox=(10.0, 20.0, 100.0, 40.0),
+        bbox=bbox,
     )
 
 
