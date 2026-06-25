@@ -14,6 +14,16 @@ class ExtractorTextJoinTest(unittest.TestCase):
 
         self.assertEqual(block.text, "resistente")
 
+    def test_merges_single_letter_fragment_with_word_rest(self):
+        block = _block(
+            [
+                _span("p", (10.0, 10.0, 15.0, 20.0)),
+                _span("urtroppo", (15.5, 10.0, 55.0, 20.0)),
+            ]
+        )
+
+        self.assertEqual(block.text, "purtroppo")
+
     def test_merges_uppercase_drop_cap_with_uppercase_rest(self):
         block = _block(
             [
@@ -23,6 +33,23 @@ class ExtractorTextJoinTest(unittest.TestCase):
         )
 
         self.assertEqual(block.text, "DOMANDE")
+
+    def test_does_not_over_merge_normal_words_with_tiny_gap(self):
+        cases = [
+            ("La", "Squadra", "La Squadra"),
+            ("Vesper", "viene", "Vesper viene"),
+            ("Dran", "este", "Dran este"),
+        ]
+        for first, second, expected in cases:
+            with self.subTest(first=first, second=second):
+                block = _block(
+                    [
+                        _span(first, (10.0, 10.0, 30.0, 20.0)),
+                        _span(second, (30.5, 10.0, 70.0, 20.0)),
+                    ]
+                )
+
+                self.assertEqual(block.text, expected)
 
     def test_does_not_insert_space_before_punctuation(self):
         block = _block(
@@ -63,6 +90,45 @@ class ExtractorTextJoinTest(unittest.TestCase):
         )
 
         self.assertEqual(block.text, "DOMANDE")
+
+
+def test_merges_word_with_single_letter_suffix_fragment(self):
+    block = _block(
+        [
+            _span("resistent", (10.0, 10.0, 40.0, 20.0)),
+            _span("e", (40.5, 10.0, 45.0, 20.0)),
+        ]
+    )
+
+    self.assertEqual(block.text, "resistente")
+
+    def test_merges_single_letter_fragment_with_word_rest(self):
+        block = _block(
+            [
+                _span("p", (10.0, 10.0, 15.0, 20.0)),
+                _span("urtroppo", (15.5, 10.0, 55.0, 20.0)),
+            ]
+        )
+
+        self.assertEqual(block.text, "purtroppo")
+
+
+def test_does_not_over_merge_normal_words_with_tiny_gap(self):
+    cases = [
+        ("La", "Squadra", "La Squadra"),
+        ("Vesper", "viene", "Vesper viene"),
+        ("lunar", "Selenia", "lunar Selenia"),
+    ]
+    for first, second, expected in cases:
+        with self.subTest(first=first, second=second):
+            block = _block(
+                [
+                    _span(first, (10.0, 10.0, 30.0, 20.0)),
+                    _span(second, (30.5, 10.0, 70.0, 20.0)),
+                ]
+            )
+
+            self.assertEqual(block.text, expected)
 
     def test_keeps_space_between_normal_words_with_normal_gap(self):
         block = _block(

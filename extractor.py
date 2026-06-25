@@ -110,7 +110,8 @@ def _should_join_span_without_space(first: TextSpan, second: TextSpan) -> bool:
         return False
 
     gap = second.bbox[0] - first.bbox[2]
-    if left[-1].isalnum() and right[0].isalnum() and gap <= 1.5:
+    has_very_short_fragment = len(left) == 1 or len(right) == 1
+    if left[-1].isalnum() and right[0].isalnum() and has_very_short_fragment and gap <= 1.5:
         return True
 
     return len(left) == 1 and left.isupper() and right.isupper() and gap <= 4.0
