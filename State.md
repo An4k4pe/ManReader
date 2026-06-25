@@ -116,3 +116,8 @@ Il core CLI espone solo Ollama come backend vision locale.
 - Valutare qualità descrizioni gemma4:12b su manuali reali
 - gestire i box o simili, se non sono già gestiti come callout o note in linea
 - creare una versione markdown del manuale strippato con link alle immagini e/o descrizione
+
+- Aggiunti test `unittest` per `markdown_builder.py` e `ir_builder.py`
+- EPUB: rimossa pagina TOC manuale duplicata; resta la navigazione standard EPUB
+- Markdown: supporto heading-like e inline emphasis prudente
+- Nota: italic puro non viene ancora renderizzato perché lo stile estratto è troppo rumoroso
