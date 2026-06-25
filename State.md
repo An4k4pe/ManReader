@@ -116,7 +116,9 @@ Il core CLI espone solo Ollama come backend vision locale.
 - Valutare qualità descrizioni gemma4:12b su manuali reali
 - gestire i box o simili, se non sono già gestiti come callout o note in linea
 - creare una versione markdown del manuale strippato con link alle immagini e/o descrizione
-
+- Known follow-up: remaining artifacts such as "resistent e", "gl i" and
+  "deci mata" are now visible in DocumentIR as separate adjacent text blocks,
+  so they require a future block-level merge pass rather than span-level join.
 - Aggiunti test `unittest` per `markdown_builder.py` e `ir_builder.py`
 - EPUB: rimossa pagina TOC manuale duplicata; resta la navigazione standard EPUB
 - Markdown: supporto heading-like e inline emphasis prudente
