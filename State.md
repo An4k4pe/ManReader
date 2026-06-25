@@ -123,3 +123,4 @@ Il core CLI espone solo Ollama come backend vision locale.
 - EPUB: rimossa pagina TOC manuale duplicata; resta la navigazione standard EPUB
 - Markdown: supporto heading-like e inline emphasis prudente
 - Nota: italic puro non viene ancora renderizzato perché lo stile estratto è troppo rumoroso
+- Follow-up extractor: preservare enfasi inline quando i gruppi di TextBlock frammentati vengono ricostruiti tramite get_text("blocks"). Il rebuild attuale migliora molto il testo pre-IR e corregge artefatti come resistent e, p urtroppo, gl i, suoam ico, deci mata, ma nei gruppi ricostruiti collassa gli span in un solo TextSpan, quindi può perdere bold/italic inline, per esempio nomi resi prima come enfasi Markdown.
