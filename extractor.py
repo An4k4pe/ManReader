@@ -246,10 +246,36 @@ def _rebuild_text_blocks_from_block_hints(
             else:
                 rebuilt.extend(text_blocks[index : index + len(group)])
         else:
-            rebuilt.append(text_blocks[index])
+            text_block = _text_block_from_single_dict_match_if_better(group[0])
+            rebuilt.append(text_block if text_block is not None else text_blocks[index])
         index += len(group)
 
     return rebuilt
+
+
+def _text_block_from_single_dict_match_if_better(match: _DictBlockMatch) -> TextBlock | None:
+    if match.matched_block is None:
+        return None
+
+    dict_text = " ".join(match.dict_text.strip().split())
+    block_hint_text = _text_from_block(match.matched_block)
+    if not block_hint_text:
+        return None
+    if not _same_text_ignoring_spaces(dict_text, block_hint_text):
+        return None
+    if _fragment_artifact_score(block_hint_text) >= _fragment_artifact_score(dict_text):
+        return None
+
+    source_span = match.source_spans[0] if match.source_spans else None
+    span = TextSpan(
+        text=block_hint_text,
+        font=source_span.font if source_span is not None else "",
+        size=source_span.size if source_span is not None else 10.0,
+        bold=source_span.bold if source_span is not None else False,
+        italic=source_span.italic if source_span is not None else False,
+        bbox=match.dict_bbox,
+    )
+    return TextBlock(spans=[span], bbox=match.dict_bbox)
 
 
 def _fallback_text_from_dict_match_group(group: list[_DictBlockMatch]) -> str:
@@ -330,7 +356,28 @@ def _fragment_artifact_score(text: str) -> int:
     words = text.split()
     return sum(
         1 for left, right in zip(words, words[1:]) if _looks_like_fragment_boundary(left, right)
-    )
+    ) + sum(_word_artifact_score(word, previous) for previous, word in zip(["", *words], words))
+
+
+def _word_artifact_score(word: str, previous: str) -> int:
+    clean_word = word.strip(",.;:!?)]»")
+    clean_previous = previous.strip(",.;:!?)]»")
+    if not clean_word:
+        return 0
+
+    score = 0
+    if "’" in clean_word:
+        apostrophe_suffix = clean_word.rsplit("’", 1)[-1]
+        if len(apostrophe_suffix) == 1:
+            score += 1
+    if (
+        clean_word.isupper()
+        and clean_previous.isupper()
+        and len(clean_previous) > 1
+        and len(clean_word) > 12
+    ):
+        score += 1
+    return score
 
 
 def _has_fragment_artifact(text: str) -> bool:

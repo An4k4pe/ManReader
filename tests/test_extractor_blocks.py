@@ -386,6 +386,48 @@ class ExtractorBlocksTest(unittest.TestCase):
 
         self.assertEqual(rebuilt, [original])
 
+    def test_rebuild_single_text_block_uses_better_heading_spacing_hint(self):
+        hint = _block("MECCANICHE E COMPLICAZIONI", x0=10.0, y0=20.0, x1=200.0, y1=40.0)
+        original = _text_block(
+            "MECCANICHE ECOMPLICAZIONI",
+            bbox=(10.0, 20.0, 200.0, 40.0),
+            font="Heading-Bold",
+            size=18.0,
+            bold=True,
+        )
+
+        rebuilt = _rebuild_text_blocks_from_block_hints([original], [hint])
+
+        self.assertEqual(rebuilt[0].text, "MECCANICHE E COMPLICAZIONI")
+        self.assertEqual(rebuilt[0].bbox, original.bbox)
+        self.assertEqual(rebuilt[0].spans[0].font, "Heading-Bold")
+        self.assertEqual(rebuilt[0].spans[0].size, 18.0)
+        self.assertTrue(rebuilt[0].spans[0].bold)
+
+    def test_rebuild_single_text_block_uses_better_apostrophe_heading_hint(self):
+        hint = _block("L’ARRIVO DELL’ORDA", x0=10.0, y0=20.0, x1=200.0, y1=40.0)
+        original = _text_block("L’A RRIVO DELL ’O RDA", bbox=(10.0, 20.0, 200.0, 40.0))
+
+        rebuilt = _rebuild_text_blocks_from_block_hints([original], [hint])
+
+        self.assertEqual(rebuilt[0].text, "L’ARRIVO DELL’ORDA")
+
+    def test_rebuild_single_text_block_keeps_original_when_hint_is_not_equivalent(self):
+        hint = _block("TITOLO DIVERSO", x0=10.0, y0=20.0, x1=200.0, y1=40.0)
+        original = _text_block("MECCANICHE ECOMPLICAZIONI", bbox=(10.0, 20.0, 200.0, 40.0))
+
+        rebuilt = _rebuild_text_blocks_from_block_hints([original], [hint])
+
+        self.assertEqual(rebuilt, [original])
+
+    def test_rebuild_single_text_block_keeps_original_when_hint_is_not_better(self):
+        hint = _block("MECCANICHE ECOMPLICAZIONI", x0=10.0, y0=20.0, x1=200.0, y1=40.0)
+        original = _text_block("MECCANICHE ECOMPLICAZIONI", bbox=(10.0, 20.0, 200.0, 40.0))
+
+        rebuilt = _rebuild_text_blocks_from_block_hints([original], [hint])
+
+        self.assertEqual(rebuilt, [original])
+
     def test_rebuild_preserves_blocks_with_different_matches(self):
         first_hint = _block("primo", x0=10.0, y0=20.0, x1=50.0, y1=40.0, block_no=1)
         second_hint = _block("secondo", x0=60.0, y0=20.0, x1=100.0, y1=40.0, block_no=2)
