@@ -22,6 +22,8 @@ Struttura cartelle output:
       tables/    ← tabelle (CSV)
 """
 
+from __future__ import annotations
+
 import contextlib
 import csv
 import hashlib
@@ -29,8 +31,10 @@ import io
 import re as _re
 import statistics
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import fitz  # PyMuPDF
 import pdfplumber
@@ -44,6 +48,9 @@ _TABLE_TEXT_LINES_SETTINGS = {"vertical_strategy": "text", "horizontal_strategy"
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
+
+BBox = tuple[float, float, float, float]
+WordItem = tuple[float, float, float, float, str]
 
 
 @dataclass
@@ -116,6 +123,26 @@ def _line_text_from_words(
     return text
 
 
+def _normalize_words(raw_words: Sequence[object]) -> list[WordItem]:
+    normalized: list[WordItem] = []
+    for raw_word in raw_words:
+        if not isinstance(raw_word, (list, tuple)) or len(raw_word) < 5:
+            continue
+        text = str(raw_word[4]).strip()
+        if not text:
+            continue
+        normalized.append(
+            (
+                float(raw_word[0]),
+                float(raw_word[1]),
+                float(raw_word[2]),
+                float(raw_word[3]),
+                text,
+            )
+        )
+    return normalized
+
+
 def _text_from_block(block: tuple[float, float, float, float, str, int, int]) -> str:
     return " ".join(block[4].strip().split())
 
@@ -138,7 +165,10 @@ def _find_table_regions(plumb_page) -> list[tuple[float, float, float, float]]:
     return _dedupe_table_regions([*default_regions, *text_line_regions])
 
 
-def _safe_find_tables(plumb_page, table_settings: dict[str, str] | None = None) -> list[object]:
+def _safe_find_tables(
+    plumb_page: Any,
+    table_settings: dict[str, str] | None = None,
+) -> list[Any]:
     try:
         if table_settings is None:
             return list(plumb_page.find_tables())
@@ -147,7 +177,7 @@ def _safe_find_tables(plumb_page, table_settings: dict[str, str] | None = None) 
         return []
 
 
-def _table_bboxes(tables: list[object]) -> list[tuple[float, float, float, float]]:
+def _table_bboxes(tables: Sequence[Any]) -> list[BBox]:
     regions = []
     for table in tables:
         bbox = _table_bbox(table)
@@ -156,7 +186,7 @@ def _table_bboxes(tables: list[object]) -> list[tuple[float, float, float, float
     return regions
 
 
-def _table_bbox(table: object) -> tuple[float, float, float, float] | None:
+def _table_bbox(table: Any) -> BBox | None:
     bbox = getattr(table, "bbox", None)
     if isinstance(bbox, (list, tuple)) and len(bbox) == 4:
         return (float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3]))
@@ -164,10 +194,10 @@ def _table_bbox(table: object) -> tuple[float, float, float, float] | None:
 
 
 def _is_valid_text_line_table_region(
-    table: object,
-    bbox: tuple[float, float, float, float],
-    default_regions: list[tuple[float, float, float, float]],
-    plumb_page,
+    table: Any,
+    bbox: BBox,
+    default_regions: list[BBox],
+    plumb_page: Any,
 ) -> bool:
     rows = table.extract() or []
     row_count = len(rows)
@@ -225,8 +255,8 @@ def _dedupe_table_regions(
     return sorted(deduped, key=lambda bbox: (bbox[1], bbox[0]))
 
 
-def _table_like_regions(plumb_page) -> list[tuple[float, float, float, float]]:
-    regions = []
+def _table_like_regions(plumb_page: Any) -> list[BBox]:
+    regions: list[BBox] = []
     for table in _safe_find_tables(plumb_page, _TABLE_TEXT_LINES_SETTINGS):
         bbox = _table_bbox(table)
         if bbox is None:
@@ -244,37 +274,40 @@ def _table_like_header_from_rows(rows: list[list[str | None]]) -> tuple[str, int
             continue
         first = cells[0].split()[0] if cells[0].split() else ""
         match = _DIE_HEADER_RE.match(first)
-        if match:
+        if match is not None:
             return first.upper(), int(match.group("sides"))
     return None
 
 
 def _words_in_bbox(
-    words: list[tuple], bbox: tuple[float, float, float, float], padding: float = 16.0
-) -> list[dict[str, object]]:
+    words: Sequence[WordItem],
+    bbox: BBox,
+    padding: float = 16.0,
+) -> list[WordItem]:
     x0, y0, x1, y1 = bbox
     region = (x0 - padding, y0 - padding, x1 + padding, y1 + padding)
-    selected = []
+    selected: list[WordItem] = []
+
     for word in words:
-        if len(word) < 5:
-            continue
-        text = str(word[4]).strip()
+        wx0, wy0, wx1, wy1, raw_text = word
+        text = str(raw_text).strip()
         if not text:
             continue
-        word_bbox = (float(word[0]), float(word[1]), float(word[2]), float(word[3]))
+
+        word_bbox = (float(wx0), float(wy0), float(wx1), float(wy1))
         center_x = (word_bbox[0] + word_bbox[2]) / 2
         center_y = (word_bbox[1] + word_bbox[3]) / 2
         if region[0] <= center_x <= region[2] and region[1] <= center_y <= region[3]:
-            selected.append({"bbox": word_bbox, "text": text})
-    return sorted(selected, key=lambda item: (item["bbox"][1], item["bbox"][0]))
+            selected.append((word_bbox[0], word_bbox[1], word_bbox[2], word_bbox[3], text))
+
+    return sorted(selected, key=lambda item: (item[1], item[0]))
 
 
 def _rebuild_numbered_table_from_words(
-    words: list[tuple] | list[dict[str, object]],
-    region: tuple[float, float, float, float],
+    words: Sequence[WordItem],
+    region: BBox,
 ) -> list[list[str]] | None:
-    normalized_words = _normalize_word_items(words)
-    region_words = _words_in_bbox(normalized_words, region, padding=16.0)
+    region_words = _words_in_bbox(words, region, padding=16.0)
     header = _numbered_table_header(region_words)
     if header is None:
         return None
@@ -291,17 +324,16 @@ def _rebuild_numbered_table_from_words(
 
     bands = _table_row_bands(row_starts)
     rows_by_number = {num: ["" for _ in starts] for num, _, _ in row_starts}
-    cell_words: dict[tuple[int, int], list[dict[str, object]]] = defaultdict(list)
+    cell_words: dict[tuple[int, int], list[WordItem]] = defaultdict(list)
 
     for word in region_words:
-        bbox = word["bbox"]
-        center_y = (bbox[1] + bbox[3]) / 2
+        center_y = (word[1] + word[3]) / 2
         if center_y <= header_bottom:
             continue
         row_num = _table_row_for_y(center_y, bands)
         if row_num is None:
             continue
-        col = _table_column_for_x(float(bbox[0]), starts)
+        col = _table_column_for_x(word[0], starts)
         cell_words[(row_num, col)].append(word)
 
     for (row_num, col), grouped_words in cell_words.items():
@@ -313,57 +345,45 @@ def _rebuild_numbered_table_from_words(
     return [header_row, *ordered_rows]
 
 
-def _normalize_word_items(words: list[tuple] | list[dict[str, object]]) -> list[tuple]:
-    normalized = []
-    for word in words:
-        if isinstance(word, dict):
-            bbox = word["bbox"]
-            normalized.append((bbox[0], bbox[1], bbox[2], bbox[3], word["text"]))
-        else:
-            normalized.append(word)
-    return normalized
-
-
 def _numbered_table_header(
-    words: list[dict[str, object]],
+    words: Sequence[WordItem],
 ) -> tuple[list[str], int, list[float], float] | None:
     for word in words:
-        match = _DIE_HEADER_RE.match(str(word["text"]))
-        if not match:
+        match = _DIE_HEADER_RE.match(word[4])
+        if match is None:
             continue
-        bbox = word["bbox"]
-        center_y = (bbox[1] + bbox[3]) / 2
+        center_y = (word[1] + word[3]) / 2
         line_words = [
             candidate
             for candidate in words
-            if abs(((candidate["bbox"][1] + candidate["bbox"][3]) / 2) - center_y) <= 3.0
+            if abs(((candidate[1] + candidate[3]) / 2) - center_y) <= 3.0
         ]
-        line_words.sort(key=lambda item: item["bbox"][0])
+        line_words.sort(key=lambda item: item[0])
         if len(line_words) < 3:
             continue
-        starts = [float(item["bbox"][0]) for item in line_words[:4]]
+        starts = [item[0] for item in line_words[:4]]
         if len(starts) < 3:
             continue
-        header_row = [str(item["text"]) for item in line_words[: len(starts) - 1]]
+        header_row = [item[4] for item in line_words[: len(starts) - 1]]
         header_row.append(_join_table_words(line_words[len(starts) - 1 :]))
         return (
             header_row,
             int(match.group("sides")),
             starts,
-            max(item["bbox"][3] for item in line_words),
+            max(item[3] for item in line_words),
         )
     return None
 
 
 def _numbered_table_row_starts(
-    words: list[dict[str, object]],
+    words: Sequence[WordItem],
     die_sides: int,
     header_bottom: float,
     first_column_x: float,
 ) -> list[tuple[int, float, float]]:
     starts = []
     for word in words:
-        text = str(word["text"])
+        text = word[4]
         if not text.isdigit():
             continue
 
@@ -371,15 +391,14 @@ def _numbered_table_row_starts(
         if not (1 <= number <= die_sides):
             continue
 
-        bbox = word["bbox"]
-        if abs(float(bbox[0]) - first_column_x) > 12.0:
+        if abs(word[0] - first_column_x) > 12.0:
             continue
 
-        center_y = (bbox[1] + bbox[3]) / 2
+        center_y = (word[1] + word[3]) / 2
         if center_y <= header_bottom:
             continue
 
-        starts.append((number, float(bbox[1]), float(bbox[3])))
+        starts.append((number, word[1], word[3]))
 
     starts.sort(key=lambda item: item[1])
     return starts
@@ -410,18 +429,16 @@ def _table_column_for_x(x0: float, starts: list[float]) -> int:
     return len(starts) - 1
 
 
-def _join_table_words(words: list[dict[str, object]]) -> str:
-    ordered = sorted(words, key=lambda item: (item["bbox"][1], item["bbox"][0]))
-    return " ".join(str(word["text"]) for word in ordered).strip()
+def _join_table_words(words: Sequence[WordItem]) -> str:
+    ordered = sorted(words, key=lambda item: (item[1], item[0]))
+    return " ".join(word[4] for word in ordered).strip()
 
 
 def _table_non_empty_cell_count(rows: list[list[str]]) -> int:
     return sum(1 for row in rows for cell in row if cell.strip())
 
 
-def _table_fragments_non_empty_in_region(
-    tables: list[object], region: tuple[float, float, float, float]
-) -> int:
+def _table_fragments_non_empty_in_region(tables: Sequence[TableBlock], region: BBox) -> int:
     return sum(
         _table_non_empty_cell_count(table.rows)
         for table in tables
@@ -1531,7 +1548,7 @@ class PDFExtractor:
             r = fitz.Rect(d["rect"])
             if r.is_empty or r.width * r.height < 4:
                 return False
-                return not (r.width > pw * 0.70 or r.height > ph * 0.70)
+            return not (r.width > pw * 0.70 or r.height > ph * 0.70)
 
         relevant = [d for d in drawings if is_relevant(d)]
         if not relevant:
@@ -1709,7 +1726,9 @@ class PDFExtractor:
                 rows = [
                     [(cell or "").replace("\n", " ").strip() for cell in row] for row in raw_rows
                 ]
-                bbox = tuple(float(value) for value in tbl_obj.bbox)
+                bbox = _table_bbox(tbl_obj)
+                if bbox is None:
+                    continue
                 default_tables.append(
                     TableBlock(rows=rows, bbox=bbox, page_num=page_num, index=idx)
                 )
@@ -1749,11 +1768,11 @@ class PDFExtractor:
         default_tables: list[TableBlock],
     ) -> list[TableBlock]:
         try:
-            words = fitz_page.get_text("words")
+            words = _normalize_words(fitz_page.get_text("words"))
         except Exception:
             return []
 
-        fallback_tables = []
+        fallback_tables: list[TableBlock] = []
         for region in _table_like_regions(plumb_page):
             rows = _rebuild_numbered_table_from_words(words, region)
             if rows is None:
@@ -1764,7 +1783,10 @@ class PDFExtractor:
             fragment_non_empty = _table_fragments_non_empty_in_region(default_tables, region)
             if fallback_non_empty <= fragment_non_empty:
                 continue
-            word_bboxes = [word["bbox"] for word in _words_in_bbox(words, region, padding=16.0)]
+            word_bboxes: list[BBox] = [
+                (word[0], word[1], word[2], word[3])
+                for word in _words_in_bbox(words, region, padding=16.0)
+            ]
             fallback_bbox = _union_bboxes([region, *word_bboxes]) if word_bboxes else region
             fallback_tables.append(
                 TableBlock(
