@@ -1126,7 +1126,9 @@ class PDFExtractor:
         width = fitz_page.rect.width
         height = fitz_page.rect.height
 
-        table_regions = _find_table_regions(plumb_page) if self.config.extract_tables else []
+        table_candidate_regions = (
+            _find_table_regions(plumb_page) if self.config.extract_tables else []
+        )
 
         images = self._extract_images(fitz_page, page_num, describer)
         vectors = []
@@ -1135,16 +1137,15 @@ class PDFExtractor:
                 fitz_page,
                 page_num,
                 describer,
-                excluded_bboxes=table_regions,
+                excluded_bboxes=table_candidate_regions,
             )
 
         tables = []
         if self.config.extract_tables:
             tables = self._extract_tables(plumb_page, page_num, describer)
 
-        # Le regioni tabellari candidate escludono il testo libero anche quando
-        # la tabella non viene salvata come CSV, per evitare duplicati nel body.
-        text_blocks = self._extract_text(fitz_page, width, table_regions)
+        table_asset_regions = [table.bbox for table in tables]
+        text_blocks = self._extract_text(fitz_page, width, table_asset_regions)
 
         return PageData(
             page_num=page_num,
