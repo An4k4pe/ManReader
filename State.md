@@ -129,3 +129,7 @@ Il core CLI espone solo Ollama come backend vision locale.
 - Follow-up IR/extractor: classificare blocchi con marker `❖` come liste/question prompts, separando gli item invece di renderli come unico paragrafo continuo.
 - Follow-up IR/extractor: distinguere testo body da label/celle/box/table-like text; casi osservati: `**La piccola cappella uberiana del villaggio**`, `**Un'offerta votiva bruciata davanti alla statua di Uberia**`, `**5 La casa del parroco**`, `**Un sermone incompiuto sul leggio**`.
 - Follow-up IR model: valutare metadati `role`/`subtype` su `BlockIR` per descrivere funzioni semantiche come `question_list`, `table_label`, `caption`, `boxed_text`, senza introdurre per ora una granularità parola-per-parola.
+- Follow-up extractor/markdown: preservare enfasi inline quando i gruppi di `TextBlock` vengono ricostruiti da `get_text("blocks")`.
+- Follow-up extractor/heading: correggere titoli con lettere spaziate o decorative, es. `L’A RRIVO DELL ’O RDA`.
+- Follow-up extractor/heading: correggere heading incollati, es. `MECCANICHE ECOMPLICAZIONI`.
+- Follow-up IR/markdown: classificare meglio blocchi table-like/label/caption, es. righe tipo `La piccola cappella uberiana del villaggio`, `Un'offerta votiva bruciata davanti alla statua di Uberia`, `5 La casa del parroco`, `Un sermone incompiuto sul leggio`.
