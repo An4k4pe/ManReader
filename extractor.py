@@ -22,6 +22,7 @@ Struttura cartelle output:
       tables/    ← tabelle (CSV)
 """
 
+import contextlib
 import csv
 import hashlib
 import io
@@ -699,8 +700,13 @@ def _same_text_ignoring_spaces(left: str, right: str) -> bool:
 def _fragment_artifact_score(text: str) -> int:
     words = text.split()
     return sum(
-        1 for left, right in zip(words, words[1:]) if _looks_like_fragment_boundary(left, right)
-    ) + sum(_word_artifact_score(word, previous) for previous, word in zip(["", *words], words))
+        1
+        for left, right in zip(words, words[1:], strict=False)
+        if _looks_like_fragment_boundary(left, right)
+    ) + sum(
+        _word_artifact_score(word, previous)
+        for previous, word in zip(["", *words], words, strict=False)
+    )
 
 
 def _word_artifact_score(word: str, previous: str) -> int:
@@ -726,10 +732,10 @@ def _word_artifact_score(word: str, previous: str) -> int:
 
 def _has_fragment_artifact(text: str) -> bool:
     words = text.split()
-    for left, right in zip(words, words[1:]):
-        if _looks_like_fragment_boundary(left, right):
-            return True
-    return False
+    return any(
+        _looks_like_fragment_boundary(left, right)
+        for left, right in zip(words, words[1:], strict=False)
+    )
 
 
 def _looks_like_fragment_boundary(left: str, right: str) -> bool:
@@ -1137,7 +1143,6 @@ _LONE_GLYPH_CHARS = frozenset(
 
 # Regex per caratteri non-standard che compaiono spesso come glifi decorativi:
 # caratteri di controllo, PUA Unicode, simboli non comuni
-import re as _re_slug
 
 
 def _title_to_slug(title: str, max_words: int = 3) -> str:
@@ -1148,13 +1153,13 @@ def _title_to_slug(title: str, max_words: int = 3) -> str:
     """
     clean = []
     for w in title.strip().split():
-        w_norm = _re_slug.sub(r"[^\w]", "", w, flags=_re_slug.UNICODE).lower()
+        w_norm = _re.sub(r"[^\w]", "", w, flags=_re.UNICODE).lower()
         if w_norm:
             clean.append(w_norm)
         if len(clean) >= max_words:
             break
     slug = "-".join(clean)
-    slug = _re_slug.sub(r"-+", "-", slug).strip("-")
+    slug = _re.sub(r"-+", "-", slug).strip("-")
     return slug
 
 
@@ -1207,13 +1212,13 @@ def _desc_to_slug(description: str, max_words: int = 4) -> str:
     }
     clean = []
     for w in description.strip().split():
-        w_norm = _re_slug.sub(r"[^\w]", "", w, flags=_re_slug.UNICODE).lower()
+        w_norm = _re.sub(r"[^\w]", "", w, flags=_re.UNICODE).lower()
         if w_norm and w_norm not in SKIP:
             clean.append(w_norm)
         if len(clean) >= max_words:
             break
     slug = "-".join(clean)
-    slug = _re_slug.sub(r"-+", "-", slug).strip("-")
+    slug = _re.sub(r"-+", "-", slug).strip("-")
     return slug or "img"
 
 
@@ -1242,8 +1247,7 @@ def _is_noise_block(spans: list) -> bool:
         return True
 
     # Caratteri non-standard (PUA Unicode, simboli rari): quasi sicuramente glifi
-    if len(full_text) <= 4 and _NONSTANDARD_CHAR_RE.match(full_text):
-        return True
+    return len(full_text) <= 4 and _NONSTANDARD_CHAR_RE.match(full_text) is not None
 
     return False
 
@@ -1369,7 +1373,6 @@ class PDFExtractor:
 
     def _extract_images(self, page, page_num: int, describer) -> list[ImageBlock]:
         results = []
-        book = self.config.book_name
 
         for idx, img_info in enumerate(page.get_images(full=True)):
             xref = img_info[0]
@@ -1514,7 +1517,6 @@ class PDFExtractor:
           5. Per ogni cluster: show_pdf_page con clip → get_svg_image
         """
         results = []
-        book = self.config.book_name
         pw, ph = page.rect.width, page.rect.height
         min_sz = self.config.min_vector_size
 
@@ -1529,9 +1531,7 @@ class PDFExtractor:
             r = fitz.Rect(d["rect"])
             if r.is_empty or r.width * r.height < 4:
                 return False
-            if r.width > pw * 0.70 or r.height > ph * 0.70:
-                return False
-            return True
+                return not (r.width > pw * 0.70 or r.height > ph * 0.70)
 
         relevant = [d for d in drawings if is_relevant(d)]
         if not relevant:
@@ -1790,7 +1790,7 @@ class PDFExtractor:
             description = describer.describe_table(table.rows)
 
         # SHA sul contenuto CSV
-        csv_bytes = open(save_path, "rb").read()
+        csv_bytes = save_path.read_bytes()
         tbl_sha = hashlib.md5(csv_bytes).hexdigest()
         self.asset_index.add_or_update(
             sha=tbl_sha,
@@ -1848,9 +1848,8 @@ class PDFExtractor:
                         )
                     )
 
-            if spans:
-                if not _is_noise_block(spans):
-                    text_blocks.append(TextBlock(spans=spans, bbox=bbox))
+            if spans and not _is_noise_block(spans):
+                text_blocks.append(TextBlock(spans=spans, bbox=bbox))
 
         block_hints = page.get_text("blocks")
         text_blocks = _rebuild_text_blocks_from_block_hints(text_blocks, block_hints)
@@ -1970,7 +1969,5 @@ class PDFExtractor:
 
     def __del__(self):
         if hasattr(self, "doc"):
-            try:
+            with contextlib.suppress(Exception):
                 self.doc.close()
-            except Exception:
-                pass
