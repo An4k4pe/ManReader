@@ -117,6 +117,32 @@ def _text_from_block(block: tuple[float, float, float, float, str, int, int]) ->
     return " ".join(block[4].strip().split())
 
 
+def _find_table_regions(plumb_page) -> list[tuple[float, float, float, float]]:
+    try:
+        tables = plumb_page.find_tables()
+    except Exception:
+        return []
+
+    regions = []
+    for table in tables:
+        bbox = getattr(table, "bbox", None)
+        if isinstance(bbox, (list, tuple)) and len(bbox) == 4:
+            regions.append((float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3])))
+    return regions
+
+
+def _bbox_overlaps_any(bbox: tuple, excluded: list[tuple], threshold: float = 0.3) -> bool:
+    x0, y0, x1, y1 = bbox
+    area = max((x1 - x0) * (y1 - y0), 1)
+    for ex in excluded:
+        ex0, ey0, ex1, ey1 = ex
+        ix = max(0.0, min(x1, ex1) - max(x0, ex0))
+        iy = max(0.0, min(y1, ey1) - max(y0, ey0))
+        if (ix * iy) / area > threshold:
+            return True
+    return False
+
+
 def _bbox_area(bbox: tuple[float, float, float, float]) -> float:
     width = max(0.0, bbox[2] - bbox[0])
     height = max(0.0, bbox[3] - bbox[1])
@@ -988,23 +1014,25 @@ class PDFExtractor:
         width = fitz_page.rect.width
         height = fitz_page.rect.height
 
+        table_regions = _find_table_regions(plumb_page) if self.config.extract_tables else []
+
         images = self._extract_images(fitz_page, page_num, describer)
         vectors = []
         if self.config.extract_vectors:
-            vectors = self._extract_vectors(fitz_page, page_num, describer)
+            vectors = self._extract_vectors(
+                fitz_page,
+                page_num,
+                describer,
+                excluded_bboxes=table_regions,
+            )
 
         tables = []
         if self.config.extract_tables:
             tables = self._extract_tables(plumb_page, page_num, describer)
 
-        # Solo le tabelle vanno in excluded_bboxes: il loro testo e gia
-        # estratto da pdfplumber e includerlo come testo libero creerebbe
-        # duplicati. Immagini e vettoriali NON escludono il testo:
-        # nel PDF il testo e un layer separato sopra questi elementi,
-        # quindi escluderlo causerebbe la perdita di titoli nei cartigli
-        # e testo sovrapposto a texture di sfondo.
-        excluded = [b.bbox for b in tables]
-        text_blocks = self._extract_text(fitz_page, width, excluded)
+        # Le regioni tabellari candidate escludono il testo libero anche quando
+        # la tabella non viene salvata come CSV, per evitare duplicati nel body.
+        text_blocks = self._extract_text(fitz_page, width, table_regions)
 
         return PageData(
             page_num=page_num,
@@ -1146,7 +1174,13 @@ class PDFExtractor:
     # Illustrazioni vettoriali
     # -----------------------------------------------------------------------
 
-    def _extract_vectors(self, page, page_num: int, describer) -> list[VectorBlock]:
+    def _extract_vectors(
+        self,
+        page,
+        page_num: int,
+        describer,
+        excluded_bboxes: list[tuple] | None = None,
+    ) -> list[VectorBlock]:
         """
         Rileva gruppi di path vettoriali che formano illustrazioni, li esporta
         come SVG ritagliando la regione dal PDF.
@@ -1241,6 +1275,8 @@ class PDFExtractor:
             fname_tmp = f"p{page_num + 1}_vec{vec_idx + 1}.svg"
             save_path = self.vectors_dir / fname_tmp
             bbox_tuple = (merged.x0, merged.y0, merged.x1, merged.y1)
+            if _bbox_overlaps_any(bbox_tuple, excluded_bboxes or [], threshold=0.8):
+                continue
 
             ok = self._export_region_as_svg(page_num, merged, save_path)
             if not ok:
@@ -1549,15 +1585,7 @@ class PDFExtractor:
 
     @staticmethod
     def _overlaps_any(bbox: tuple, excluded: list[tuple], threshold: float = 0.3) -> bool:
-        x0, y0, x1, y1 = bbox
-        area = max((x1 - x0) * (y1 - y0), 1)
-        for ex in excluded:
-            ex0, ey0, ex1, ey1 = ex
-            ix = max(0.0, min(x1, ex1) - max(x0, ex0))
-            iy = max(0.0, min(y1, ey1) - max(y0, ey0))
-            if (ix * iy) / area > threshold:
-                return True
-        return False
+        return _bbox_overlaps_any(bbox, excluded, threshold)
 
     def __del__(self):
         if hasattr(self, "doc"):
