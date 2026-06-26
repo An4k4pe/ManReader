@@ -19,6 +19,7 @@ import pdfplumber
 HEADER_TEXT = "D6 Luogo Ritrovamento Dettagli"
 ROW_RE = re.compile(r"^(?P<num>[1-6])(?:\s+(?P<rest>.*))?$")
 TEXT_LINES_SETTINGS = {"vertical_strategy": "text", "horizontal_strategy": "lines"}
+WORD_REGION_PADDING = 16.0
 
 
 def main() -> int:
@@ -41,6 +42,7 @@ def main() -> int:
     with fitz.open(pdf_path) as document:
         page = document[page_index]
         blocks = _blocks_in_region(page, region)
+        words = _words_in_region(page, _padded_region(region, page.rect))
 
     print(f"PDF: {pdf_path}")
     print(f"Page: {page_number}")
@@ -48,7 +50,8 @@ def main() -> int:
     print()
 
     _print_blocks(blocks)
-    rows = _rebuild_rows(blocks)
+    _print_words(words)
+    rows = _rebuild_rows(blocks, words)
     _print_rows(rows)
     _print_csv(rows)
     return 0
@@ -95,6 +98,18 @@ def _region_score(
     return score
 
 
+def _padded_region(
+    region: tuple[float, float, float, float], page_rect: fitz.Rect
+) -> tuple[float, float, float, float]:
+    # pdfplumber text/lines can be slightly narrower than PyMuPDF word bboxes.
+    return (
+        max(float(page_rect.x0), region[0] - WORD_REGION_PADDING),
+        max(float(page_rect.y0), region[1] - WORD_REGION_PADDING),
+        min(float(page_rect.x1), region[2] + WORD_REGION_PADDING),
+        min(float(page_rect.y1), region[3] + WORD_REGION_PADDING),
+    )
+
+
 def _blocks_in_region(
     page: fitz.Page, region: tuple[float, float, float, float]
 ) -> list[dict[str, object]]:
@@ -112,6 +127,25 @@ def _blocks_in_region(
     return sorted(blocks, key=lambda item: (item["bbox"][1], item["bbox"][0]))
 
 
+def _words_in_region(
+    page: fitz.Page, region: tuple[float, float, float, float]
+) -> list[dict[str, object]]:
+    words = []
+    for word in page.get_text("words"):
+        if len(word) < 5:
+            continue
+        text = str(word[4]).strip()
+        if not text:
+            continue
+        bbox = _bbox(word[:4])
+        center_x = (bbox[0] + bbox[2]) / 2
+        center_y = (bbox[1] + bbox[3]) / 2
+        if not (region[0] <= center_x <= region[2] and region[1] <= center_y <= region[3]):
+            continue
+        words.append({"bbox": bbox, "text": text})
+    return sorted(words, key=lambda item: (item["bbox"][1], item["bbox"][0]))
+
+
 def _print_blocks(blocks: list[dict[str, object]]) -> None:
     print("== Blocks used ==")
     for block in blocks:
@@ -123,29 +157,31 @@ def _print_blocks(blocks: list[dict[str, object]]) -> None:
     print()
 
 
-def _rebuild_rows(blocks: list[dict[str, object]]) -> dict[str, list[str]]:
+def _print_words(words: list[dict[str, object]]) -> None:
+    print("== Words used ==")
+    for word in words:
+        print(
+            f"bbox={_fmt_bbox(word['bbox'])} col={_column_for_x(word['bbox'][0])} text={word['text']}"
+        )
+    print()
+
+
+def _rebuild_rows(
+    blocks: list[dict[str, object]], words: list[dict[str, object]]
+) -> dict[str, list[str]]:
     rows = {str(num): ["", "", "", ""] for num in range(1, 7)}
     row_bands = _row_bands(blocks)
+    cell_words: dict[tuple[str, int], list[dict[str, object]]] = {}
 
-    for block in blocks:
-        text = str(block["text"])
-        if HEADER_TEXT in text:
-            continue
-        row_num = _row_for_block(block, row_bands)
+    for word in words:
+        row_num = _row_for_word(word, row_bands)
         if row_num is None:
             continue
+        col = _column_for_x(word["bbox"][0])
+        cell_words.setdefault((row_num, col), []).append(word)
 
-        col = _column_for_x(block["bbox"][0])
-        start = _row_start(text)
-        if start is not None:
-            row_num, rest = start
-            rows[row_num][0] = row_num
-            if rest:
-                col = max(col, 1)
-                rows[row_num][col] = _append_text(rows[row_num][col], rest)
-            continue
-
-        rows[row_num][col] = _append_text(rows[row_num][col], text)
+    for (row_num, col), grouped_words in cell_words.items():
+        rows[row_num][col] = _join_words(grouped_words)
 
     return rows
 
@@ -169,13 +205,8 @@ def _row_bands(blocks: list[dict[str, object]]) -> dict[str, tuple[float, float]
     return bands
 
 
-def _row_for_block(block: dict[str, object], bands: dict[str, tuple[float, float]]) -> str | None:
-    text = str(block["text"])
-    start = _row_start(text)
-    if start is not None:
-        return start[0]
-
-    bbox = block["bbox"]
+def _row_for_word(word: dict[str, object], bands: dict[str, tuple[float, float]]) -> str | None:
+    bbox = word["bbox"]
     center_y = (bbox[1] + bbox[3]) / 2
     for num, (top, bottom) in bands.items():
         if top <= center_y <= bottom:
@@ -200,12 +231,9 @@ def _column_for_x(x0: float) -> int:
     return 3
 
 
-def _append_text(existing: str, text: str) -> str:
-    if not existing:
-        return text
-    if not text:
-        return existing
-    return f"{existing} {text}"
+def _join_words(words: list[dict[str, object]]) -> str:
+    ordered = sorted(words, key=lambda item: (item["bbox"][1], item["bbox"][0]))
+    return " ".join(str(word["text"]) for word in ordered)
 
 
 def _print_rows(rows: dict[str, list[str]]) -> None:
