@@ -1,6 +1,13 @@
 import unittest
 
-from extractor import _bbox_overlaps_any, _find_table_regions
+from extractor import (
+    TableBlock,
+    _bbox_contains,
+    _bbox_overlaps_any,
+    _find_table_regions,
+    _rebuild_numbered_table_from_words,
+    _table_fragments_non_empty_in_region,
+)
 
 
 class FakeTable:
@@ -96,6 +103,68 @@ class ExtractorTablesTest(unittest.TestCase):
         overlaps = _bbox_overlaps_any(vector_bbox, table_regions, threshold=0.8)
 
         self.assertFalse(overlaps)
+
+    def test_rebuild_numbered_table_from_words_splits_fused_d6_row_by_coordinates(self):
+        words = [
+            (10, 10, 20, 20, "D6"),
+            (30, 10, 50, 20, "Luogo"),
+            (90, 10, 140, 20, "Ritrovamento"),
+            (180, 10, 220, 20, "Dettagli"),
+            (222, 10, 228, 20, "e"),
+            (230, 10, 270, 20, "atmosfera"),
+        ]
+        for row_num, y in enumerate([40, 70, 100], start=1):
+            words.extend(
+                [
+                    (10, y, 15, y + 10, str(row_num)),
+                    (30, y, 38, y + 10, "Il"),
+                    (40, y, 65, y + 10, f"luogo{row_num}"),
+                    (90, y, 105, y + 10, "Il"),
+                    (107, y, 145, y + 10, f"ritrovamento{row_num}"),
+                    (180, y, 220, y + 10, f"dettaglio{row_num}"),
+                ]
+            )
+
+        rows = _rebuild_numbered_table_from_words(words, (0.0, 0.0, 300.0, 130.0))
+
+        self.assertIsNotNone(rows)
+        self.assertEqual(rows[0], ["D6", "Luogo", "Ritrovamento", "Dettagli e atmosfera"])
+        self.assertEqual(rows[2], ["2", "Il luogo2", "Il ritrovamento2", "dettaglio2"])
+
+    def test_rebuild_numbered_table_from_words_rejects_missing_essential_cells(self):
+        words = [
+            (10, 10, 20, 20, "D6"),
+            (30, 10, 50, 20, "Luogo"),
+            (90, 10, 140, 20, "Ritrovamento"),
+            (180, 10, 220, 20, "Dettagli"),
+            (10, 40, 15, 50, "1"),
+            (30, 40, 60, 50, "Casa"),
+            (180, 40, 220, 50, "dettaglio"),
+            (10, 70, 15, 80, "2"),
+            (30, 70, 60, 80, "Mulino"),
+            (90, 70, 130, 80, "registro"),
+            (180, 70, 220, 80, "dettaglio"),
+            (10, 100, 15, 110, "3"),
+            (30, 100, 60, 110, "Pozzo"),
+            (90, 100, 130, 110, "secchio"),
+            (180, 100, 220, 110, "dettaglio"),
+        ]
+
+        rows = _rebuild_numbered_table_from_words(words, (0.0, 0.0, 300.0, 130.0))
+
+        self.assertIsNone(rows)
+
+    def test_fallback_region_can_identify_contained_pdfplumber_fragments(self):
+        fallback_region = (8.0, 8.0, 220.0, 120.0)
+        fragment = TableBlock(
+            rows=[["1", "Casa"], ["2", "Mulino"]],
+            bbox=(10.0, 20.0, 100.0, 60.0),
+            page_num=0,
+            index=0,
+        )
+
+        self.assertTrue(_bbox_contains(fallback_region, fragment.bbox))
+        self.assertEqual(_table_fragments_non_empty_in_region([fragment], fallback_region), 4)
 
 
 if __name__ == "__main__":

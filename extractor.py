@@ -38,6 +38,8 @@ from PIL import Image
 from config import LayoutConfig
 
 _NONSTANDARD_CHAR_RE = _re.compile(r"^[^\w\s]+$")
+_DIE_HEADER_RE = _re.compile(r"^D(?P<sides>\d{1,3})$", _re.IGNORECASE)
+_TABLE_TEXT_LINES_SETTINGS = {"vertical_strategy": "text", "horizontal_strategy": "lines"}
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
@@ -123,7 +125,7 @@ def _find_table_regions(plumb_page) -> list[tuple[float, float, float, float]]:
 
     text_line_tables = _safe_find_tables(
         plumb_page,
-        {"vertical_strategy": "text", "horizontal_strategy": "lines"},
+        _TABLE_TEXT_LINES_SETTINGS,
     )
     for table in text_line_tables:
         bbox = _table_bbox(table)
@@ -220,6 +222,210 @@ def _dedupe_table_regions(
             continue
         deduped.append(region)
     return sorted(deduped, key=lambda bbox: (bbox[1], bbox[0]))
+
+
+def _table_like_regions(plumb_page) -> list[tuple[float, float, float, float]]:
+    regions = []
+    for table in _safe_find_tables(plumb_page, _TABLE_TEXT_LINES_SETTINGS):
+        bbox = _table_bbox(table)
+        if bbox is None:
+            continue
+        rows = table.extract() or []
+        if _table_like_header_from_rows(rows) is not None:
+            regions.append(_pad_bbox_to_page(bbox, plumb_page, padding=2.0))
+    return regions
+
+
+def _table_like_header_from_rows(rows: list[list[str | None]]) -> tuple[str, int] | None:
+    for row in rows:
+        cells = [(cell or "").strip() for cell in row]
+        if not cells:
+            continue
+        first = cells[0].split()[0] if cells[0].split() else ""
+        match = _DIE_HEADER_RE.match(first)
+        if match:
+            return first.upper(), int(match.group("sides"))
+    return None
+
+
+def _words_in_bbox(
+    words: list[tuple], bbox: tuple[float, float, float, float], padding: float = 16.0
+) -> list[dict[str, object]]:
+    x0, y0, x1, y1 = bbox
+    region = (x0 - padding, y0 - padding, x1 + padding, y1 + padding)
+    selected = []
+    for word in words:
+        if len(word) < 5:
+            continue
+        text = str(word[4]).strip()
+        if not text:
+            continue
+        word_bbox = (float(word[0]), float(word[1]), float(word[2]), float(word[3]))
+        center_x = (word_bbox[0] + word_bbox[2]) / 2
+        center_y = (word_bbox[1] + word_bbox[3]) / 2
+        if region[0] <= center_x <= region[2] and region[1] <= center_y <= region[3]:
+            selected.append({"bbox": word_bbox, "text": text})
+    return sorted(selected, key=lambda item: (item["bbox"][1], item["bbox"][0]))
+
+
+def _rebuild_numbered_table_from_words(
+    words: list[tuple] | list[dict[str, object]],
+    region: tuple[float, float, float, float],
+) -> list[list[str]] | None:
+    normalized_words = _normalize_word_items(words)
+    region_words = _words_in_bbox(normalized_words, region, padding=16.0)
+    header = _numbered_table_header(region_words)
+    if header is None:
+        return None
+
+    header_row, die_sides, starts, header_bottom = header
+    row_starts = _numbered_table_row_starts(
+        region_words,
+        die_sides,
+        header_bottom,
+        starts[0],
+    )
+    if len(row_starts) < 3:
+        return None
+
+    bands = _table_row_bands(row_starts)
+    rows_by_number = {num: ["" for _ in starts] for num, _, _ in row_starts}
+    cell_words: dict[tuple[int, int], list[dict[str, object]]] = defaultdict(list)
+
+    for word in region_words:
+        bbox = word["bbox"]
+        center_y = (bbox[1] + bbox[3]) / 2
+        if center_y <= header_bottom:
+            continue
+        row_num = _table_row_for_y(center_y, bands)
+        if row_num is None:
+            continue
+        col = _table_column_for_x(float(bbox[0]), starts)
+        cell_words[(row_num, col)].append(word)
+
+    for (row_num, col), grouped_words in cell_words.items():
+        rows_by_number[row_num][col] = _join_table_words(grouped_words)
+
+    ordered_rows = [rows_by_number[num] for num, _, _ in row_starts]
+    if any(not cell.strip() for row in ordered_rows for cell in row):
+        return None
+    return [header_row, *ordered_rows]
+
+
+def _normalize_word_items(words: list[tuple] | list[dict[str, object]]) -> list[tuple]:
+    normalized = []
+    for word in words:
+        if isinstance(word, dict):
+            bbox = word["bbox"]
+            normalized.append((bbox[0], bbox[1], bbox[2], bbox[3], word["text"]))
+        else:
+            normalized.append(word)
+    return normalized
+
+
+def _numbered_table_header(
+    words: list[dict[str, object]],
+) -> tuple[list[str], int, list[float], float] | None:
+    for word in words:
+        match = _DIE_HEADER_RE.match(str(word["text"]))
+        if not match:
+            continue
+        bbox = word["bbox"]
+        center_y = (bbox[1] + bbox[3]) / 2
+        line_words = [
+            candidate
+            for candidate in words
+            if abs(((candidate["bbox"][1] + candidate["bbox"][3]) / 2) - center_y) <= 3.0
+        ]
+        line_words.sort(key=lambda item: item["bbox"][0])
+        if len(line_words) < 3:
+            continue
+        starts = [float(item["bbox"][0]) for item in line_words[:4]]
+        if len(starts) < 3:
+            continue
+        header_row = [str(item["text"]) for item in line_words[: len(starts) - 1]]
+        header_row.append(_join_table_words(line_words[len(starts) - 1 :]))
+        return (
+            header_row,
+            int(match.group("sides")),
+            starts,
+            max(item["bbox"][3] for item in line_words),
+        )
+    return None
+
+
+def _numbered_table_row_starts(
+    words: list[dict[str, object]],
+    die_sides: int,
+    header_bottom: float,
+    first_column_x: float,
+) -> list[tuple[int, float, float]]:
+    starts = []
+    for word in words:
+        text = str(word["text"])
+        if not text.isdigit():
+            continue
+
+        number = int(text)
+        if not (1 <= number <= die_sides):
+            continue
+
+        bbox = word["bbox"]
+        if abs(float(bbox[0]) - first_column_x) > 12.0:
+            continue
+
+        center_y = (bbox[1] + bbox[3]) / 2
+        if center_y <= header_bottom:
+            continue
+
+        starts.append((number, float(bbox[1]), float(bbox[3])))
+
+    starts.sort(key=lambda item: item[1])
+    return starts
+
+
+def _table_row_bands(row_starts: list[tuple[int, float, float]]) -> dict[int, tuple[float, float]]:
+    bands = {}
+    for index, (num, y0, y1) in enumerate(row_starts):
+        top = (row_starts[index - 1][1] + y0) / 2 if index > 0 else y0 - 20.0
+        bottom = (y1 + row_starts[index + 1][1]) / 2 if index + 1 < len(row_starts) else y1 + 40.0
+        bands[num] = (top, bottom)
+    return bands
+
+
+def _table_row_for_y(center_y: float, bands: dict[int, tuple[float, float]]) -> int | None:
+    for num, (top, bottom) in bands.items():
+        if top <= center_y <= bottom:
+            return num
+    return None
+
+
+def _table_column_for_x(x0: float, starts: list[float]) -> int:
+    # Header starts mark left cell edges; table words can extend close to the next edge.
+    thresholds = [starts[index + 1] - 2.0 for index in range(len(starts) - 1)]
+    for index, threshold in enumerate(thresholds):
+        if x0 < threshold:
+            return index
+    return len(starts) - 1
+
+
+def _join_table_words(words: list[dict[str, object]]) -> str:
+    ordered = sorted(words, key=lambda item: (item["bbox"][1], item["bbox"][0]))
+    return " ".join(str(word["text"]) for word in ordered).strip()
+
+
+def _table_non_empty_cell_count(rows: list[list[str]]) -> int:
+    return sum(1 for row in rows for cell in row if cell.strip())
+
+
+def _table_fragments_non_empty_in_region(
+    tables: list[object], region: tuple[float, float, float, float]
+) -> int:
+    return sum(
+        _table_non_empty_cell_count(table.rows)
+        for table in tables
+        if _bbox_contains(region, table.bbox) or _bbox_overlap_ratio(table.bbox, region) >= 0.8
+    )
 
 
 def _bbox_contains(
@@ -1142,7 +1348,7 @@ class PDFExtractor:
 
         tables = []
         if self.config.extract_tables:
-            tables = self._extract_tables(plumb_page, page_num, describer)
+            tables = self._extract_tables(plumb_page, fitz_page, page_num, describer)
 
         table_asset_regions = [table.bbox for table in tables]
         text_blocks = self._extract_text(fitz_page, width, table_asset_regions)
@@ -1486,13 +1692,13 @@ class PDFExtractor:
     # Tabelle
     # -----------------------------------------------------------------------
 
-    def _extract_tables(self, plumb_page, page_num: int, describer) -> list[TableBlock]:
+    def _extract_tables(self, plumb_page, fitz_page, page_num: int, describer) -> list[TableBlock]:
         results = []
-        book = self.config.book_name
+        default_tables: list[TableBlock] = []
         try:
             found = plumb_page.find_tables()
         except Exception:
-            return []
+            found = []
 
         for idx, tbl_obj in enumerate(found):
             try:
@@ -1503,44 +1709,106 @@ class PDFExtractor:
                 rows = [
                     [(cell or "").replace("\n", " ").strip() for cell in row] for row in raw_rows
                 ]
-                bbox = tuple(tbl_obj.bbox)
-
-                fname = f"p{page_num + 1}_tbl{idx + 1}.csv"
-                save_path = self.tables_dir / fname
-                with open(save_path, "w", encoding="utf-8") as f:
-                    for row in rows:
-                        f.write(",".join(f'"{c}"' for c in row) + "\n")
-
-                description = None
-                if describer:
-                    description = describer.describe_table(rows)
-
-                # SHA sul contenuto CSV
-                csv_bytes = open(save_path, "rb").read()
-                tbl_sha = hashlib.md5(csv_bytes).hexdigest()
-                self.asset_index.add_or_update(
-                    sha=tbl_sha,
-                    nome_file=save_path.name,
-                    tipo="table",
-                    pagina=page_num,
-                    titolo=None,
-                    descrizione=description,
-                )
-
-                results.append(
-                    TableBlock(
-                        rows=rows,
-                        bbox=bbox,
-                        page_num=page_num,
-                        index=idx,
-                        saved_path=str(save_path),
-                        description=description,
-                    )
+                bbox = tuple(float(value) for value in tbl_obj.bbox)
+                default_tables.append(
+                    TableBlock(rows=rows, bbox=bbox, page_num=page_num, index=idx)
                 )
             except Exception as e:
                 print(f"\n  [warn] tabella p{page_num + 1} #{idx}: {e}")
 
+        fallback_tables = self._table_like_fallback_tables(
+            plumb_page, fitz_page, page_num, default_tables
+        )
+        fallback_regions = [table.bbox for table in fallback_tables]
+
+        pending_tables = [
+            table
+            for table in default_tables
+            if not any(
+                _bbox_contains(region, table.bbox) or _bbox_overlap_ratio(table.bbox, region) >= 0.8
+                for region in fallback_regions
+            )
+        ]
+        pending_tables.extend(fallback_tables)
+        pending_tables.sort(key=lambda table: (table.bbox[1], table.bbox[0]))
+
+        for idx, table in enumerate(pending_tables):
+            try:
+                saved = self._save_table_block(table, page_num, idx, describer)
+                results.append(saved)
+            except Exception as e:
+                print(f"\n  [warn] tabella p{page_num + 1} #{idx}: {e}")
+
         return results
+
+    def _table_like_fallback_tables(
+        self,
+        plumb_page,
+        fitz_page,
+        page_num: int,
+        default_tables: list[TableBlock],
+    ) -> list[TableBlock]:
+        try:
+            words = fitz_page.get_text("words")
+        except Exception:
+            return []
+
+        fallback_tables = []
+        for region in _table_like_regions(plumb_page):
+            rows = _rebuild_numbered_table_from_words(words, region)
+            if rows is None:
+                continue
+            if len(rows[0]) < 3 or len(rows) < 4:
+                continue
+            fallback_non_empty = _table_non_empty_cell_count(rows)
+            fragment_non_empty = _table_fragments_non_empty_in_region(default_tables, region)
+            if fallback_non_empty <= fragment_non_empty:
+                continue
+            word_bboxes = [word["bbox"] for word in _words_in_bbox(words, region, padding=16.0)]
+            fallback_bbox = _union_bboxes([region, *word_bboxes]) if word_bboxes else region
+            fallback_tables.append(
+                TableBlock(
+                    rows=rows,
+                    bbox=fallback_bbox,
+                    page_num=page_num,
+                    index=0,
+                )
+            )
+        return fallback_tables
+
+    def _save_table_block(
+        self, table: TableBlock, page_num: int, index: int, describer
+    ) -> TableBlock:
+        fname = f"p{page_num + 1}_tbl{index + 1}.csv"
+        save_path = self.tables_dir / fname
+        with open(save_path, "w", encoding="utf-8", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerows(table.rows)
+
+        description = None
+        if describer:
+            description = describer.describe_table(table.rows)
+
+        # SHA sul contenuto CSV
+        csv_bytes = open(save_path, "rb").read()
+        tbl_sha = hashlib.md5(csv_bytes).hexdigest()
+        self.asset_index.add_or_update(
+            sha=tbl_sha,
+            nome_file=save_path.name,
+            tipo="table",
+            pagina=page_num,
+            titolo=None,
+            descrizione=description,
+        )
+
+        return TableBlock(
+            rows=table.rows,
+            bbox=table.bbox,
+            page_num=page_num,
+            index=index,
+            saved_path=str(save_path),
+            description=description,
+        )
 
     # -----------------------------------------------------------------------
     # Testo
