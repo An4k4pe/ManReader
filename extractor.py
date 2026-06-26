@@ -118,17 +118,129 @@ def _text_from_block(block: tuple[float, float, float, float, str, int, int]) ->
 
 
 def _find_table_regions(plumb_page) -> list[tuple[float, float, float, float]]:
+    default_regions = _table_bboxes(_safe_find_tables(plumb_page))
+    text_line_regions = []
+
+    text_line_tables = _safe_find_tables(
+        plumb_page,
+        {"vertical_strategy": "text", "horizontal_strategy": "lines"},
+    )
+    for table in text_line_tables:
+        bbox = _table_bbox(table)
+        if bbox is None:
+            continue
+        if _is_valid_text_line_table_region(table, bbox, default_regions, plumb_page):
+            text_line_regions.append(_pad_bbox_to_page(bbox, plumb_page, padding=2.0))
+
+    return _dedupe_table_regions([*default_regions, *text_line_regions])
+
+
+def _safe_find_tables(plumb_page, table_settings: dict[str, str] | None = None) -> list[object]:
     try:
-        tables = plumb_page.find_tables()
+        if table_settings is None:
+            return list(plumb_page.find_tables())
+        return list(plumb_page.find_tables(table_settings=table_settings))
     except Exception:
         return []
 
+
+def _table_bboxes(tables: list[object]) -> list[tuple[float, float, float, float]]:
     regions = []
     for table in tables:
-        bbox = getattr(table, "bbox", None)
-        if isinstance(bbox, (list, tuple)) and len(bbox) == 4:
-            regions.append((float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3])))
+        bbox = _table_bbox(table)
+        if bbox is not None:
+            regions.append(bbox)
     return regions
+
+
+def _table_bbox(table: object) -> tuple[float, float, float, float] | None:
+    bbox = getattr(table, "bbox", None)
+    if isinstance(bbox, (list, tuple)) and len(bbox) == 4:
+        return (float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3]))
+    return None
+
+
+def _is_valid_text_line_table_region(
+    table: object,
+    bbox: tuple[float, float, float, float],
+    default_regions: list[tuple[float, float, float, float]],
+    plumb_page,
+) -> bool:
+    rows = table.extract() or []
+    row_count = len(rows)
+    column_count = max((len(row) for row in rows), default=0)
+    non_empty = sum(1 for row in rows for cell in row if (cell or "").strip())
+    page_height = float(getattr(plumb_page, "height", bbox[3]) or bbox[3])
+
+    return (
+        row_count >= 3
+        and column_count >= 3
+        and non_empty >= 8
+        and (bbox[3] - bbox[1]) <= page_height * 0.75
+        and any(
+            _horizontal_overlap_ratio(bbox, default_region) >= 0.5
+            for default_region in default_regions
+        )
+    )
+
+
+def _horizontal_overlap_ratio(
+    first: tuple[float, float, float, float],
+    second: tuple[float, float, float, float],
+) -> float:
+    width = max(min(first[2] - first[0], second[2] - second[0]), 1.0)
+    overlap = max(0.0, min(first[2], second[2]) - max(first[0], second[0]))
+    return overlap / width
+
+
+def _pad_bbox_to_page(
+    bbox: tuple[float, float, float, float],
+    plumb_page,
+    padding: float,
+) -> tuple[float, float, float, float]:
+    width = float(getattr(plumb_page, "width", bbox[2]) or bbox[2])
+    height = float(getattr(plumb_page, "height", bbox[3]) or bbox[3])
+    return (
+        max(0.0, bbox[0] - padding),
+        max(0.0, bbox[1] - padding),
+        min(width, bbox[2] + padding),
+        min(height, bbox[3] + padding),
+    )
+
+
+def _dedupe_table_regions(
+    regions: list[tuple[float, float, float, float]],
+) -> list[tuple[float, float, float, float]]:
+    deduped = []
+    for region in sorted(regions, key=_bbox_area, reverse=True):
+        if any(
+            _bbox_contains(existing, region) or _bbox_overlap_ratio(region, existing) >= 0.95
+            for existing in deduped
+        ):
+            continue
+        deduped.append(region)
+    return sorted(deduped, key=lambda bbox: (bbox[1], bbox[0]))
+
+
+def _bbox_contains(
+    outer: tuple[float, float, float, float],
+    inner: tuple[float, float, float, float],
+    tolerance: float = 2.5,
+) -> bool:
+    return (
+        outer[0] <= inner[0] + tolerance
+        and outer[1] <= inner[1] + tolerance
+        and outer[2] >= inner[2] - tolerance
+        and outer[3] >= inner[3] - tolerance
+    )
+
+
+def _bbox_overlap_ratio(
+    source: tuple[float, float, float, float],
+    target: tuple[float, float, float, float],
+) -> float:
+    area = max(_bbox_area(source), 1.0)
+    return _bbox_intersection_area(source, target) / area
 
 
 def _bbox_overlaps_any(bbox: tuple, excluded: list[tuple], threshold: float = 0.3) -> bool:
