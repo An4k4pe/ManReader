@@ -98,6 +98,40 @@ class IRBuilderTest(unittest.TestCase):
 
         self.assertEqual([block.text for block in ir_page.blocks], ["first", "second"])
 
+    def test_marks_text_with_question_marker_as_bullet_list(self):
+        page = FakePage(
+            text_blocks=[FakeTextBlock("❖ Domanda uno ❖ Domanda due", (10.0, 10.0, 50.0, 20.0))]
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertEqual(ir_page.blocks[0].type, "text")
+        self.assertEqual(ir_page.blocks[0].role, "bullet_list")
+        self.assertEqual(ir_page.blocks[0].metadata, {"marker": "❖"})
+
+    def test_keeps_text_with_internal_question_marker_without_role_or_metadata(self):
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock(
+                    "continuazione della frase ❖ Domanda due",
+                    (10.0, 10.0, 50.0, 20.0),
+                )
+            ]
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertIsNone(ir_page.blocks[0].role)
+        self.assertEqual(ir_page.blocks[0].metadata, {})
+
+    def test_keeps_normal_text_without_role_or_metadata(self):
+        page = FakePage(text_blocks=[FakeTextBlock("Testo normale", (10.0, 10.0, 50.0, 20.0))])
+
+        ir_page = self.build_page(page)
+
+        self.assertIsNone(ir_page.blocks[0].role)
+        self.assertEqual(ir_page.blocks[0].metadata, {})
+
     def test_excludes_background_image_asset(self):
         page = FakePage(
             images=[

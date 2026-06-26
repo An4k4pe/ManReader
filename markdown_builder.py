@@ -22,9 +22,19 @@ def build_markdown(document: DocumentIR) -> str:
         previous_text_block: BlockIR | None = None
         parts.append(f"<!-- page: {page.page_num} -->")
 
-        for block in page.blocks:
+        index = 0
+        while index < len(page.blocks):
+            block = page.blocks[index]
             if block.type == "text" and block.text:
-                if _is_heading_text(block.text, block.style):
+                if block.role == "bullet_list":
+                    if current_paragraph:
+                        parts.append(current_paragraph)
+                        current_paragraph = ""
+                    previous_text_block = None
+                    bullet_text, marker, index = _collect_bullet_list_text(page.blocks, index)
+                    parts.append(_render_bullet_list_text(bullet_text, marker))
+                    continue
+                elif _is_heading_text(block.text, block.style):
                     if current_paragraph:
                         parts.append(current_paragraph)
                         current_paragraph = ""
@@ -48,6 +58,7 @@ def build_markdown(document: DocumentIR) -> str:
                     current_paragraph = ""
                 previous_text_block = None
                 parts.append(_render_asset(block.asset, block.page_num, block.type))
+            index += 1
 
     if current_paragraph:
         parts.append(current_paragraph)
@@ -153,6 +164,51 @@ def _join_text_fragments(first: str, second: str) -> str:
         return left + right
 
     return f"{left} {right}"
+
+
+def _collect_bullet_list_text(blocks: list[BlockIR], start: int) -> tuple[str, str, int]:
+    first_block = blocks[start]
+    marker = first_block.metadata.get("marker") or "❖"
+    texts: list[str] = [first_block.text or ""]
+    index = start + 1
+
+    while index < len(blocks):
+        block = blocks[index]
+        if not _is_bullet_list_continuation(block, texts[-1], marker):
+            break
+        texts.append(block.text or "")
+        index += 1
+
+    return " ".join(text.strip() for text in texts if text.strip()), marker, index
+
+
+def _is_bullet_list_continuation(block: BlockIR, previous_text: str, marker: str) -> bool:
+    if block.type != "text" or not block.text:
+        return False
+    if _is_heading_text(block.text, block.style):
+        return False
+    if marker in block.text:
+        return True
+    return not _ends_with_strong_punctuation(previous_text)
+
+
+def _ends_with_strong_punctuation(text: str) -> bool:
+    return text.rstrip().endswith((".", "!", "?", ":", ";"))
+
+
+def _is_bullet_list_text_block(block: BlockIR) -> bool:
+    if block.type != "text" or not block.text:
+        return False
+    return not _is_heading_text(block.text, block.style)
+
+
+def _render_bullet_list_text(text: str, marker: str) -> str:
+    raw_items = text.split(marker)
+    items = [" ".join(item.split()) for item in raw_items if item.strip()]
+    if not items:
+        normalized = " ".join(text.split())
+        return f"- {normalized}" if normalized else ""
+    return "\n".join(f"- {item}" for item in items)
 
 
 def _render_asset(asset: AssetIR, page_num: int, block_type: str) -> str:

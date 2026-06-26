@@ -192,6 +192,107 @@ class MarkdownBuilderTest(unittest.TestCase):
         self.assertIn("Questo è testo normale con un secondo frammento", markdown)
         self.assertNotIn("## Questo è testo normale", markdown)
 
+    def test_bullet_list_role_renders_markdown_list(self):
+        document = _document(
+            [
+                _text(
+                    "b1",
+                    "❖ Domanda uno ❖ Domanda due",
+                    role="bullet_list",
+                    metadata={"marker": "❖"},
+                )
+            ]
+        )
+
+        markdown = build_markdown(document)
+
+        self.assertIn("- Domanda uno\n- Domanda due", markdown)
+        self.assertNotIn("❖ Domanda uno", markdown)
+
+    def test_bullet_list_flushes_current_paragraph(self):
+        document = _document(
+            [
+                _text("b1", "Paragrafo prima"),
+                _text(
+                    "b2",
+                    "❖ Domanda uno ❖ Domanda due",
+                    role="bullet_list",
+                    metadata={"marker": "❖"},
+                ),
+            ]
+        )
+
+        markdown = build_markdown(document)
+
+        self.assertIn("Paragrafo prima\n\n- Domanda uno\n- Domanda due", markdown)
+
+    def test_bullet_list_normalizes_internal_newlines(self):
+        document = _document(
+            [
+                _text(
+                    "b1",
+                    "❖ Prima voce con\n\nspezzatura ❖ Seconda voce",
+                    role="bullet_list",
+                    metadata={"marker": "❖"},
+                )
+            ]
+        )
+
+        markdown = build_markdown(document)
+
+        self.assertIn("- Prima voce con spezzatura\n- Seconda voce", markdown)
+
+    def test_bullet_list_collects_consecutive_text_blocks(self):
+        document = _document(
+            [
+                _text("b1", "❖ Prima voce", role="bullet_list", metadata={"marker": "❖"}),
+                _text("b2", "continua qui ❖ Seconda"),
+                _text("b3", "voce finale"),
+            ]
+        )
+
+        markdown = build_markdown(document)
+
+        self.assertIn("- Prima voce continua qui\n- Seconda voce finale", markdown)
+        rendered_list = markdown.split("<!-- page: 1 -->", 1)[1]
+        self.assertNotIn("❖", rendered_list)
+
+    def test_bullet_list_stops_before_asset(self):
+        document = _document(
+            [
+                _text("b1", "❖ Prima voce", role="bullet_list", metadata={"marker": "❖"}),
+                _text("b2", "continua"),
+                _asset_block(),
+                _text("b3", "Dopo asset"),
+            ]
+        )
+
+        markdown = build_markdown(document)
+
+        self.assertIn("- Prima voce continua\n\n<!-- asset: asset-1", markdown)
+        self.assertIn("> Descrizione: Mappa del dungeon\n\nDopo asset", markdown)
+
+    def test_bullet_list_stops_before_heading(self):
+        document = _document(
+            [
+                _text("b1", "❖ Prima voce", role="bullet_list", metadata={"marker": "❖"}),
+                _text("b2", "DOMANDE"),
+                _text("b3", "Paragrafo dopo"),
+            ]
+        )
+
+        markdown = build_markdown(document)
+
+        self.assertIn("- Prima voce\n\n## DOMANDE\n\nParagrafo dopo", markdown)
+        self.assertNotIn("- DOMANDE", markdown)
+
+    def test_bullet_list_uses_default_marker(self):
+        document = _document([_text("b1", "❖ Uno ❖ Due", role="bullet_list")])
+
+        markdown = build_markdown(document)
+
+        self.assertIn("- Uno\n- Due", markdown)
+
     def test_invalid_font_size_uses_safe_paragraph_gap_fallback(self):
         document = _document(
             [
@@ -294,6 +395,8 @@ def _text(
     text: str,
     style: dict[str, str] | None = None,
     bbox: tuple[float, float, float, float] | None = None,
+    role: str | None = None,
+    metadata: dict[str, str] | None = None,
 ) -> BlockIR:
     return BlockIR(
         id=block_id,
@@ -303,6 +406,8 @@ def _text(
         bbox=bbox,
         text=text,
         style=style or {},
+        role=role,
+        metadata=metadata or {},
     )
 
 

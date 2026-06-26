@@ -206,19 +206,30 @@ def _join_text_fragments(first: str | None, second: str | None, horizontal_gap: 
 
 
 def _build_text_block(block: object, page_num: int, index: int, order: int) -> BlockIR:
+    text = getattr(block, "text", None)
+    role, metadata = _text_block_role_and_metadata(text or "")
     return BlockIR(
         id=f"{_page_id(page_num)}_b{index:04d}",
         type="text",
         page_num=page_num + 1,
         order=order,
         bbox=_bbox_tuple(getattr(block, "bbox", None)),
-        text=getattr(block, "text", None),
+        text=text,
         style={
             "avg_font_size": str(getattr(block, "avg_font_size", "")),
             "bold": str(getattr(block, "is_bold", False)).lower(),
             "italic": str(getattr(block, "is_italic", False)).lower(),
         },
+        role=role,
+        metadata=metadata,
     )
+
+
+def _text_block_role_and_metadata(text: str) -> tuple[str | None, dict[str, str]]:
+    normalized = text.lstrip()
+    if normalized.startswith("❖"):
+        return "bullet_list", {"marker": "❖"}
+    return None, {}
 
 
 def _build_asset_block(asset: object, kind: str, page_num: int, index: int, order: int) -> BlockIR:
