@@ -420,6 +420,139 @@ def _table_row_for_y(center_y: float, bands: dict[int, tuple[float, float]]) -> 
     return None
 
 
+def _rebuild_temporal_units_table_from_words(
+    words: Sequence[WordItem],
+) -> tuple[list[list[str]], BBox] | None:
+    header = _temporal_units_header(words)
+    if header is None:
+        return None
+
+    header_row, starts, header_bottom, header_words = header
+    row_starts = _temporal_units_row_starts(words, header_bottom)
+    if len(row_starts) != 3:
+        return None
+
+    bands = _labeled_table_row_bands(row_starts)
+    rows_by_label = {label: ["" for _ in starts] for label, _, _ in row_starts}
+    cell_words: dict[tuple[str, int], list[WordItem]] = defaultdict(list)
+
+    first_top = min(top for _, top, _ in row_starts) - 12.0
+    last_bottom = max(bottom for _, _, bottom in row_starts) + 40.0
+    for word in words:
+        center_y = (word[1] + word[3]) / 2
+        if center_y <= header_bottom or center_y < first_top or center_y > last_bottom:
+            continue
+        label = _labeled_table_row_for_y(center_y, bands)
+        if label is None:
+            continue
+        col = _table_column_for_x(word[0], starts)
+        cell_words[(label, col)].append(word)
+
+    for (label, col), grouped_words in cell_words.items():
+        rows_by_label[label][col] = _join_table_words(grouped_words)
+
+    ordered_rows = [rows_by_label[label] for label, _, _ in row_starts]
+    rows = [header_row, *ordered_rows]
+    if any(not cell.strip() for row in ordered_rows for cell in row):
+        return None
+
+    table_words = [*header_words, *(word for grouped in cell_words.values() for word in grouped)]
+    bbox = _union_bboxes([(word[0], word[1], word[2], word[3]) for word in table_words])
+    return rows, bbox
+
+
+def _temporal_units_header(
+    words: Sequence[WordItem],
+) -> tuple[list[str], list[float], float, list[WordItem]] | None:
+    for unita in words:
+        if unita[4] != "UNITÀ":
+            continue
+        temporali = _find_word(
+            words, "TEMPORALI", x=unita[0], min_y=unita[1], max_y=unita[3] + 16.0
+        )
+        if temporali is None:
+            continue
+        header_y = (temporali[1] + temporali[3]) / 2
+        durata = _find_word_on_line(words, "DURATA", header_y, min_x=temporali[2])
+        tempo = _find_word_on_line(words, "TEMPO", header_y, min_x=durata[2] if durata else None)
+        necessario = _find_word_on_line(
+            words, "NECESSARIO", header_y, min_x=tempo[2] if tempo else None
+        )
+        per = _find_word_on_line(
+            words, "PER", header_y, min_x=necessario[2] if necessario else None
+        )
+        if durata is None or tempo is None or necessario is None or per is None:
+            continue
+        header_words = [unita, temporali, durata, tempo, necessario, per]
+        return (
+            ["UNITÀ TEMPORALI", "DURATA", "TEMPO NECESSARIO PER"],
+            [unita[0], durata[0], tempo[0]],
+            max(word[3] for word in header_words),
+            header_words,
+        )
+    return None
+
+
+def _find_word(
+    words: Sequence[WordItem],
+    text: str,
+    x: float,
+    min_y: float,
+    max_y: float,
+) -> WordItem | None:
+    for word in words:
+        if word[4] == text and abs(word[0] - x) <= 3.0 and min_y <= word[1] <= max_y:
+            return word
+    return None
+
+
+def _find_word_on_line(
+    words: Sequence[WordItem],
+    text: str,
+    center_y: float,
+    min_x: float | None = None,
+) -> WordItem | None:
+    for word in words:
+        word_center_y = (word[1] + word[3]) / 2
+        if word[4] != text or abs(word_center_y - center_y) > 3.0:
+            continue
+        if min_x is not None and word[0] <= min_x:
+            continue
+        return word
+    return None
+
+
+def _temporal_units_row_starts(
+    words: Sequence[WordItem], header_bottom: float
+) -> list[tuple[str, float, float]]:
+    labels = {"Round", "Intervallo", "Periodo"}
+    starts = [
+        (word[4], word[1], word[3])
+        for word in words
+        if word[4] in labels and word[1] > header_bottom
+    ]
+    starts.sort(key=lambda item: item[1])
+    return starts
+
+
+def _labeled_table_row_bands(
+    row_starts: list[tuple[str, float, float]],
+) -> dict[str, tuple[float, float]]:
+    bands = {}
+    for index, (label, y0, y1) in enumerate(row_starts):
+        top = row_starts[index - 1][1] + 2.0 if index > 0 else y0 - 12.0
+        bottom = row_starts[index + 1][1] - 2.0 if index + 1 < len(row_starts) else y1 + 40.0
+        bands[label] = (top, bottom)
+    return bands
+
+
+def _labeled_table_row_for_y(center_y: float, bands: dict[str, tuple[float, float]]) -> str | None:
+    for label, (top, bottom) in bands.items():
+        if top <= center_y <= bottom:
+            return label
+    return None
+
+
 def _table_column_for_x(x0: float, starts: list[float]) -> int:
     # Header starts mark left cell edges; table words can extend close to the next edge.
     thresholds = [starts[index + 1] - 2.0 for index in range(len(starts) - 1)]
@@ -436,6 +569,34 @@ def _join_table_words(words: Sequence[WordItem]) -> str:
 
 def _table_non_empty_cell_count(rows: list[list[str]]) -> int:
     return sum(1 for row in rows for cell in row if cell.strip())
+
+
+def _is_meaningful_table(rows: list[list[str]]) -> bool:
+    if not rows:
+        return False
+
+    non_empty_rows = sum(1 for row in rows if any(cell.strip() for cell in row))
+    if non_empty_rows < 2:
+        return False
+
+    non_empty_cells = _table_non_empty_cell_count(rows)
+    if non_empty_cells < 4:
+        return False
+
+    total_cells = sum(len(row) for row in rows)
+    if total_cells == 0 or non_empty_cells / total_cells < 0.12:
+        return False
+
+    column_count = max((len(row) for row in rows), default=0)
+    significant_columns = 0
+    for column_index in range(column_count):
+        column_non_empty = sum(
+            1 for row in rows if column_index < len(row) and row[column_index].strip()
+        )
+        if column_non_empty >= 2:
+            significant_columns += 1
+
+    return significant_columns >= 2
 
 
 def _table_fragments_non_empty_in_region(tables: Sequence[TableBlock], region: BBox) -> int:
@@ -1726,6 +1887,8 @@ class PDFExtractor:
                 rows = [
                     [(cell or "").replace("\n", " ").strip() for cell in row] for row in raw_rows
                 ]
+                if not _is_meaningful_table(rows):
+                    continue
                 bbox = _table_bbox(tbl_obj)
                 if bbox is None:
                     continue
@@ -1779,6 +1942,8 @@ class PDFExtractor:
                 continue
             if len(rows[0]) < 3 or len(rows) < 4:
                 continue
+            if not _is_meaningful_table(rows):
+                continue
             fallback_non_empty = _table_non_empty_cell_count(rows)
             fragment_non_empty = _table_fragments_non_empty_in_region(default_tables, region)
             if fallback_non_empty <= fragment_non_empty:
@@ -1796,6 +1961,14 @@ class PDFExtractor:
                     index=0,
                 )
             )
+
+        temporal_table = _rebuild_temporal_units_table_from_words(words)
+        if temporal_table is not None:
+            rows, bbox = temporal_table
+            if _is_meaningful_table(rows) and not any(
+                _bbox_overlap_ratio(bbox, table.bbox) >= 0.8 for table in fallback_tables
+            ):
+                fallback_tables.append(TableBlock(rows=rows, bbox=bbox, page_num=page_num, index=0))
         return fallback_tables
 
     def _save_table_block(
