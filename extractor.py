@@ -1400,6 +1400,28 @@ def _desc_to_slug(description: str, max_words: int = 4) -> str:
     return slug or "img"
 
 
+def _raster_image_bytes_for_debug(
+    image_bytes: bytes,
+    original_ext: str,
+) -> tuple[bytes, str]:
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+        img.load()
+        if img.mode in {"RGBA", "LA"} or (img.mode == "P" and "transparency" in img.info):
+            rgba = img.convert("RGBA")
+            background = Image.new("RGB", rgba.size, (255, 255, 255))
+            background.paste(rgba, mask=rgba.getchannel("A"))
+            img = background
+        elif img.mode != "RGB":
+            img = img.convert("RGB")
+
+        buffer = io.BytesIO()
+        img.save(buffer, format="JPEG", quality=85)
+        return buffer.getvalue(), "jpeg"
+    except Exception:
+        return image_bytes, original_ext
+
+
 def _is_noise_block(spans: list) -> bool:
     """
     Restituisce True se il blocco e quasi certamente rumore decorativo:
@@ -1556,23 +1578,19 @@ class PDFExtractor:
             xref = img_info[0]
             try:
                 raw = self.doc.extract_image(xref)
-                img_bytes = raw["image"]
-                ext = raw["ext"]
+                original_bytes = raw["image"]
+                original_ext = raw["ext"]
+                img_bytes, ext = _raster_image_bytes_for_debug(original_bytes, original_ext)
 
-                # Filtra immagini troppo piccole
+                # Filtra immagini troppo piccole quando Pillow riesce a leggerle.
                 try:
                     pil = Image.open(io.BytesIO(img_bytes))
-                    if pil.mode == "CMYK":
-                        pil = pil.convert("RGB")
-                        buf = io.BytesIO()
-                        pil.save(buf, format="PNG")
-                        img_bytes = buf.getvalue()
-                        ext = "png"
+                    pil.load()
                     w, h = pil.size
                     if w < self.config.min_image_width or h < self.config.min_image_height:
                         continue
                 except Exception:
-                    continue
+                    pass
 
                 bbox = self._get_image_bbox(page, xref)
 
