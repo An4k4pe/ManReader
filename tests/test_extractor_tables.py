@@ -651,6 +651,84 @@ class ExtractorTablesTest(unittest.TestCase):
         )
         self.assertEqual(rebuilt[1][0], [["SOPRANNOME", "ORIGINE"], ["1", "Rosso"], ["2", "Lesto"]])
 
+    def test_meaningful_table_rejects_two_column_prose_callout(self):
+        rows = [
+            ["CAPACITÀ", "ALTERNATIVE"],
+            ["Se senti che la capacità", "eroica indicata nella"],
+            ["tua professione non è", "adatta per il personaggio"],
+        ]
+
+        self.assertFalse(_is_meaningful_table(rows))
+
+    def test_meaningful_table_accepts_d20_with_long_descriptive_cells(self):
+        rows = [
+            ["D20", "DEBOLEZZA"],
+            ["1", "Credulone. Credo a tutto ciò che mi viene detto."],
+            ["2", "Avido. Voglio la parte più grande del bottino."],
+        ]
+
+        self.assertTrue(_is_meaningful_table(rows))
+
+    def test_meaningful_table_accepts_stirpe_movimento(self):
+        rows = [["STIRPE", "MOVIMENTO"], ["Umano", "10"], ["Halfling", "8"], ["Nano", "8"]]
+
+        self.assertTrue(_is_meaningful_table(rows))
+
+    def test_rebuild_tables_from_vector_regions_rejects_two_column_prose_callout(self):
+        words = [
+            (10, 10, 56, 20, "CAPACITÀ"),
+            (90, 10, 155, 20, "ALTERNATIVE"),
+            (10, 30, 22, 40, "Se"),
+            (24, 30, 52, 40, "senti"),
+            (54, 30, 72, 40, "che"),
+            (74, 30, 88, 40, "la"),
+            (90, 30, 132, 40, "capacità"),
+            (150, 30, 184, 40, "eroica"),
+            (186, 30, 232, 40, "indicata"),
+            (234, 30, 258, 40, "nella"),
+            (10, 50, 24, 60, "tua"),
+            (26, 50, 82, 60, "professione"),
+            (84, 50, 108, 60, "non"),
+            (110, 50, 116, 60, "è"),
+            (150, 50, 184, 60, "adatta"),
+            (186, 50, 202, 60, "per"),
+            (204, 50, 214, 60, "il"),
+            (216, 50, 270, 60, "personaggio"),
+        ]
+
+        rebuilt = _rebuild_tables_from_vector_regions(words, [(8.0, 8.0, 280.0, 62.0)])
+
+        self.assertEqual(rebuilt, [])
+
+    def test_rebuild_tables_from_vector_regions_keeps_d6_attrezzatura_with_long_cells(self):
+        words = [
+            (10, 10, 22, 20, "D6"),
+            (45, 10, 120, 20, "ATTREZZATURA"),
+            (10, 30, 24, 40, "1"),
+            (45, 30, 86, 40, "Martello"),
+            (88, 30, 126, 40, "d'arme,"),
+            (128, 30, 170, 40, "armatura"),
+            (172, 30, 184, 40, "di"),
+            (186, 30, 220, 40, "cuoio"),
+            (10, 50, 24, 60, "2"),
+            (45, 50, 82, 60, "Accetta,"),
+            (84, 50, 126, 60, "armatura"),
+            (128, 50, 140, 60, "di"),
+            (142, 50, 176, 60, "cuoio"),
+        ]
+
+        rebuilt = _rebuild_tables_from_vector_regions(words, [(8.0, 8.0, 230.0, 62.0)])
+
+        self.assertEqual(len(rebuilt), 1)
+        self.assertEqual(
+            rebuilt[0][0],
+            [
+                ["D6", "ATTREZZATURA"],
+                ["1", "Martello d'arme, armatura di cuoio"],
+                ["2", "Accetta, armatura di cuoio"],
+            ],
+        )
+
     def test_rebuild_tables_from_vector_regions_rejects_paragraph_box(self):
         words = [
             (10, 10, 40, 20, "Questo"),

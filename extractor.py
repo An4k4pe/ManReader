@@ -1299,6 +1299,8 @@ def _looks_like_geometric_table(rows: list[list[str]]) -> bool:
     column_count = max(len(row) for row in rows)
     if column_count < 2 or not _looks_like_table_header(rows[0]):
         return False
+    if _looks_like_text_callout_table_candidate(rows):
+        return False
 
     body_rows = rows[1:]
     if len(body_rows) < 2:
@@ -1320,6 +1322,89 @@ def _looks_like_geometric_table(rows: list[list[str]]) -> bool:
 
     avg_non_empty = _table_non_empty_cell_count(rows) / len(rows)
     return avg_non_empty >= 1.6
+
+
+def _looks_like_text_callout_table_candidate(rows: Sequence[Sequence[str]]) -> bool:
+    clean_rows = [
+        [cell.strip() for cell in row] for row in rows if any(cell.strip() for cell in row)
+    ]
+    if len(clean_rows) < 3 or len(clean_rows) > 5:
+        return False
+
+    column_count = max((len(row) for row in clean_rows), default=0)
+    if column_count != 2:
+        return False
+
+    header = clean_rows[0]
+    if len(header) < 2 or not all(_has_uppercase_header_shape(cell) for cell in header[:2]):
+        return False
+
+    if _has_strong_table_likeness(clean_rows):
+        return False
+
+    body_rows = clean_rows[1:]
+    split_prose_rows = sum(1 for row in body_rows if _looks_like_split_prose_table_row(row))
+    return split_prose_rows >= max(2, len(body_rows) - 1)
+
+
+def _has_strong_table_likeness(rows: Sequence[Sequence[str]]) -> bool:
+    if any(_is_die_header(cell) for cell in rows[0]):
+        return True
+
+    body_rows = [row for row in rows[1:] if row and row[0].strip()]
+    if not body_rows:
+        return False
+
+    first_column_row_tokens = sum(
+        1 for row in body_rows if _LOOSE_ROW_FIRST_TOKEN_RE.match(row[0].strip())
+    )
+    if first_column_row_tokens >= max(2, len(body_rows) - 1):
+        return True
+
+    column_count = max((len(row) for row in rows), default=0)
+    for column_index in range(1, column_count):
+        compact_values = sum(
+            1
+            for row in body_rows
+            if column_index < len(row) and _looks_like_compact_table_value(row[column_index])
+        )
+        if compact_values >= max(2, len(body_rows) - 1):
+            return True
+
+    return _repeated_first_column_token(rows) is not None
+
+
+def _looks_like_compact_table_value(text: str) -> bool:
+    clean = text.strip()
+    if not clean:
+        return False
+    if _LOOSE_ROW_FIRST_TOKEN_RE.match(clean):
+        return True
+    if _re.fullmatch(r"[+\-−–—]?\s*D?\d{1,3}(?:\s*[+\-−–—]\s*D?\d{1,3})?", clean, _re.I):
+        return True
+    return clean in {"—", "-"}
+
+
+def _looks_like_split_prose_table_row(row: Sequence[str]) -> bool:
+    if len(row) < 2:
+        return False
+
+    first = row[0].strip()
+    second = row[1].strip()
+    if not first or not second:
+        return False
+    if _LOOSE_ROW_FIRST_TOKEN_RE.match(first) or _looks_like_compact_table_value(second):
+        return False
+
+    combined = f"{first} {second}"
+    if len(combined.split()) < 5:
+        return False
+    if not any(char.islower() for char in combined):
+        return False
+
+    first_tail = first.rstrip()[-1]
+    second_head = second.lstrip()[0]
+    return first_tail not in ".;:!?" and second_head.islower()
 
 
 def _looks_like_table_header(row: Sequence[str]) -> bool:
@@ -1534,7 +1619,10 @@ def _is_meaningful_table(rows: list[list[str]]) -> bool:
         if column_non_empty >= 2:
             significant_columns += 1
 
-    return significant_columns >= 2
+    if significant_columns < 2:
+        return False
+
+    return not _looks_like_text_callout_table_candidate(rows)
 
 
 def _table_fragments_non_empty_in_region(tables: Sequence[TableBlock], region: BBox) -> int:
