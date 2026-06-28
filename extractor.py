@@ -46,6 +46,7 @@ _NONSTANDARD_CHAR_RE = _re.compile(r"^[^\w\s]+$")
 _DIE_HEADER_RE = _re.compile(r"^D(?P<sides>\d{1,3})$", _re.IGNORECASE)
 _DIE_BODY_VALUE_RE = _re.compile(r"^(?P<start>\d{1,3})(?:\s*[-–—]\s*(?P<end>\d{1,3}))?$")
 _TABLE_TEXT_LINES_SETTINGS = {"vertical_strategy": "text", "horizontal_strategy": "lines"}
+_LOOSE_ROW_FIRST_TOKEN_RE = _re.compile(r"^(?:[≤≥<>]=?\d{1,3}|\d{1,3}(?:\+|[-–—]\d{1,3})?)$")
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
@@ -448,7 +449,8 @@ def _rebuild_tables_from_vector_regions(
             rebuilt.append((rows, bbox))
 
     rebuilt = _merge_compact_die_table_candidates(rebuilt)
-    return _merge_compact_die_tables_with_loose_fragments(rebuilt, words)
+    rebuilt = _merge_compact_die_tables_with_loose_fragments(rebuilt, words)
+    return _append_loose_rows_below_tables(rebuilt, words)
 
 
 def _merge_compact_die_table_candidates(
@@ -522,6 +524,223 @@ def _merge_compact_die_tables_with_loose_fragments(
         merged.append((merged_rows, merged_bbox))
 
     return sorted(merged, key=lambda item: (item[1][1], item[1][0]))
+
+
+def _append_loose_rows_below_tables(
+    tables: Sequence[tuple[list[list[str]], BBox]],
+    words: Sequence[WordItem],
+) -> list[tuple[list[list[str]], BBox]]:
+    merged: list[tuple[list[list[str]], BBox]] = []
+
+    for rows, bbox in tables:
+        extended_rows, extended_bbox = _append_loose_rows_below_table(rows, bbox, words)
+        merged.append((extended_rows, extended_bbox))
+
+    return sorted(merged, key=lambda item: (item[1][1], item[1][0]))
+
+
+def _append_loose_rows_below_table(
+    rows: list[list[str]],
+    bbox: BBox,
+    words: Sequence[WordItem],
+) -> tuple[list[list[str]], BBox]:
+    if len(rows) < 3:
+        return rows, bbox
+    starts = _table_column_starts_for_existing_table(rows, bbox, words)
+    if len(starts) < 2:
+        return rows, bbox
+
+    column_count = max(len(row) for row in rows)
+    if column_count < 2:
+        return rows, bbox
+
+    existing_lines = _cluster_words_by_line(_words_in_bbox(words, bbox, padding=2.0))
+    line_height = _median_line_height(existing_lines)
+    max_gap = max(18.0, line_height * 2.6)
+    max_first_gap = max(max_gap, 28.0)
+
+    current_rows = [list(row) for row in rows]
+    current_bbox = bbox
+    previous_bottom = bbox[3]
+    consumed_bboxes: list[BBox] = []
+
+    for line in _candidate_loose_lines_below(words, bbox):
+        line_bbox = _union_bboxes([(word[0], word[1], word[2], word[3]) for word in line])
+        gap = line_bbox[1] - previous_bottom
+        allowed_gap = max_first_gap if not consumed_bboxes else max_gap
+        if gap > allowed_gap:
+            break
+        if gap < -2.0:
+            continue
+        if not _loose_line_x_is_compatible(line_bbox, current_bbox, starts):
+            continue
+        if not _loose_line_text_is_row_like(line):
+            break
+        if not _loose_line_first_token_is_compatible(current_rows, line):
+            break
+
+        row = _split_loose_line_into_table_row(line, starts, column_count)
+        if row is None or not _loose_row_cells_are_compatible(current_rows, row):
+            break
+
+        current_rows.append(row)
+        current_bbox = _union_bboxes([current_bbox, line_bbox])
+        previous_bottom = line_bbox[3]
+        consumed_bboxes.append(line_bbox)
+        if len(consumed_bboxes) >= 4:
+            break
+
+    return current_rows, current_bbox
+
+
+def _table_column_starts_for_existing_table(
+    rows: Sequence[Sequence[str]],
+    bbox: BBox,
+    words: Sequence[WordItem],
+) -> list[float]:
+    table_lines = _cluster_words_by_line(_words_in_bbox(words, bbox, padding=2.0))
+    starts = _recurring_column_starts(table_lines) if table_lines else []
+    column_count = max(len(row) for row in rows)
+    if len(starts) >= min(2, column_count):
+        return starts[:column_count]
+
+    width = max(bbox[2] - bbox[0], 1.0)
+    step = width / max(column_count, 1)
+    return [bbox[0] + (step * index) for index in range(column_count)]
+
+
+def _median_line_height(lines: Sequence[Sequence[WordItem]]) -> float:
+    heights = [max(word[3] - word[1] for word in line) for line in lines if line]
+    if not heights:
+        return 10.0
+    return sorted(heights)[len(heights) // 2]
+
+
+def _candidate_loose_lines_below(words: Sequence[WordItem], bbox: BBox) -> list[list[WordItem]]:
+    table_width = max(bbox[2] - bbox[0], 1.0)
+    search_bbox = (
+        bbox[0] - 12.0,
+        bbox[3] - 2.0,
+        bbox[2] + max(120.0, table_width * 0.75),
+        bbox[3] + 96.0,
+    )
+    candidates = _words_in_bbox(words, search_bbox, padding=0.0)
+    lines = _cluster_words_by_line(candidates)
+    return [line for line in lines if line and min(word[1] for word in line) >= bbox[3] - 2.0]
+
+
+def _loose_line_x_is_compatible(line_bbox: BBox, table_bbox: BBox, starts: Sequence[float]) -> bool:
+    first_start = starts[0]
+    table_width = max(table_bbox[2] - table_bbox[0], 1.0)
+    if abs(line_bbox[0] - first_start) <= 14.0:
+        return line_bbox[2] <= table_bbox[2] + max(120.0, table_width * 0.75)
+    return _horizontal_overlap_ratio(line_bbox, table_bbox) >= 0.65
+
+
+def _loose_line_text_is_row_like(line: Sequence[WordItem]) -> bool:
+    texts = [word[4].strip() for word in line if word[4].strip()]
+    if len(texts) < 2 or len(texts) > 16:
+        return False
+    first = texts[0]
+    if first.startswith(("*", "†")):
+        return False
+    joined = " ".join(texts)
+    if len(joined) > 120:
+        return False
+    return not (len(texts) == 1 and _has_uppercase_header_shape(first))
+
+
+def _loose_line_first_token_is_compatible(
+    rows: Sequence[Sequence[str]],
+    line: Sequence[WordItem],
+) -> bool:
+    if not line:
+        return False
+
+    first = line[0][4].strip()
+    if _LOOSE_ROW_FIRST_TOKEN_RE.match(first):
+        return _table_first_column_uses_row_tokens(rows)
+
+    repeated = _repeated_first_column_token(rows)
+    return repeated is not None and first == repeated
+
+
+def _table_first_column_uses_row_tokens(rows: Sequence[Sequence[str]]) -> bool:
+    first_cells = [row[0].strip() for row in rows[1:] if row and row[0].strip()]
+    if not first_cells:
+        return False
+    if rows and rows[0]:
+        header_match = _DIE_HEADER_RE.match(rows[0][0].strip())
+        if header_match is not None:
+            die_sides = int(header_match.group("sides"))
+            die_matches = sum(
+                1 for cell in first_cells if _die_body_values(cell, die_sides) is not None
+            )
+            if die_matches >= max(1, len(first_cells) - 1):
+                return True
+    matches = sum(1 for cell in first_cells if _LOOSE_ROW_FIRST_TOKEN_RE.match(cell))
+    return matches >= max(1, len(first_cells) - 1)
+
+
+def _repeated_first_column_token(rows: Sequence[Sequence[str]]) -> str | None:
+    first_cells = [row[0].strip() for row in rows if row and row[0].strip()]
+    if len(first_cells) < 3:
+        return None
+    body_first_cells = first_cells[1:]
+    if len(set(body_first_cells)) != 1:
+        return None
+    token = body_first_cells[0]
+    if token.isalpha() and token.upper() == token and len(token) <= 8:
+        return token
+    return None
+
+
+def _split_loose_line_into_table_row(
+    line: Sequence[WordItem],
+    starts: Sequence[float],
+    column_count: int,
+) -> list[str] | None:
+    cell_words: list[list[WordItem]] = [[] for _ in range(column_count)]
+    usable_starts = list(starts[:column_count])
+    if len(usable_starts) < column_count:
+        return None
+
+    for word in line:
+        column_index = _table_column_for_x(word[0], usable_starts)
+        if column_index >= column_count:
+            return None
+        cell_words[column_index].append(word)
+
+    row = [_join_table_line_words(words) for words in cell_words]
+    if sum(1 for cell in row if cell.strip()) < 2:
+        return None
+    return row
+
+
+def _loose_row_cells_are_compatible(
+    rows: Sequence[Sequence[str]],
+    row: Sequence[str],
+) -> bool:
+    first = row[0].strip() if row else ""
+    if not first:
+        return False
+
+    repeated = _repeated_first_column_token(rows)
+    if repeated is not None:
+        if first != repeated:
+            return False
+        if len(row) < 3 or not row[1].strip() or not row[2].strip():
+            return False
+        existing_keys = {(old[0].strip(), old[1].strip()) for old in rows if len(old) >= 2}
+        return (row[0].strip(), row[1].strip()) not in existing_keys
+
+    if not _LOOSE_ROW_FIRST_TOKEN_RE.match(first):
+        return False
+
+    existing_first_cells = {old[0].strip() for old in rows[1:] if old and old[0].strip()}
+    if first in existing_first_cells:
+        return False
+    return any(cell.strip() for cell in row[1:])
 
 
 def _compact_die_tables_can_merge(
@@ -1263,6 +1482,11 @@ def _table_column_for_x(x0: float, starts: list[float]) -> int:
 
 def _join_table_words(words: Sequence[WordItem]) -> str:
     ordered = sorted(words, key=lambda item: (item[1], item[0]))
+    return " ".join(word[4] for word in ordered).strip()
+
+
+def _join_table_line_words(words: Sequence[WordItem]) -> str:
+    ordered = sorted(words, key=lambda item: (item[0], item[1]))
     return " ".join(word[4] for word in ordered).strip()
 
 

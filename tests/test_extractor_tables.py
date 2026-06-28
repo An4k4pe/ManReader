@@ -345,58 +345,210 @@ class ExtractorTablesTest(unittest.TestCase):
             ],
         )
 
+    def test_rebuild_tables_from_vector_regions_merges_page25_compact_d6_with_row_6(self):
+        words = [
+            (10, 10, 22, 20, "D6"),
+            (40, 10, 105, 20, "SOPRANNOME"),
+            (10, 30, 15, 40, "1"),
+            (40, 30, 95, 40, "Mentechiara"),
+            (10, 50, 15, 60, "2"),
+            (40, 50, 80, 60, "Polmone"),
+            (82, 50, 135, 60, "Impolverato"),
+            (10, 70, 15, 80, "3"),
+            (40, 70, 50, 80, "Il"),
+            (52, 70, 120, 80, "Lungimirante"),
+            (155, 30, 160, 40, "4"),
+            (185, 30, 195, 40, "Il"),
+            (197, 30, 225, 40, "Dotto"),
+            (155, 50, 160, 60, "5"),
+            (185, 50, 250, 60, "L'Onnisciente"),
+            # Row 6 is vertically lower than the left row 3 because the left
+            # side contains a multiline body cell. The loose merge must use
+            # missing die values, not strict left-anchor y alignment.
+            (155, 86, 160, 96, "6"),
+            (185, 86, 195, 96, "Il"),
+            (197, 86, 230, 96, "Colto"),
+            (232, 86, 270, 96, "Paffuto"),
+            # Surrounding prose/nearby words: must not be absorbed into the table.
+            (155, 112, 195, 122, "Studioso"),
+            (197, 112, 230, 122, "delle"),
+            (232, 112, 285, 122, "rovine"),
+            (155, 112, 190, 122, "Questo"),
+            (192, 112, 245, 122, "paragrafo"),
+            (247, 112, 290, 122, "continua"),
+        ]
 
-def test_rebuild_tables_from_vector_regions_merges_page25_compact_d6_with_row_6(self):
-    words = [
-        (10, 10, 22, 20, "D6"),
-        (40, 10, 105, 20, "SOPRANNOME"),
-        (10, 30, 15, 40, "1"),
-        (40, 30, 95, 40, "Mentechiara"),
-        (10, 50, 15, 60, "2"),
-        (40, 50, 80, 60, "Polmone"),
-        (82, 50, 135, 60, "Impolverato"),
-        (10, 70, 15, 80, "3"),
-        (40, 70, 50, 80, "Il"),
-        (52, 70, 120, 80, "Lungimirante"),
-        (155, 30, 160, 40, "4"),
-        (185, 30, 195, 40, "Il"),
-        (197, 30, 225, 40, "Dotto"),
-        (155, 50, 160, 60, "5"),
-        (185, 50, 250, 60, "L'Onnisciente"),
-        # Row 6 is vertically lower than the left row 3 because the left
-        # side contains a multiline body cell. The loose merge must use
-        # missing die values, not strict left-anchor y alignment.
-        (155, 86, 160, 96, "6"),
-        (185, 86, 195, 96, "Il"),
-        (197, 86, 230, 96, "Colto"),
-        (232, 86, 270, 96, "Paffuto"),
-        # Surrounding prose/nearby words: must not be absorbed into the table.
-        (155, 112, 195, 122, "Studioso"),
-        (197, 112, 230, 122, "delle"),
-        (232, 112, 285, 122, "rovine"),
-        (155, 112, 190, 122, "Questo"),
-        (192, 112, 245, 122, "paragrafo"),
-        (247, 112, 290, 122, "continua"),
-    ]
+        rebuilt = _rebuild_tables_from_vector_regions(
+            words,
+            [(8.0, 24.0, 140.0, 74.0)],
+        )
 
-    rebuilt = _rebuild_tables_from_vector_regions(
-        words,
-        [(8.0, 24.0, 140.0, 74.0)],
-    )
+        self.assertEqual(len(rebuilt), 1)
+        self.assertEqual(
+            rebuilt[0][0],
+            [
+                ["D6", "SOPRANNOME"],
+                ["1", "Mentechiara"],
+                ["2", "Polmone Impolverato"],
+                ["3", "Il Lungimirante"],
+                ["4", "Il Dotto"],
+                ["5", "L'Onnisciente"],
+                ["6", "Il Colto Paffuto"],
+            ],
+        )
 
-    self.assertEqual(len(rebuilt), 1)
-    self.assertEqual(
-        rebuilt[0][0],
-        [
-            ["D6", "SOPRANNOME"],
-            ["1", "Mentechiara"],
-            ["2", "Polmone Impolverato"],
-            ["3", "Il Lungimirante"],
-            ["4", "Il Dotto"],
-            ["5", "L'Onnisciente"],
-            ["6", "Il Colto Paffuto"],
-        ],
-    )
+    def test_rebuild_tables_from_vector_regions_appends_cut_d6_age_row_below(self):
+        words = [
+            (10, 10, 22, 20, "D6"),
+            (40, 10, 68, 20, "ETÀ"),
+            (95, 10, 132, 20, "ABILITÀ"),
+            (134, 10, 190, 20, "ALLENATE*"),
+            (210, 10, 260, 20, "ATTRIBUTI†"),
+            (10, 30, 28, 40, "1–3"),
+            (40, 30, 75, 40, "Giovane"),
+            (95, 30, 116, 40, "6+2"),
+            (210, 30, 224, 40, "AGI"),
+            (226, 30, 232, 40, "e"),
+            (234, 30, 252, 40, "COS"),
+            (254, 30, 268, 40, "+1"),
+            (10, 50, 28, 60, "4–5"),
+            (40, 50, 72, 60, "Adulto"),
+            (95, 50, 116, 60, "6+4"),
+            (210, 50, 218, 60, "—"),
+            (10, 78, 16, 88, "6"),
+            (40, 78, 72, 88, "Vecchio"),
+            (95, 78, 116, 88, "6+6"),
+            (210, 78, 232, 88, "FOR,"),
+            (234, 80, 248, 90, "AGI"),
+            (250, 78, 256, 88, "e"),
+            (258, 80, 278, 90, "COS"),
+            (280, 78, 298, 88, "–2,"),
+            (300, 80, 314, 90, "INT"),
+            (316, 78, 322, 88, "e"),
+            (324, 80, 342, 90, "VOL"),
+            (344, 78, 358, 88, "+1"),
+            (10, 102, 16, 112, "*"),
+            (18, 102, 36, 112, "Sei"),
+            (38, 102, 72, 112, "abilità"),
+            (74, 102, 112, 112, "allenate"),
+        ]
+        rebuilt = _rebuild_tables_from_vector_regions(words, [(8.0, 24.0, 275.0, 58.0)])
+
+        self.assertEqual(len(rebuilt), 1)
+        self.assertIn(
+            ["6", "Vecchio", "6+6", "FOR, AGI e COS –2, INT e VOL +1"],
+            rebuilt[0][0],
+        )
+        flattened = " ".join(cell for row in rebuilt[0][0] for cell in row)
+        self.assertNotIn("Sei abilità", flattened)
+
+    def test_rebuild_tables_from_vector_regions_does_not_append_cut_table_note(self):
+        words = [
+            (10, 10, 22, 20, "D6"),
+            (40, 10, 68, 20, "ETÀ"),
+            (10, 30, 28, 40, "1–3"),
+            (40, 30, 75, 40, "Giovane"),
+            (10, 50, 28, 60, "4–5"),
+            (40, 50, 72, 60, "Adulto"),
+            (10, 78, 16, 88, "*"),
+            (18, 78, 36, 88, "Sei"),
+            (38, 78, 72, 88, "abilità"),
+            (74, 78, 112, 88, "allenate"),
+        ]
+
+        rebuilt = _rebuild_tables_from_vector_regions(words, [(8.0, 24.0, 120.0, 58.0)])
+        self.assertEqual(len(rebuilt), 1)
+        self.assertEqual(
+            rebuilt[0][0],
+            [["D6", "ETÀ"], ["1–3", "Giovane"], ["4–5", "Adulto"]],
+        )
+
+    def test_rebuild_tables_from_vector_regions_appends_cut_threshold_row_below(self):
+        words = [
+            (10, 10, 46, 20, "FOR/AGI"),
+            (70, 10, 110, 20, "DANNO"),
+            (112, 10, 150, 20, "BONUS"),
+            (10, 30, 34, 40, "≤12"),
+            (70, 30, 78, 40, "—"),
+            (10, 50, 44, 60, "13–16"),
+            (70, 50, 92, 60, "+D4"),
+            (10, 78, 30, 88, "17+"),
+            (70, 78, 92, 88, "+D6"),
+        ]
+
+        rebuilt = _rebuild_tables_from_vector_regions(words, [(8.0, 24.0, 160.0, 58.0)])
+
+        self.assertEqual(len(rebuilt), 1)
+        self.assertEqual(rebuilt[0][0][-1], ["17+", "+D6", ""])
+
+    def test_rebuild_tables_from_vector_regions_appends_cut_repeated_first_column_rows(self):
+        words = [
+            (10, 10, 28, 20, "AGI"),
+            (50, 10, 72, 20, "1–6"),
+            (90, 10, 104, 20, "–4"),
+            (10, 30, 28, 40, "AGI"),
+            (50, 30, 72, 40, "7–9"),
+            (90, 30, 104, 40, "–2"),
+            (10, 50, 28, 60, "AGI"),
+            (50, 50, 80, 60, "10–12"),
+            (90, 50, 104, 60, "+0"),
+            (10, 78, 28, 88, "AGI"),
+            (50, 78, 80, 88, "13–15"),
+            (90, 78, 104, 88, "+2"),
+            (10, 96, 28, 106, "AGI"),
+            (50, 96, 80, 106, "16–18"),
+            (90, 96, 104, 106, "+4"),
+        ]
+
+        rebuilt = _rebuild_tables_from_vector_regions(words, [(8.0, 8.0, 120.0, 58.0)])
+
+        self.assertEqual(len(rebuilt), 1)
+        self.assertEqual(
+            rebuilt[0][0],
+            [
+                ["AGI", "1–6", "–4"],
+                ["AGI", "7–9", "–2"],
+                ["AGI", "10–12", "+0"],
+                ["AGI", "13–15", "+2"],
+                ["AGI", "16–18", "+4"],
+            ],
+        )
+
+    def test_rebuild_tables_from_vector_regions_does_not_append_incompatible_heading(self):
+        words = [
+            (10, 10, 22, 20, "D6"),
+            (40, 10, 90, 20, "RISULTATO"),
+            (10, 30, 16, 40, "1"),
+            (40, 30, 70, 40, "Primo"),
+            (10, 50, 16, 60, "2"),
+            (40, 50, 80, 60, "Secondo"),
+            (10, 78, 52, 88, "ABILITÀ"),
+        ]
+
+        rebuilt = _rebuild_tables_from_vector_regions(words, [(8.0, 24.0, 100.0, 58.0)])
+
+        self.assertEqual(len(rebuilt), 1)
+        self.assertEqual(rebuilt[0][0], [["D6", "RISULTATO"], ["1", "Primo"], ["2", "Secondo"]])
+
+    def test_rebuild_tables_from_vector_regions_does_not_append_paragraph_below(self):
+        words = [
+            (10, 10, 22, 20, "D6"),
+            (40, 10, 90, 20, "RISULTATO"),
+            (10, 30, 16, 40, "1"),
+            (40, 30, 70, 40, "Primo"),
+            (10, 50, 16, 60, "2"),
+            (40, 50, 80, 60, "Secondo"),
+            (10, 78, 42, 88, "Questo"),
+            (44, 78, 72, 88, "testo"),
+            (74, 78, 116, 88, "continua"),
+            (118, 78, 140, 88, "fuori"),
+            (142, 78, 172, 88, "tabella"),
+        ]
+
+        rebuilt = _rebuild_tables_from_vector_regions(words, [(8.0, 24.0, 100.0, 58.0)])
+
+        self.assertEqual(len(rebuilt), 1)
+        self.assertEqual(rebuilt[0][0], [["D6", "RISULTATO"], ["1", "Primo"], ["2", "Secondo"]])
 
     def test_rebuild_tables_from_vector_regions_rejects_incomplete_loose_d6_fragment(self):
         words = [
