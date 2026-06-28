@@ -27,7 +27,14 @@ def build_markdown(document: DocumentIR) -> str:
         while index < len(page.blocks):
             block = page.blocks[index]
             if block.type == "text" and block.text:
-                if block.role == "bullet_list":
+                if block.role == "callout":
+                    if current_paragraph:
+                        parts.append(current_paragraph)
+                        current_paragraph = ""
+                    previous_text_block = None
+                    last_quote_text_block = None
+                    parts.append(_render_callout(block))
+                elif block.role == "bullet_list":
                     if current_paragraph:
                         parts.append(current_paragraph)
                         current_paragraph = ""
@@ -265,6 +272,22 @@ def _render_bullet_list_text(text: str, marker: str) -> str:
         normalized = " ".join(text.split())
         return f"- {normalized}" if normalized else ""
     return "\n".join(f"- {item}" for item in items)
+
+
+def _render_callout(block: BlockIR) -> str:
+    callout_type = block.metadata.get("callout_type") or "info"
+    title = block.metadata.get("title", "").strip()
+    body = (block.text or "").strip()
+
+    header = f"> [!{callout_type.upper()}]"
+    if title:
+        header = f"{header} {title}"
+
+    if not body:
+        return header
+
+    body_lines = [f"> {line.strip()}" if line.strip() else ">" for line in body.splitlines()]
+    return "\n".join([header, ">", *body_lines])
 
 
 def _render_asset(asset: AssetIR, page_num: int, block_type: str) -> str:

@@ -4,12 +4,20 @@ from ir_builder import build_document_ir
 
 
 class FakeTextBlock:
-    def __init__(self, text: str, bbox: tuple[float, float, float, float]) -> None:
+    def __init__(
+        self,
+        text: str,
+        bbox: tuple[float, float, float, float],
+        *,
+        avg_font_size: float = 10.0,
+        is_bold: bool = False,
+        is_italic: bool = False,
+    ) -> None:
         self.text = text
         self.bbox = bbox
-        self.avg_font_size = 10.0
-        self.is_bold = False
-        self.is_italic = False
+        self.avg_font_size = avg_font_size
+        self.is_bold = is_bold
+        self.is_italic = is_italic
 
 
 class FakeAsset:
@@ -108,6 +116,135 @@ class IRBuilderTest(unittest.TestCase):
         self.assertEqual(ir_page.blocks[0].type, "text")
         self.assertEqual(ir_page.blocks[0].role, "bullet_list")
         self.assertEqual(ir_page.blocks[0].metadata, {"marker": "❖"})
+
+    def test_merges_nearby_uppercase_title_and_body_as_callout(self):
+        body = (
+            "Se senti che la capacità eroica indicata nella tua professione non è adatta "
+            "per il personaggio che vuoi creare, il GM può permetterti di sceglierne un'altra."
+        )
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock("CAPACITÀ ALTERNATIVE", (10.0, 10.0, 80.0, 20.0)),
+                FakeTextBlock(body, (10.0, 24.0, 95.0, 44.0)),
+            ]
+        )
+
+        ir_page = self.build_page(page)
+        self.assertEqual(len(ir_page.blocks), 1)
+        self.assertEqual(ir_page.blocks[0].type, "text")
+        self.assertEqual(ir_page.blocks[0].role, "callout")
+        self.assertEqual(
+            ir_page.blocks[0].metadata,
+            {"callout_type": "info", "title": "CAPACITÀ ALTERNATIVE"},
+        )
+        self.assertEqual(ir_page.blocks[0].text, body)
+        self.assertEqual(ir_page.blocks[0].bbox, (10.0, 10.0, 95.0, 44.0))
+
+    def test_merges_callout_when_graphic_asset_sits_between_title_and_body(self):
+        body = (
+            "Se senti che la capacità eroica indicata nella tua professione non è adatta "
+            "per il personaggio che vuoi creare, il GM può permetterti di sceglierne un'altra."
+        )
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock("CAPACITÀ ALTERNATIVE", (10.0, 10.0, 80.0, 20.0)),
+                FakeTextBlock(body, (10.0, 42.0, 95.0, 62.0)),
+            ],
+            images=[
+                FakeAsset(
+                    (8.0, 21.0, 98.0, 40.0),
+                    saved_path="images/callout-decoration.png",
+                    sha="callout-decoration-sha",
+                )
+            ],
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertEqual(len(ir_page.blocks), 2)
+        self.assertEqual(ir_page.blocks[0].type, "text")
+        self.assertEqual(ir_page.blocks[0].role, "callout")
+        self.assertEqual(
+            ir_page.blocks[0].metadata,
+            {"callout_type": "info", "title": "CAPACITÀ ALTERNATIVE"},
+        )
+        self.assertEqual(ir_page.blocks[0].text, body)
+        self.assertEqual(ir_page.blocks[0].bbox, (10.0, 10.0, 95.0, 62.0))
+        self.assertEqual(ir_page.blocks[1].type, "image")
+        self.assertEqual([block.order for block in ir_page.blocks], [1, 2])
+
+    def test_keeps_dash_attribution_outside_callout(self):
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock("– CYRIL CHIOMA DI FUOCO", (10.0, 10.0, 80.0, 20.0)),
+                FakeTextBlock(
+                    (
+                        "I maghi hanno imparato a controllare le antiche forze che permeano "
+                        "la natura e le strutture primordiali del mondo."
+                    ),
+                    (10.0, 24.0, 95.0, 44.0),
+                ),
+            ]
+        )
+
+        ir_page = self.build_page(page)
+        self.assertEqual(len(ir_page.blocks), 2)
+        self.assertIsNone(ir_page.blocks[0].role)
+        self.assertIsNone(ir_page.blocks[1].role)
+
+    def test_keeps_large_heading_and_following_paragraph_outside_callout(self):
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock("CAPACITÀ ALTERNATIVE", (10.0, 10.0, 80.0, 24.0), avg_font_size=16.0),
+                FakeTextBlock(
+                    "Questo paragrafo descrive la sezione e deve restare nel normale flusso.",
+                    (10.0, 28.0, 95.0, 48.0),
+                ),
+            ]
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertEqual(len(ir_page.blocks), 2)
+        self.assertIsNone(ir_page.blocks[0].role)
+        self.assertIsNone(ir_page.blocks[1].role)
+
+    def test_keeps_single_word_uppercase_heading_outside_callout(self):
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock("DOMANDE", (10.0, 10.0, 80.0, 20.0)),
+                FakeTextBlock(
+                    "Questo paragrafo segue una heading breve e non deve diventare un callout.",
+                    (10.0, 24.0, 95.0, 44.0),
+                ),
+            ]
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertEqual(len(ir_page.blocks), 2)
+        self.assertIsNone(ir_page.blocks[0].role)
+        self.assertIsNone(ir_page.blocks[1].role)
+
+    def test_callout_merge_preserves_following_bullet_list(self):
+        body = (
+            "Se senti che la capacità eroica indicata nella tua professione non è adatta "
+            "per il personaggio che vuoi creare, il GM può permetterti di sceglierne un’altra."
+        )
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock("CAPACITÀ ALTERNATIVE", (10.0, 10.0, 80.0, 20.0)),
+                FakeTextBlock(body, (10.0, 24.0, 95.0, 44.0)),
+                FakeTextBlock("✦ Abilità: Osservazione, Furtività", (10.0, 60.0, 95.0, 72.0)),
+            ]
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertEqual(len(ir_page.blocks), 2)
+        self.assertEqual(ir_page.blocks[0].role, "callout")
+        self.assertEqual(ir_page.blocks[1].role, "bullet_list")
+        self.assertEqual(ir_page.blocks[1].metadata, {"marker": "✦"})
 
     def test_splits_inline_trait_bullets_onto_separate_lines(self):
         page = FakePage(

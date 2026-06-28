@@ -117,7 +117,194 @@ def _build_blocks(page) -> list[BlockIR]:
         else:
             blocks.append(_build_asset_block(item, kind, page_num, index, order))
 
-    return blocks
+    return _renumber_blocks(_merge_callout_blocks(blocks))
+
+
+def _merge_callout_blocks(blocks: list[BlockIR]) -> list[BlockIR]:
+    merged: list[BlockIR] = []
+    index = 0
+
+    while index < len(blocks):
+        current = blocks[index]
+        body_index = _callout_body_index(blocks, index)
+
+        if body_index is not None:
+            merged.append(_build_callout_block(current, blocks[body_index]))
+            merged.extend(blocks[index + 1 : body_index])
+            index = body_index + 1
+            continue
+
+        merged.append(current)
+        index += 1
+
+    return merged
+
+
+def _callout_body_index(blocks: list[BlockIR], title_index: int) -> int | None:
+    title_block = blocks[title_index]
+    if not _is_callout_title_block(title_block):
+        return None
+
+    index = title_index + 1
+    while index < len(blocks) and _is_callout_separator_block(blocks[index], title_block):
+        index += 1
+
+    if index >= len(blocks):
+        return None
+
+    body_block = blocks[index]
+    if _is_callout_body_block(body_block) and _has_compatible_callout_bbox(title_block, body_block):
+        return index
+    return None
+
+
+def _is_callout_pair(title_block: BlockIR, body_block: BlockIR) -> bool:
+    return (
+        _is_callout_title_block(title_block)
+        and _is_callout_body_block(body_block)
+        and _has_compatible_callout_bbox(title_block, body_block)
+    )
+
+
+def _is_callout_title_block(block: BlockIR) -> bool:
+    if block.type != "text" or block.role is not None or not block.text:
+        return False
+
+    stripped = " ".join(block.text.split())
+    words = stripped.split()
+    if not stripped or len(stripped) > 50:
+        return False
+    if stripped.startswith(("-", "–", "—")):
+        return False
+    if not 2 <= len(words) <= 6:
+        return False
+    if not any(character.isalpha() for character in stripped):
+        return False
+    if not stripped.isupper():
+        return False
+    if stripped.endswith((".", ",", ";", ":")):
+        return False
+    return not _looks_like_section_heading_block(block)
+
+
+def _is_callout_body_block(block: BlockIR) -> bool:
+    if block.type != "text" or block.role is not None or not block.text:
+        return False
+
+    stripped = " ".join(block.text.split())
+    if len(stripped) < 40:
+        return False
+    if stripped.isupper():
+        return False
+    return not _looks_like_section_heading_block(block)
+
+
+def _is_callout_separator_block(block: BlockIR, title_block: BlockIR) -> bool:
+    if block.type not in {"image", "vector"}:
+        return False
+    if block.bbox is None or title_block.bbox is None:
+        return False
+    if block.page_num != title_block.page_num:
+        return False
+
+    # Alcuni box arrivano nel reading flow come titolo, asset grafico del box,
+    # poi corpo. Non riclassifichiamo l'asset: lo saltiamo solo per trovare il
+    # corpo testuale semanticamente collegato al titolo.
+    title_bbox = title_block.bbox
+    horizontal_overlap = min(title_bbox[2], block.bbox[2]) - max(title_bbox[0], block.bbox[0])
+    return horizontal_overlap > 0 and block.bbox[1] >= title_bbox[1] - 2.0
+
+
+def _has_compatible_callout_bbox(title_block: BlockIR, body_block: BlockIR) -> bool:
+    if title_block.page_num != body_block.page_num:
+        return False
+    if title_block.bbox is None or body_block.bbox is None:
+        return False
+
+    title_bbox = title_block.bbox
+    body_bbox = body_block.bbox
+    if body_bbox[1] < title_bbox[1]:
+        return False
+
+    vertical_gap = body_bbox[1] - title_bbox[3]
+    max_font_size = max(
+        _font_size_from_style(title_block.style) or 0.0,
+        _font_size_from_style(body_block.style) or 0.0,
+        10.0,
+    )
+    if vertical_gap < -2.0 or vertical_gap > max_font_size * 3.0:
+        return False
+
+    title_width = title_bbox[2] - title_bbox[0]
+    body_width = body_bbox[2] - body_bbox[0]
+    if title_width <= 0 or body_width <= 0:
+        return False
+
+    horizontal_overlap = min(title_bbox[2], body_bbox[2]) - max(title_bbox[0], body_bbox[0])
+    has_clear_overlap = horizontal_overlap >= min(title_width, body_width) * 0.5
+    has_compatible_left_edge = abs(title_bbox[0] - body_bbox[0]) <= 12.0
+    body_covers_title = (
+        body_bbox[0] <= title_bbox[0] + 12.0 and body_bbox[2] >= title_bbox[2] - 12.0
+    )
+    return has_clear_overlap or has_compatible_left_edge or body_covers_title
+
+
+def _looks_like_section_heading_block(block: BlockIR) -> bool:
+    text = (block.text or "").strip()
+    if not text:
+        return False
+    if text.startswith("Scena "):
+        return True
+
+    font_size = _font_size_from_style(block.style)
+    return font_size is not None and font_size >= 14.0
+
+
+def _font_size_from_style(style: dict[str, str]) -> float | None:
+    try:
+        font_size = float(style.get("avg_font_size", ""))
+    except ValueError:
+        return None
+    return font_size if font_size > 0 else None
+
+
+def _build_callout_block(title_block: BlockIR, body_block: BlockIR) -> BlockIR:
+    bbox = None
+    if title_block.bbox is not None and body_block.bbox is not None:
+        bbox = _union_bbox(title_block.bbox, body_block.bbox)
+
+    return BlockIR(
+        id=title_block.id,
+        type="text",
+        page_num=title_block.page_num,
+        order=title_block.order,
+        bbox=bbox,
+        text=" ".join((body_block.text or "").split()),
+        style=body_block.style,
+        role="callout",
+        metadata={
+            "callout_type": "info",
+            "title": " ".join((title_block.text or "").split()),
+        },
+    )
+
+
+def _renumber_blocks(blocks: list[BlockIR]) -> list[BlockIR]:
+    return [
+        BlockIR(
+            id=block.id,
+            type=block.type,
+            page_num=block.page_num,
+            order=order,
+            bbox=block.bbox,
+            text=block.text,
+            style=block.style,
+            asset=block.asset,
+            role=block.role,
+            metadata=block.metadata,
+        )
+        for order, block in enumerate(blocks, start=1)
+    ]
 
 
 def _merge_adjacent_text_elements(

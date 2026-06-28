@@ -179,6 +179,52 @@ class MarkdownBuilderTest(unittest.TestCase):
 
         self.assertIn("## DOMANDE", markdown)
 
+    def test_callout_role_renders_obsidian_info_callout(self):
+        document = _document(
+            [
+                _text(
+                    "b1",
+                    "Se senti che la capacità eroica indicata nella tua professione non è adatta.",
+                    role="callout",
+                    metadata={"callout_type": "info", "title": "CAPACITÀ ALTERNATIVE"},
+                )
+            ]
+        )
+
+        markdown = build_markdown(document)
+
+        self.assertIn(
+            "> [!INFO] CAPACITÀ ALTERNATIVE\n"
+            ">\n"
+            "> Se senti che la capacità eroica indicata nella tua professione non è adatta.",
+            markdown,
+        )
+        self.assertNotIn("## CAPACITÀ ALTERNATIVE", markdown)
+
+    def test_callout_does_not_disable_following_bullet_list(self):
+        document = _document(
+            [
+                _text(
+                    "b1",
+                    "Se senti che la capacità eroica indicata nella tua professione non è adatta.",
+                    role="callout",
+                    metadata={"callout_type": "info", "title": "CAPACITÀ ALTERNATIVE"},
+                ),
+                _text(
+                    "b2",
+                    "✦ Abilità: Osservazione\n✦ Capacità Eroica: Colpo Preciso",
+                    role="bullet_list",
+                    metadata={"marker": "✦"},
+                ),
+            ]
+        )
+
+        markdown = build_markdown(document)
+
+        self.assertIn("> [!INFO] CAPACITÀ ALTERNATIVE", markdown)
+        self.assertIn("- Abilità: Osservazione", markdown)
+        self.assertIn("- Capacità Eroica: Colpo Preciso", markdown)
+
     def test_quote_attribution_renders_as_standalone_bold_paragraph(self):
         document = _document(
             [
