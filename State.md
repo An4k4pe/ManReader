@@ -133,3 +133,11 @@ Il core CLI espone solo Ollama come backend vision locale.
 - Follow-up extractor/heading: correggere titoli con lettere spaziate o decorative, es. `L’A RRIVO DELL ’O RDA`.
 - Follow-up extractor/heading: correggere heading incollati, es. `MECCANICHE ECOMPLICAZIONI`.
 - Follow-up IR/markdown: classificare meglio blocchi table-like/label/caption, es. righe tipo `La piccola cappella uberiana del villaggio`, `Un'offerta votiva bruciata davanti alla statua di Uberia`, `5 La casa del parroco`, `Un sermone incompiuto sul leggio`.
+- Follow-up extractor/tables: pagina 8 mostra testo di tabella ancora presente nel reading flow anche se la tabella viene estratta come asset CSV. Caso osservato: sezione `D6 Luogo Ritrovamento Dettagli e atmosfera`, con righe come `Casa di una famiglia comune`, `La piccola cappella uberiana del villaggio`, `La casa del parroco`.
+- Follow-up extractor/tables: verificare sovrapposizione bbox tra TextBlock e TableAsset; i TextBlock coperti da tabelle riconosciute non dovrebbero essere renderizzati come body text normale.
+- Follow-up extractor/tables: verificare doppia estrazione vector/table su pagina 8 (`p8_vec*.svg` + `p8_tbl*.csv`); se i vettoriali sono solo bordi/linee della tabella, classificarli come decorativi/strutturali e non come asset leggibile.
+- Follow-up extractor/tables: verificare se le tre tabelle `p8_tbl2.csv`, `p8_tbl3.csv`, `p8_tbl4.csv` sono frammenti di una tabella unica e valutare merge/dedup a livello IR.
+  Done:
+- test.pdf completo: ok, 1 tabella vera, 0 vettoriali
+- DB.pdf pagine 1–10: 1 tabella vera recuperata, 10 falsi positivi rimossi
+- vettoriali DB residui identificati come barcode/numeri pagina decorativi, da trattare più avanti nella fase asset/decorazioni

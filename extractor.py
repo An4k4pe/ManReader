@@ -420,6 +420,215 @@ def _table_row_for_y(center_y: float, bands: dict[int, tuple[float, float]]) -> 
     return None
 
 
+def _rebuild_tables_from_vector_regions(
+    words: Sequence[WordItem],
+    vector_regions: Sequence[BBox],
+) -> list[tuple[list[list[str]], BBox]]:
+    rebuilt: list[tuple[list[list[str]], BBox]] = []
+    for region in sorted(vector_regions, key=lambda bbox: (bbox[1], bbox[0])):
+        expanded = _expand_bbox(region, x_padding=4.0, y_padding=18.0)
+        region_words = _words_in_bbox(words, expanded, padding=0.0)
+        for segment in _table_line_segments(region_words):
+            table = _rebuild_table_from_word_lines(segment)
+            if table is None:
+                continue
+            rows, bbox = table
+            if not _is_meaningful_table(rows):
+                continue
+            if any(_bbox_overlap_ratio(bbox, existing_bbox) >= 0.8 for _, existing_bbox in rebuilt):
+                continue
+            rebuilt.append((rows, bbox))
+    return rebuilt
+
+
+def _expand_bbox(bbox: BBox, x_padding: float, y_padding: float) -> BBox:
+    return (
+        bbox[0] - x_padding,
+        bbox[1] - y_padding,
+        bbox[2] + x_padding,
+        bbox[3] + y_padding,
+    )
+
+
+def _table_line_segments(words: Sequence[WordItem]) -> list[list[list[WordItem]]]:
+    lines = _cluster_words_by_line(words)
+    if len(lines) < 3:
+        return []
+
+    gaps = [lines[index][0][1] - lines[index - 1][0][1] for index in range(1, len(lines))]
+    normal_gap = sorted(gaps)[len(gaps) // 2] if gaps else 0.0
+    split_gap = max(22.0, normal_gap * 2.4)
+
+    segments: list[list[list[WordItem]]] = []
+    current: list[list[WordItem]] = [lines[0]]
+    for index, line in enumerate(lines[1:], start=1):
+        starts_new_header = (
+            len(current) >= 3
+            and line[0][0] <= current[0][0][0] + 12.0
+            and _line_looks_like_table_header(line)
+        )
+        if line[0][1] - lines[index - 1][0][1] > split_gap or starts_new_header:
+            if len(current) >= 3:
+                segments.append(current)
+            current = [line]
+        else:
+            current.append(line)
+    if len(current) >= 3:
+        segments.append(current)
+    return segments
+
+
+def _line_looks_like_table_header(line: Sequence[WordItem]) -> bool:
+    return _looks_like_table_header([word[4] for word in line])
+
+
+def _cluster_words_by_line(words: Sequence[WordItem]) -> list[list[WordItem]]:
+    ordered = sorted(words, key=lambda word: ((word[1] + word[3]) / 2, word[0]))
+    lines: list[list[WordItem]] = []
+    for word in ordered:
+        center_y = (word[1] + word[3]) / 2
+        for line in lines:
+            line_center = sum((item[1] + item[3]) / 2 for item in line) / len(line)
+            if abs(center_y - line_center) <= 4.0:
+                line.append(word)
+                line.sort(key=lambda item: item[0])
+                break
+        else:
+            lines.append([word])
+    return lines
+
+
+def _rebuild_table_from_word_lines(
+    lines: Sequence[Sequence[WordItem]],
+) -> tuple[list[list[str]], BBox] | None:
+    starts = _recurring_column_starts(lines)
+    if len(starts) < 2:
+        return None
+
+    rows: list[list[str]] = []
+    used_words: list[WordItem] = []
+    for line in lines:
+        cell_words: list[list[WordItem]] = [[] for _ in starts]
+        for word in line:
+            col = _table_column_for_x(word[0], starts)
+            cell_words[col].append(word)
+        row = [_join_table_words(words) for words in cell_words]
+        non_empty = sum(1 for cell in row if cell.strip())
+        if non_empty == 0:
+            continue
+        if _starts_new_logical_table_row(row, rows):
+            rows.append(row)
+        elif rows and any(cell.strip() for cell in row[1:]):
+            _append_table_row_cells(rows[-1], row)
+        elif rows:
+            break
+        else:
+            continue
+        used_words.extend(word for words in cell_words for word in words)
+
+    if not _looks_like_geometric_table(rows):
+        return None
+
+    bbox = _union_bboxes([(word[0], word[1], word[2], word[3]) for word in used_words])
+    return rows, bbox
+
+
+def _starts_new_logical_table_row(row: list[str], existing_rows: Sequence[list[str]]) -> bool:
+    first_cell = row[0].strip() if row else ""
+    non_empty = sum(1 for cell in row if cell.strip())
+    if first_cell:
+        return True
+    return not existing_rows and non_empty >= 2 and _looks_like_table_header(row)
+
+
+def _append_table_row_cells(target: list[str], continuation: Sequence[str]) -> None:
+    for index, text in enumerate(continuation):
+        text = text.strip()
+        if not text:
+            continue
+        if index >= len(target):
+            target.append(text)
+        elif target[index].strip():
+            target[index] = f"{target[index].strip()} {text}"
+        else:
+            target[index] = text
+
+
+def _recurring_column_starts(lines: Sequence[Sequence[WordItem]]) -> list[float]:
+    for line in lines:
+        header_row = [_join_table_words([word]) for word in line]
+        if _looks_like_table_header(header_row) and len(line) >= 2:
+            return _dedupe_column_starts(
+                [word[0] for word in sorted(line, key=lambda item: item[0])]
+            )
+
+    clusters: list[list[float]] = []
+    for line in lines:
+        for word in line:
+            for cluster in clusters:
+                if abs(word[0] - (sum(cluster) / len(cluster))) <= 8.0:
+                    cluster.append(word[0])
+                    break
+            else:
+                clusters.append([word[0]])
+
+    starts = [sum(cluster) / len(cluster) for cluster in clusters if len(cluster) >= 2]
+    return _dedupe_column_starts(starts)
+
+
+def _dedupe_column_starts(starts: Sequence[float]) -> list[float]:
+    deduped: list[float] = []
+    for start in sorted(starts):
+        if not deduped or start - deduped[-1] >= 18.0:
+            deduped.append(start)
+    return deduped[:4]
+
+
+def _looks_like_geometric_table(rows: list[list[str]]) -> bool:
+    if len(rows) < 3 or not rows:
+        return False
+    column_count = max(len(row) for row in rows)
+    if column_count < 2 or not _looks_like_table_header(rows[0]):
+        return False
+
+    body_rows = rows[1:]
+    if len(body_rows) < 2:
+        return False
+
+    significant_columns = 0
+    for column_index in range(column_count):
+        column_non_empty = sum(
+            1 for row in rows if column_index < len(row) and row[column_index].strip()
+        )
+        if column_non_empty >= 2:
+            significant_columns += 1
+    if significant_columns < 2:
+        return False
+
+    first_column_data_rows = sum(1 for row in body_rows if row and row[0].strip())
+    if first_column_data_rows < max(2, len(body_rows) - 1):
+        return False
+
+    avg_non_empty = _table_non_empty_cell_count(rows) / len(rows)
+    return avg_non_empty >= 1.6
+
+
+def _looks_like_table_header(row: Sequence[str]) -> bool:
+    non_empty = [cell.strip() for cell in row if cell.strip()]
+    if len(non_empty) < 2:
+        return False
+    return any(_is_die_header(cell) or _has_uppercase_header_shape(cell) for cell in non_empty)
+
+
+def _is_die_header(text: str) -> bool:
+    return _DIE_HEADER_RE.match(text.strip()) is not None
+
+
+def _has_uppercase_header_shape(text: str) -> bool:
+    letters = [char for char in text if char.isalpha()]
+    return bool(letters) and len(text) <= 32 and all(char.isupper() for char in letters)
+
+
 def _rebuild_temporal_units_table_from_words(
     words: Sequence[WordItem],
 ) -> tuple[list[list[str]], BBox] | None:
@@ -569,6 +778,21 @@ def _join_table_words(words: Sequence[WordItem]) -> str:
 
 def _table_non_empty_cell_count(rows: list[list[str]]) -> int:
     return sum(1 for row in rows for cell in row if cell.strip())
+
+
+def _vector_table_candidate_regions_from_drawings(drawings: Sequence[object]) -> list[BBox]:
+    regions: list[BBox] = []
+    for drawing in drawings:
+        if not isinstance(drawing, dict) or "rect" not in drawing:
+            continue
+        try:
+            rect = fitz.Rect(drawing["rect"])
+        except Exception:
+            continue
+        if rect.is_empty or rect.is_infinite or rect.width < 20.0 or rect.height < 20.0:
+            continue
+        regions.append((rect.x0, rect.y0, rect.x1, rect.y1))
+    return sorted(regions, key=lambda bbox: (bbox[1], bbox[0]))
 
 
 def _is_meaningful_table(rows: list[list[str]]) -> bool:
@@ -1986,6 +2210,14 @@ class PDFExtractor:
             if _is_meaningful_table(rows) and not any(
                 _bbox_overlap_ratio(bbox, table.bbox) >= 0.8 for table in fallback_tables
             ):
+                fallback_tables.append(TableBlock(rows=rows, bbox=bbox, page_num=page_num, index=0))
+
+        try:
+            vector_regions = _vector_table_candidate_regions_from_drawings(fitz_page.get_drawings())
+        except Exception:
+            vector_regions = []
+        for rows, bbox in _rebuild_tables_from_vector_regions(words, vector_regions):
+            if not any(_bbox_overlap_ratio(bbox, table.bbox) >= 0.8 for table in fallback_tables):
                 fallback_tables.append(TableBlock(rows=rows, bbox=bbox, page_num=page_num, index=0))
         return fallback_tables
 
