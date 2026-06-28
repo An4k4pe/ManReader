@@ -13,6 +13,8 @@ from ir_model import AssetIR, BlockIR, DocumentIR, PageIR
 
 SCHEMA_VERSION = "1.0"
 
+_BULLET_LIST_MARKERS = ("✦", "❖", "•", "●", "◆", "■")
+
 
 class _MergedText:
     """Small adapter that exposes the TextBlock attributes used by _build_text_block."""
@@ -206,7 +208,8 @@ def _join_text_fragments(first: str | None, second: str | None, horizontal_gap: 
 
 
 def _build_text_block(block: object, page_num: int, index: int, order: int) -> BlockIR:
-    text = getattr(block, "text", None)
+    raw_text = getattr(block, "text", None)
+    text = _normalize_inline_bullet_list_text(raw_text) if raw_text is not None else None
     role, metadata = _text_block_role_and_metadata(text or "")
     return BlockIR(
         id=f"{_page_id(page_num)}_b{index:04d}",
@@ -225,10 +228,65 @@ def _build_text_block(block: object, page_num: int, index: int, order: int) -> B
     )
 
 
-def _text_block_role_and_metadata(text: str) -> tuple[str | None, dict[str, str]]:
+def _leading_bullet_marker(text: str) -> str | None:
     normalized = text.lstrip()
-    if normalized.startswith("❖"):
-        return "bullet_list", {"marker": "❖"}
+    for marker in _BULLET_LIST_MARKERS:
+        if normalized.startswith(marker):
+            return marker
+    return None
+
+
+def _normalize_inline_bullet_list_text(text: str) -> str:
+    marker = _leading_bullet_marker(text)
+    if marker is None:
+        return text
+
+    normalized = text.lstrip()
+    marker_positions = _marker_positions(normalized, marker)
+    if len(marker_positions) < 2:
+        return text
+
+    has_inline_marker = any(
+        not _marker_starts_line(normalized, position) for position in marker_positions[1:]
+    )
+    if not has_inline_marker:
+        return text
+
+    leading_whitespace = text[: len(text) - len(normalized)]
+    entries = []
+    for index, position in enumerate(marker_positions):
+        next_position = (
+            marker_positions[index + 1] if index + 1 < len(marker_positions) else len(normalized)
+        )
+        entry = normalized[position:next_position].strip()
+        if entry:
+            entries.append(entry)
+
+    if len(entries) < 2:
+        return text
+    return leading_whitespace + "\n".join(entries)
+
+
+def _marker_positions(text: str, marker: str) -> list[int]:
+    positions = []
+    start = 0
+    while True:
+        position = text.find(marker, start)
+        if position == -1:
+            return positions
+        positions.append(position)
+        start = position + len(marker)
+
+
+def _marker_starts_line(text: str, position: int) -> bool:
+    line_start = text.rfind("\n", 0, position) + 1
+    return not text[line_start:position].strip()
+
+
+def _text_block_role_and_metadata(text: str) -> tuple[str | None, dict[str, str]]:
+    marker = _leading_bullet_marker(text)
+    if marker is not None:
+        return "bullet_list", {"marker": marker}
     return None, {}
 
 

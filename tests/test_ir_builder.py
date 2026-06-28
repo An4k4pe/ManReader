@@ -109,6 +109,66 @@ class IRBuilderTest(unittest.TestCase):
         self.assertEqual(ir_page.blocks[0].role, "bullet_list")
         self.assertEqual(ir_page.blocks[0].metadata, {"marker": "❖"})
 
+    def test_splits_inline_trait_bullets_onto_separate_lines(self):
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock(
+                    (
+                        "✦ Attributo Principale: AGI ✦ Abilità: Acrobazia, Coltelli "
+                        "✦ Capacità Eroica: Pugnalata alle Spalle"
+                    ),
+                    (10.0, 10.0, 50.0, 20.0),
+                )
+            ]
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertEqual(
+            ir_page.blocks[0].text,
+            (
+                "✦ Attributo Principale: AGI\n"
+                "✦ Abilità: Acrobazia, Coltelli\n"
+                "✦ Capacità Eroica: Pugnalata alle Spalle"
+            ),
+        )
+
+    def test_marks_inline_trait_bullets_as_bullet_list(self):
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock(
+                    "✦ Attributo Principale: AGI ✦ Abilità: Acrobazia",
+                    (10.0, 10.0, 50.0, 20.0),
+                )
+            ]
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertEqual(ir_page.blocks[0].role, "bullet_list")
+        self.assertEqual(ir_page.blocks[0].metadata, {"marker": "✦"})
+
+    def test_keeps_single_trait_bullet_unchanged(self):
+        page = FakePage(
+            text_blocks=[FakeTextBlock("✦ Attributo Principale: AGI", (10.0, 10.0, 50.0, 20.0))]
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertEqual(ir_page.blocks[0].text, "✦ Attributo Principale: AGI")
+        self.assertEqual(ir_page.blocks[0].role, "bullet_list")
+        self.assertEqual(ir_page.blocks[0].metadata, {"marker": "✦"})
+
+    def test_keeps_already_multiline_trait_bullets_unchanged(self):
+        text = "✦ Attributo Principale: AGI\n✦ Abilità: Acrobazia"
+        page = FakePage(text_blocks=[FakeTextBlock(text, (10.0, 10.0, 50.0, 20.0))])
+
+        ir_page = self.build_page(page)
+
+        self.assertEqual(ir_page.blocks[0].text, text)
+        self.assertEqual(ir_page.blocks[0].role, "bullet_list")
+        self.assertEqual(ir_page.blocks[0].metadata, {"marker": "✦"})
+
     def test_keeps_text_with_internal_question_marker_without_role_or_metadata(self):
         page = FakePage(
             text_blocks=[
