@@ -555,33 +555,78 @@ def _append_table_row_cells(target: list[str], continuation: Sequence[str]) -> N
 
 
 def _recurring_column_starts(lines: Sequence[Sequence[WordItem]]) -> list[float]:
+    stable_starts = _stable_word_column_starts(lines)
+
     for line in lines:
         header_row = [_join_table_words([word]) for word in line]
         if _looks_like_table_header(header_row) and len(line) >= 2:
             return _dedupe_column_starts(
-                [word[0] for word in sorted(line, key=lambda item: item[0])]
+                [word[0] for word in sorted(line, key=lambda item: item[0])],
+                stable_starts=stable_starts,
             )
 
-    clusters: list[list[float]] = []
-    for line in lines:
+    return _dedupe_column_starts(stable_starts)
+
+
+def _stable_word_column_starts(lines: Sequence[Sequence[WordItem]]) -> list[float]:
+    clusters: list[list[tuple[float, int]]] = []
+    for line_index, line in enumerate(lines):
         for word in line:
             for cluster in clusters:
-                if abs(word[0] - (sum(cluster) / len(cluster))) <= 8.0:
-                    cluster.append(word[0])
+                cluster_center = sum(start for start, _ in cluster) / len(cluster)
+                if abs(word[0] - cluster_center) <= 8.0:
+                    cluster.append((word[0], line_index))
                     break
+
             else:
-                clusters.append([word[0]])
+                clusters.append([(word[0], line_index)])
 
-    starts = [sum(cluster) / len(cluster) for cluster in clusters if len(cluster) >= 2]
-    return _dedupe_column_starts(starts)
+    starts: list[float] = []
+    for cluster in clusters:
+        line_count = len({line_index for _, line_index in cluster})
+        if line_count >= 2:
+            starts.append(sum(start for start, _ in cluster) / len(cluster))
+    return sorted(starts)
 
 
-def _dedupe_column_starts(starts: Sequence[float]) -> list[float]:
+def _dedupe_column_starts(
+    starts: Sequence[float], stable_starts: Sequence[float] | None = None
+) -> list[float]:
     deduped: list[float] = []
+    stable = sorted(stable_starts or [])
     for start in sorted(starts):
-        if not deduped or start - deduped[-1] >= 18.0:
+        if (
+            not deduped
+            or start - deduped[-1] >= 18.0
+            or _is_supported_close_column_start(deduped[-1], start, stable)
+        ):
             deduped.append(start)
     return deduped[:4]
+
+
+def _is_supported_close_column_start(
+    previous: float,
+    current: float,
+    stable_starts: Sequence[float],
+) -> bool:
+    if current - previous < 10.0:
+        return False
+
+    previous_support = _nearest_stable_column_start(previous, stable_starts)
+    current_support = _nearest_stable_column_start(current, stable_starts)
+    if previous_support is None or current_support is None:
+        return False
+    return current_support - previous_support >= 10.0
+
+
+def _nearest_stable_column_start(
+    start: float,
+    stable_starts: Sequence[float],
+) -> float | None:
+    nearby = [stable for stable in stable_starts if abs(stable - start) <= 8.0]
+    if not nearby:
+        return None
+    return min(nearby, key=lambda stable: abs(stable - start))
 
 
 def _looks_like_geometric_table(rows: list[list[str]]) -> bool:

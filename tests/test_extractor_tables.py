@@ -180,6 +180,61 @@ class ExtractorTablesTest(unittest.TestCase):
         )
         self.assertEqual(bbox, (143.2, 595.2, 208.1, 711.0))
 
+    def test_rebuild_tables_from_vector_regions_handles_narrow_d6_nome_columns(self):
+        words = [
+            (320.48, 102.0, 332.0, 112.0, "D6"),
+            (337.36, 102.0, 370.0, 112.0, "NOME"),
+            (323.10, 120.0, 327.0, 130.0, "1"),
+            (337.32, 120.0, 365.0, 130.0, "Joruna"),
+            (323.80, 138.0, 327.8, 148.0, "2"),
+            (337.32, 138.0, 354.0, 148.0, "Tym"),
+            (323.60, 156.0, 327.6, 166.0, "3"),
+            (337.32, 156.0, 374.0, 166.0, "Halvelda"),
+        ]
+
+        rebuilt = _rebuild_tables_from_vector_regions(words, [(318.0, 116.0, 380.0, 162.0)])
+
+        self.assertEqual(len(rebuilt), 1)
+        rows, _ = rebuilt[0]
+        self.assertEqual(
+            rows,
+            [
+                ["D6", "NOME"],
+                ["1", "Joruna"],
+                ["2", "Tym"],
+                ["3", "Halvelda"],
+            ],
+        )
+
+    def test_rebuild_tables_from_vector_regions_handles_narrow_d6_soprannome_columns(self):
+        words = [
+            (320.48, 202.0, 332.0, 212.0, "D6"),
+            (337.36, 202.0, 405.0, 212.0, "SOPRANNOME"),
+            (323.10, 220.0, 327.0, 230.0, "1"),
+            (337.32, 220.0, 365.0, 230.0, "Cuore"),
+            (367.0, 220.0, 375.0, 230.0, "di"),
+            (377.0, 220.0, 402.0, 230.0, "Drago"),
+            (323.80, 238.0, 327.8, 248.0, "2"),
+            (337.32, 238.0, 372.0, 248.0, "Lancia"),
+            (374.0, 238.0, 410.0, 248.0, "d’Oro"),
+            (323.60, 256.0, 327.6, 266.0, "3"),
+            (337.32, 256.0, 395.0, 266.0, "Grifoartiglio"),
+        ]
+
+        rebuilt = _rebuild_tables_from_vector_regions(words, [(318.0, 216.0, 420.0, 262.0)])
+
+        self.assertEqual(len(rebuilt), 1)
+        rows, _ = rebuilt[0]
+        self.assertEqual(
+            rows,
+            [
+                ["D6", "SOPRANNOME"],
+                ["1", "Cuore di Drago"],
+                ["2", "Lancia d’Oro"],
+                ["3", "Grifoartiglio"],
+            ],
+        )
+
     def test_rebuild_tables_from_vector_regions_handles_side_by_side_tables(self):
         words = [
             (10, 10, 22, 20, "D6"),
