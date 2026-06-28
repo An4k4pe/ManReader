@@ -8,12 +8,14 @@ exposed by PageData and related extraction objects.
 from __future__ import annotations
 
 import hashlib
+import re
 
 from ir_model import AssetIR, BlockIR, DocumentIR, PageIR
 
 SCHEMA_VERSION = "1.0"
 
 _BULLET_LIST_MARKERS = ("✦", "❖", "•", "●", "◆", "■")
+_HYPHENATED_WORD_RE = re.compile(r"(?<=[A-Za-zÀ-ÖØ-öø-ÿ])-\s+(?=[a-zà-öø-ÿ])")
 
 
 class _MergedText:
@@ -207,9 +209,17 @@ def _join_text_fragments(first: str | None, second: str | None, horizontal_gap: 
     return f"{left} {right}"
 
 
+def _normalize_text_block_text(text: str) -> str:
+    return _HYPHENATED_WORD_RE.sub("", text)
+
+
 def _build_text_block(block: object, page_num: int, index: int, order: int) -> BlockIR:
     raw_text = getattr(block, "text", None)
-    text = _normalize_inline_bullet_list_text(raw_text) if raw_text is not None else None
+    text = (
+        _normalize_text_block_text(_normalize_inline_bullet_list_text(raw_text))
+        if raw_text is not None
+        else None
+    )
     role, metadata = _text_block_role_and_metadata(text or "")
     return BlockIR(
         id=f"{_page_id(page_num)}_b{index:04d}",

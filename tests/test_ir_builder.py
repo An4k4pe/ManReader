@@ -192,6 +192,71 @@ class IRBuilderTest(unittest.TestCase):
         self.assertIsNone(ir_page.blocks[0].role)
         self.assertEqual(ir_page.blocks[0].metadata, {})
 
+    def test_normalizes_pdf_hyphenated_words_in_normal_text_blocks(self):
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock(
+                    (
+                        "È probabil- mente una acqui- sizione per lavo- rare con "
+                        "individua- listi, Consape- volezza, Sgattaio- lare, "
+                        "Que- sta e auto- ritari."
+                    ),
+                    (10.0, 10.0, 50.0, 20.0),
+                )
+            ]
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertEqual(
+            ir_page.blocks[0].text,
+            (
+                "È probabilmente una acquisizione per lavorare con "
+                "individualisti, Consapevolezza, Sgattaiolare, Questa e autoritari."
+            ),
+        )
+
+    def test_normalizes_pdf_hyphenated_words_in_bullet_list_blocks(self):
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock(
+                    "✦ Capa- cità Eroica: Sgattaio- lare nell'ombra",
+                    (10.0, 10.0, 50.0, 20.0),
+                )
+            ]
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertEqual(
+            ir_page.blocks[0].text,
+            "✦ Capacità Eroica: Sgattaiolare nell'ombra",
+        )
+
+    def test_preserves_bullet_list_role_and_metadata_after_hyphenation_normalization(self):
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock(
+                    "❖ Consapevolezza del pericolo",
+                    (10.0, 10.0, 50.0, 20.0),
+                )
+            ]
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertEqual(ir_page.blocks[0].text, "❖ Consapevolezza del pericolo")
+        self.assertEqual(ir_page.blocks[0].role, "bullet_list")
+        self.assertEqual(ir_page.blocks[0].metadata, {"marker": "❖"})
+
+    def test_keeps_real_hyphens_and_dashes_unchanged(self):
+        text = "local-first arma - scudo – FRIGgA MOGLIE DEL MARE 1–2 D6 razioni di cibo"
+        page = FakePage(text_blocks=[FakeTextBlock(text, (10.0, 10.0, 50.0, 20.0))])
+
+        ir_page = self.build_page(page)
+
+        self.assertEqual(ir_page.blocks[0].text, text)
+
     def test_excludes_background_image_asset(self):
         page = FakePage(
             images=[
