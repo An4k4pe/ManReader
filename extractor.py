@@ -44,6 +44,7 @@ from config import LayoutConfig
 
 _NONSTANDARD_CHAR_RE = _re.compile(r"^[^\w\s]+$")
 _DIE_HEADER_RE = _re.compile(r"^D(?P<sides>\d{1,3})$", _re.IGNORECASE)
+_DIE_BODY_VALUE_RE = _re.compile(r"^(?P<start>\d{1,3})(?:\s*[-–—]\s*(?P<end>\d{1,3}))?$")
 _TABLE_TEXT_LINES_SETTINGS = {"vertical_strategy": "text", "horizontal_strategy": "lines"}
 # ---------------------------------------------------------------------------
 # Data classes
@@ -51,6 +52,13 @@ _TABLE_TEXT_LINES_SETTINGS = {"vertical_strategy": "text", "horizontal_strategy"
 
 BBox = tuple[float, float, float, float]
 WordItem = tuple[float, float, float, float, str]
+
+
+@dataclass(frozen=True)
+class _CompactDieTableInfo:
+    header: tuple[str, str]
+    sides: int
+    values: frozenset[int]
 
 
 @dataclass
@@ -438,7 +446,444 @@ def _rebuild_tables_from_vector_regions(
             if any(_bbox_overlap_ratio(bbox, existing_bbox) >= 0.8 for _, existing_bbox in rebuilt):
                 continue
             rebuilt.append((rows, bbox))
-    return rebuilt
+
+    rebuilt = _merge_compact_die_table_candidates(rebuilt)
+    return _merge_compact_die_tables_with_loose_fragments(rebuilt, words)
+
+
+def _merge_compact_die_table_candidates(
+    tables: Sequence[tuple[list[list[str]], BBox]],
+) -> list[tuple[list[list[str]], BBox]]:
+    merged: list[tuple[list[list[str]], BBox]] = []
+    consumed: set[int] = set()
+
+    for index, (rows, bbox) in enumerate(tables):
+        if index in consumed:
+            continue
+
+        current_rows = rows
+        current_bbox = bbox
+        current_info = _compact_die_table_info(current_rows)
+
+        if current_info is not None:
+            for other_index in range(index + 1, len(tables)):
+                if other_index in consumed:
+                    continue
+
+                other_rows, other_bbox = tables[other_index]
+                other_info = _compact_die_table_info(other_rows)
+                if other_info is None:
+                    continue
+                if not _compact_die_tables_can_merge(
+                    current_info,
+                    current_bbox,
+                    other_info,
+                    other_bbox,
+                ):
+                    continue
+
+                current_rows = _merge_compact_die_rows(
+                    current_rows,
+                    other_rows,
+                    current_info.sides,
+                )
+                current_bbox = _union_bboxes([current_bbox, other_bbox])
+                consumed.add(other_index)
+                current_info = _compact_die_table_info(current_rows)
+
+                if current_info is None:
+                    break
+
+        merged.append((current_rows, current_bbox))
+
+    return sorted(merged, key=lambda item: (item[1][1], item[1][0]))
+
+
+def _merge_compact_die_tables_with_loose_fragments(
+    tables: Sequence[tuple[list[list[str]], BBox]],
+    words: Sequence[WordItem],
+) -> list[tuple[list[list[str]], BBox]]:
+    merged: list[tuple[list[list[str]], BBox]] = []
+
+    for rows, bbox in tables:
+        fragment = _find_loose_compact_die_table_fragment(rows, bbox, words)
+        if fragment is None:
+            merged.append((rows, bbox))
+            continue
+
+        fragment_rows, fragment_bbox = fragment
+        info = _compact_die_table_info(rows)
+        if info is None:
+            merged.append((rows, bbox))
+            continue
+
+        merged_rows = _merge_compact_die_rows(rows, fragment_rows, info.sides)
+        merged_bbox = _union_bboxes([bbox, fragment_bbox])
+        merged.append((merged_rows, merged_bbox))
+
+    return sorted(merged, key=lambda item: (item[1][1], item[1][0]))
+
+
+def _compact_die_tables_can_merge(
+    left_info: _CompactDieTableInfo,
+    left_bbox: BBox,
+    right_info: _CompactDieTableInfo,
+    right_bbox: BBox,
+) -> bool:
+    if left_info.header != right_info.header or left_info.sides != right_info.sides:
+        return False
+    if not _die_value_sets_are_complementary(left_info.values, right_info.values):
+        return False
+    if not _bboxes_are_side_by_side(left_bbox, right_bbox):
+        return False
+    return _vertical_overlap_ratio(left_bbox, right_bbox) >= 0.65
+
+
+def _compact_die_table_info(rows: Sequence[Sequence[str]]) -> _CompactDieTableInfo | None:
+    if len(rows) < 3:
+        return None
+
+    header = [cell.strip() for cell in rows[0]]
+    if len(header) != 2:
+        return None
+
+    match = _DIE_HEADER_RE.match(header[0])
+    if match is None or not header[1]:
+        return None
+
+    sides = int(match.group("sides"))
+    values: set[int] = set()
+
+    for row in rows[1:]:
+        if len(row) < 2 or not row[1].strip():
+            return None
+
+        row_values = _die_body_values(row[0], sides)
+        if row_values is None or values.intersection(row_values):
+            return None
+        values.update(row_values)
+
+    if len(values) < 2:
+        return None
+
+    return _CompactDieTableInfo(
+        header=(header[0].upper(), _normalize_table_header_cell(header[1])),
+        sides=sides,
+        values=frozenset(values),
+    )
+
+
+def _normalize_table_header_cell(text: str) -> str:
+    return " ".join(text.strip().upper().split())
+
+
+def _die_body_values(text: str, die_sides: int) -> frozenset[int] | None:
+    match = _DIE_BODY_VALUE_RE.match(text.strip())
+    if match is None:
+        return None
+
+    start = int(match.group("start"))
+    end = int(match.group("end") or start)
+    if start > end or start < 1 or end > die_sides:
+        return None
+
+    return frozenset(range(start, end + 1))
+
+
+def _die_value_sets_are_complementary(
+    first: frozenset[int],
+    second: frozenset[int],
+) -> bool:
+    if not first or not second or not first.isdisjoint(second):
+        return False
+    return len(first | second) > max(len(first), len(second))
+
+
+def _die_value_sets_complete_die(
+    first: frozenset[int],
+    second: frozenset[int],
+    die_sides: int,
+) -> bool:
+    if not _die_value_sets_are_complementary(first, second):
+        return False
+    return first | second == frozenset(range(1, die_sides + 1))
+
+
+def _bboxes_are_side_by_side(first: BBox, second: BBox) -> bool:
+    first_width = max(first[2] - first[0], 1.0)
+    second_width = max(second[2] - second[0], 1.0)
+    max_reasonable_gap = max(first_width, second_width) * 2.5
+
+    if first[2] <= second[0]:
+        return second[0] - first[2] <= max_reasonable_gap
+    if second[2] <= first[0]:
+        return first[0] - second[2] <= max_reasonable_gap
+    return False
+
+
+def _vertical_overlap_ratio(first: BBox, second: BBox) -> float:
+    height = max(min(first[3] - first[1], second[3] - second[1]), 1.0)
+    overlap = max(0.0, min(first[3], second[3]) - max(first[1], second[1]))
+    return overlap / height
+
+
+def _merge_compact_die_rows(
+    first: Sequence[Sequence[str]],
+    second: Sequence[Sequence[str]],
+    die_sides: int,
+) -> list[list[str]]:
+    header = [cell.strip() for cell in first[0]]
+    body = [[cell.strip() for cell in row[:2]] for row in [*first[1:], *second[1:]]]
+
+    def row_key(row: Sequence[str]) -> int:
+        values = _die_body_values(row[0], die_sides)
+        return min(values) if values else die_sides + 1
+
+    return [header, *sorted(body, key=row_key)]
+
+
+def _find_loose_compact_die_table_fragment(
+    rows: Sequence[Sequence[str]],
+    bbox: BBox,
+    words: Sequence[WordItem],
+) -> tuple[list[list[str]], BBox] | None:
+    info = _compact_die_table_info(rows)
+    if info is None:
+        return None
+
+    candidates = [
+        fragment
+        for direction in (1, -1)
+        if (
+            fragment := _loose_compact_die_fragment_for_direction(
+                rows, bbox, words, info, direction
+            )
+        )
+        is not None
+    ]
+    if not candidates:
+        return None
+
+    return max(candidates, key=lambda item: len(item[0]))
+
+
+def _compact_die_row_anchors(
+    rows: Sequence[Sequence[str]],
+    bbox: BBox,
+    words: Sequence[WordItem],
+    die_sides: int,
+) -> list[tuple[float, float, float]]:
+    expected = [
+        _die_body_values(row[0], die_sides)
+        for row in rows[1:]
+        if row and _die_body_values(row[0], die_sides) is not None
+    ]
+    expected_values = {value for values in expected if values is not None for value in values}
+
+    anchors: list[tuple[float, float, float]] = []
+    for word in _words_in_bbox(words, bbox, padding=2.0):
+        values = _die_body_values(word[4], die_sides)
+        if values is None or not values.issubset(expected_values):
+            continue
+        if word[0] > bbox[0] + 24.0:
+            continue
+        center_y = (word[1] + word[3]) / 2
+        anchors.append((center_y, word[1], word[3]))
+
+    anchors.sort(key=lambda item: item[0])
+    return anchors
+
+
+def _loose_compact_die_fragment_for_direction(
+    rows: Sequence[Sequence[str]],
+    bbox: BBox,
+    words: Sequence[WordItem],
+    info: _CompactDieTableInfo,
+    direction: int,
+) -> tuple[list[list[str]], BBox] | None:
+    table_width = max(bbox[2] - bbox[0], 1.0)
+    search_distance = max(140.0, table_width * 2.5)
+
+    if direction > 0:
+        min_x = bbox[2] + 6.0
+        max_x = bbox[2] + search_distance
+    else:
+        min_x = bbox[0] - search_distance
+        max_x = bbox[0] - 6.0
+
+    expected_values = frozenset(range(1, info.sides + 1))
+    missing_values = expected_values - info.values
+    if not missing_values:
+        return None
+
+    candidate_numbers: list[WordItem] = []
+    for word in words:
+        if not (min_x <= word[0] <= max_x):
+            continue
+
+        values = _die_body_values(word[4], info.sides)
+        if values is None:
+            continue
+
+        if not values.issubset(missing_values):
+            continue
+
+        candidate_numbers.append(word)
+
+    for cluster in _cluster_words_by_x(candidate_numbers, tolerance=12.0):
+        fragment = _build_loose_compact_die_fragment_from_number_cluster(
+            rows,
+            bbox,
+            words,
+            info,
+            cluster,
+        )
+        if fragment is not None:
+            return fragment
+
+    return None
+
+
+def _die_values_from_number_words(
+    words: Sequence[WordItem],
+    die_sides: int,
+) -> frozenset[int]:
+    values: set[int] = set()
+    for word in words:
+        word_values = _die_body_values(word[4], die_sides)
+        if word_values is None or values.intersection(word_values):
+            return frozenset()
+        values.update(word_values)
+    return frozenset(values)
+
+
+def _cluster_words_by_x(words: Sequence[WordItem], tolerance: float) -> list[list[WordItem]]:
+    clusters: list[list[WordItem]] = []
+    for word in sorted(words, key=lambda item: item[0]):
+        for cluster in clusters:
+            center = sum(item[0] for item in cluster) / len(cluster)
+            if abs(word[0] - center) <= tolerance:
+                cluster.append(word)
+                break
+        else:
+            clusters.append([word])
+    return clusters
+
+
+def _build_loose_compact_die_fragment_from_number_cluster(
+    rows: Sequence[Sequence[str]],
+    bbox: BBox,
+    words: Sequence[WordItem],
+    info: _CompactDieTableInfo,
+    number_words: Sequence[WordItem],
+) -> tuple[list[list[str]], BBox] | None:
+    if len(number_words) < 2:
+        return None
+
+    ordered_numbers = sorted(number_words, key=lambda word: (word[1], word[0]))
+    values: set[int] = set()
+    body_rows: list[list[str]] = []
+    used_words: list[WordItem] = []
+    fragment_width = max(110.0, min(240.0, (bbox[2] - bbox[0]) * 1.8))
+
+    if not _loose_fragment_header_matches_or_absent(
+        rows,
+        bbox,
+        words,
+        info,
+        ordered_numbers[0][0],
+        fragment_width,
+    ):
+        return None
+
+    for number_word in ordered_numbers:
+        row_values = _die_body_values(number_word[4], info.sides)
+        if row_values is None or values.intersection(row_values):
+            return None
+        values.update(row_values)
+
+        center_y = (number_word[1] + number_word[3]) / 2
+        row_words = [
+            word
+            for word in words
+            if abs(((word[1] + word[3]) / 2) - center_y) <= 4.0
+            and number_word[0] - 2.0 <= word[0] <= number_word[0] + fragment_width
+        ]
+        row_words.sort(key=lambda word: word[0])
+        if not row_words or row_words[0] != number_word:
+            return None
+
+        body_cell_words = row_words[1:]
+        if not body_cell_words:
+            return None
+
+        body_rows.append([number_word[4], _join_table_words(body_cell_words)])
+        used_words.extend(row_words)
+
+    if not _die_value_sets_complete_die(info.values, frozenset(values), info.sides):
+        return None
+
+    header = [cell.strip() for cell in rows[0][:2]]
+    fragment_rows = [header, *body_rows]
+    if not _is_meaningful_table(fragment_rows):
+        return None
+
+    word_bboxes = [(word[0], word[1], word[2], word[3]) for word in used_words]
+    fragment_bbox = _union_bboxes(
+        [
+            *word_bboxes,
+            (
+                min(word[0] for word in used_words),
+                bbox[1],
+                max(word[2] for word in used_words),
+                bbox[3],
+            ),
+        ]
+    )
+    return fragment_rows, fragment_bbox
+
+
+def _loose_fragment_header_matches_or_absent(
+    rows: Sequence[Sequence[str]],
+    bbox: BBox,
+    words: Sequence[WordItem],
+    info: _CompactDieTableInfo,
+    fragment_x0: float,
+    fragment_width: float,
+) -> bool:
+    first_row_top = min(
+        (word[1] for word in words if word[0] >= fragment_x0 - 2.0), default=bbox[3]
+    )
+    header_words = [
+        word
+        for word in words
+        if bbox[1] - 4.0 <= word[1] <= first_row_top
+        and fragment_x0 - 2.0 <= word[0] <= fragment_x0 + fragment_width
+        and _is_die_header(word[4])
+    ]
+    if not header_words:
+        return True
+
+    expected_header = (rows[0][0].strip().upper(), _normalize_table_header_cell(rows[0][1]))
+    for die_word in header_words:
+        center_y = (die_word[1] + die_word[3]) / 2
+        line_words = [
+            word
+            for word in words
+            if abs(((word[1] + word[3]) / 2) - center_y) <= 4.0
+            and fragment_x0 - 2.0 <= word[0] <= fragment_x0 + fragment_width
+        ]
+        line_words.sort(key=lambda word: word[0])
+        if len(line_words) < 2:
+            continue
+        candidate_header = (
+            line_words[0][4].strip().upper(),
+            _normalize_table_header_cell(_join_table_words(line_words[1:])),
+        )
+        if candidate_header == expected_header and candidate_header == info.header:
+            return True
+
+    return False
 
 
 def _expand_bbox(bbox: BBox, x_padding: float, y_padding: float) -> BBox:
