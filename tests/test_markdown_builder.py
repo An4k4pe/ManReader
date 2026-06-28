@@ -179,6 +179,95 @@ class MarkdownBuilderTest(unittest.TestCase):
 
         self.assertIn("## DOMANDE", markdown)
 
+    def test_quote_attribution_renders_as_standalone_bold_paragraph(self):
+        document = _document(
+            [
+                _text("b1", "“Marinai si nasce, non si diventa. Terreno solido?”"),
+                _text("b2", "– FRIGGA MOGLIE DEL MARE"),
+                _text("b3", "Onde schiumose e navi che solcano..."),
+            ]
+        )
+
+        markdown = build_markdown(document)
+
+        self.assertIn(
+            "“Marinai si nasce, non si diventa. Terreno solido?”\n\n"
+            "**– FRIGGA MOGLIE DEL MARE**\n\n"
+            "Onde schiumose e navi che solcano...",
+            markdown,
+        )
+
+    def test_quote_attribution_is_not_rendered_as_heading(self):
+        document = _document(
+            [
+                _text("b1", "“Chi guarda il mare non torna mai uguale.”"),
+                _text("b2", "– FRIGGA MOGLIE DEL MARE"),
+            ]
+        )
+
+        markdown = build_markdown(document)
+
+        self.assertIn("**– FRIGGA MOGLIE DEL MARE**", markdown)
+        self.assertNotIn("## – FRIGGA MOGLIE DEL MARE", markdown)
+
+    def test_uppercase_heading_still_renders_as_heading_near_quote_rules(self):
+        document = _document([_text("b1", "MARINAIO")])
+
+        markdown = build_markdown(document)
+
+        self.assertIn("## MARINAIO", markdown)
+
+    def test_dash_starting_line_without_previous_quote_is_not_quote_attribution(self):
+        document = _document(
+            [
+                _text("b1", "- FRIGGA MOGLIE DEL MARE"),
+            ]
+        )
+
+        markdown = build_markdown(document)
+
+        self.assertNotIn("**- FRIGGA MOGLIE DEL MARE**", markdown)
+
+    def test_bullet_list_rendering_is_unchanged_near_quote_rules(self):
+        document = _document(
+            [
+                _text(
+                    "b1",
+                    "❖ Domanda uno ❖ Domanda due",
+                    role="bullet_list",
+                    metadata={"marker": "❖"},
+                )
+            ]
+        )
+
+        markdown = build_markdown(document)
+
+        self.assertIn("- Domanda uno\n- Domanda due", markdown)
+        self.assertNotIn("❖ Domanda uno", markdown)
+
+    def test_quote_attribution_after_asset_renders_as_standalone_bold_paragraph(self):
+        document = _document(
+            [
+                _text("b1", "“Chi appartiene al mare non teme la tempesta.”"),
+                _asset_block(),
+                _text("b2", "– FRIGGA MOGLIE DEL MARE"),
+                _text("b3", "Onde schiumose e navi che solcano..."),
+            ]
+        )
+
+        markdown = build_markdown(document)
+
+        self.assertIn(
+            "“Chi appartiene al mare non teme la tempesta.”\n\n"
+            "<!-- asset: asset-1 | page: 1 | type: image -->\n"
+            "[Immagine: Mappa](/assets/map.png)\n\n"
+            "> Descrizione: Mappa del dungeon\n\n"
+            "**– FRIGGA MOGLIE DEL MARE**\n\n"
+            "Onde schiumose e navi che solcano...",
+            markdown,
+        )
+        self.assertNotIn("## – FRIGGA MOGLIE DEL MARE", markdown)
+
     def test_normal_text_stays_paragraph(self):
         document = _document(
             [

@@ -20,6 +20,7 @@ def build_markdown(document: DocumentIR) -> str:
             current_paragraph = ""
 
         previous_text_block: BlockIR | None = None
+        last_quote_text_block: BlockIR | None = None
         parts.append(f"<!-- page: {page.page_num} -->")
 
         index = 0
@@ -31,14 +32,27 @@ def build_markdown(document: DocumentIR) -> str:
                         parts.append(current_paragraph)
                         current_paragraph = ""
                     previous_text_block = None
+                    last_quote_text_block = None
                     bullet_text, marker, index = _collect_bullet_list_text(page.blocks, index)
                     parts.append(_render_bullet_list_text(bullet_text, marker))
                     continue
+                elif _is_quote_attribution_block(
+                    block,
+                    previous_text_block,
+                    last_quote_text_block,
+                ):
+                    if current_paragraph:
+                        parts.append(current_paragraph)
+                        current_paragraph = ""
+                    parts.append(f"**{block.text.strip()}**")
+                    previous_text_block = None
+                    last_quote_text_block = None
                 elif _is_heading_text(block.text, block.style):
                     if current_paragraph:
                         parts.append(current_paragraph)
                         current_paragraph = ""
                     previous_text_block = None
+                    last_quote_text_block = None
                     level = _heading_level(block.text, block.style)
                     parts.append(f"{'#' * level} {block.text.strip()}")
                 else:
@@ -52,6 +66,7 @@ def build_markdown(document: DocumentIR) -> str:
                     text = _format_inline_text(block.text, block.style)
                     current_paragraph = _join_text_fragments(current_paragraph, text)
                     previous_text_block = block
+                    last_quote_text_block = block if _looks_like_closed_quote(block.text) else None
             elif block.type in {"image", "vector", "table"} and block.asset is not None:
                 if current_paragraph:
                     parts.append(current_paragraph)
@@ -79,8 +94,53 @@ def _should_start_new_paragraph(previous: BlockIR, current: BlockIR) -> bool:
     return vertical_gap >= font_size * 1.2
 
 
+def _is_quote_attribution_block(
+    block: BlockIR,
+    previous_text_block: BlockIR | None,
+    last_quote_text_block: BlockIR | None,
+) -> bool:
+    if block.type != "text" or not block.text:
+        return False
+
+    stripped = block.text.strip()
+    if len(stripped) > 80:
+        return False
+    if not stripped.startswith(("– ", "- ")):
+        return False
+    if stripped.endswith((".", ":", ";")):
+        return False
+
+    candidate_quote_block = previous_text_block
+    if candidate_quote_block is None or not _looks_like_closed_quote(
+        candidate_quote_block.text or ""
+    ):
+        candidate_quote_block = last_quote_text_block
+    if candidate_quote_block is None:
+        return False
+    if candidate_quote_block.type != "text" or not candidate_quote_block.text:
+        return False
+
+    return _looks_like_closed_quote(candidate_quote_block.text)
+
+
+def _looks_like_closed_quote(text: str) -> bool:
+    stripped = text.strip()
+    return stripped.endswith(
+        (
+            "?”",
+            "!”",
+            ".”",
+            "”",
+            '?"',
+            '!"',
+            '."',
+            '"',
+        )
+    )
+
+
 def _ends_with_strong_punctuation(text: str) -> bool:
-    return text.strip().endswith((".", "?", "!", "»", ")", "…"))
+    return text.rstrip().endswith((".", "!", "?", ":", ";"))
 
 
 def _paragraph_font_size(first_style: dict[str, str], second_style: dict[str, str]) -> float:
@@ -190,10 +250,6 @@ def _is_bullet_list_continuation(block: BlockIR, previous_text: str, marker: str
     if marker in block.text:
         return True
     return not _ends_with_strong_punctuation(previous_text)
-
-
-def _ends_with_strong_punctuation(text: str) -> bool:
-    return text.rstrip().endswith((".", "!", "?", ":", ";"))
 
 
 def _is_bullet_list_text_block(block: BlockIR) -> bool:
