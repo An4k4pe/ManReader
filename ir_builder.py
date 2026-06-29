@@ -126,12 +126,22 @@ def _merge_callout_blocks(blocks: list[BlockIR]) -> list[BlockIR]:
 
     while index < len(blocks):
         current = blocks[index]
-        body_index = _callout_body_index(blocks, index)
+        body_indexes = _callout_body_indexes(blocks, index)
 
-        if body_index is not None:
-            merged.append(_build_callout_block(current, blocks[body_index]))
-            merged.extend(blocks[index + 1 : body_index])
-            index = body_index + 1
+        if body_indexes:
+            body_index_set = set(body_indexes)
+            merged.append(
+                _build_callout_block(current, [blocks[body_index] for body_index in body_indexes])
+            )
+            merged.extend(
+                block
+                for block_index, block in enumerate(
+                    blocks[index + 1 : body_indexes[-1] + 1],
+                    start=index + 1,
+                )
+                if block_index not in body_index_set
+            )
+            index = body_indexes[-1] + 1
             continue
 
         merged.append(current)
@@ -140,7 +150,7 @@ def _merge_callout_blocks(blocks: list[BlockIR]) -> list[BlockIR]:
     return merged
 
 
-def _callout_body_index(blocks: list[BlockIR], title_index: int) -> int | None:
+def _callout_body_indexes(blocks: list[BlockIR], title_index: int) -> list[int] | None:
     title_block = blocks[title_index]
     if not _is_callout_title_block(title_block):
         return None
@@ -149,11 +159,12 @@ def _callout_body_index(blocks: list[BlockIR], title_index: int) -> int | None:
     if region is None:
         return None
 
+    body_indexes: list[int] = []
     index = title_index + 1
     while index < len(blocks):
         block = blocks[index]
         if block.page_num != title_block.page_num:
-            return None
+            return _valid_callout_body_indexes(blocks, body_indexes)
 
         if _is_callout_region_graphic(block, region):
             index += 1
@@ -161,15 +172,17 @@ def _callout_body_index(blocks: list[BlockIR], title_index: int) -> int | None:
 
         if block.type == "text":
             if not _block_belongs_to_region(block, region):
-                return None
-            if _looks_like_section_heading_block(block):
-                return None
-            return index if _is_callout_body_block(block) else None
+                return _valid_callout_body_indexes(blocks, body_indexes)
+            if not _is_callout_body_fragment_block(block):
+                return _valid_callout_body_indexes(blocks, body_indexes)
+            body_indexes.append(index)
+            index += 1
+            continue
 
         index += 1
         continue
 
-    return None
+    return _valid_callout_body_indexes(blocks, body_indexes)
 
 
 def _callout_region_for_title(blocks: list[BlockIR], title_index: int) -> BlockIR | None:
@@ -212,18 +225,37 @@ def _is_callout_title_block(block: BlockIR) -> bool:
     return not _looks_like_section_heading_block(block)
 
 
+def _valid_callout_body_indexes(blocks: list[BlockIR], body_indexes: list[int]) -> list[int] | None:
+    if not body_indexes:
+        return None
+    text = _joined_block_text([blocks[index] for index in body_indexes])
+    return body_indexes if _is_callout_body_text(text) else None
+
+
 def _is_callout_body_block(block: BlockIR) -> bool:
+    return _is_callout_body_fragment_block(block) and _is_callout_body_text(block.text or "")
+
+
+def _is_callout_body_fragment_block(block: BlockIR) -> bool:
     if block.type != "text" or block.role not in {None, "bullet_list"} or not block.text:
         return False
+    if _looks_like_section_heading_block(block):
+        return False
+    return _is_callout_body_fragment_text(block.text)
 
-    stripped = " ".join(block.text.split())
-    if len(stripped) < 40:
+
+def _is_callout_body_fragment_text(text: str) -> bool:
+    stripped = " ".join(text.split())
+    if not stripped:
         return False
     if stripped.startswith(('"', "“", "”", "-", "–", "—")):
         return False
-    if stripped.isupper():
-        return False
-    return not _looks_like_section_heading_block(block)
+    return not stripped.isupper()
+
+
+def _is_callout_body_text(text: str) -> bool:
+    stripped = " ".join(text.split())
+    return len(stripped) >= 40 and _is_callout_body_fragment_text(stripped)
 
 
 def _is_callout_region_candidate(block: BlockIR) -> bool:
@@ -386,25 +418,33 @@ def _font_size_from_style(style: dict[str, str]) -> float | None:
     return font_size if font_size > 0 else None
 
 
-def _build_callout_block(title_block: BlockIR, body_block: BlockIR) -> BlockIR:
-    bbox = None
-    if title_block.bbox is not None and body_block.bbox is not None:
-        bbox = _union_bbox(title_block.bbox, body_block.bbox)
+def _build_callout_block(title_block: BlockIR, body_blocks: list[BlockIR]) -> BlockIR:
+    bbox = title_block.bbox
+    for body_block in body_blocks:
+        if bbox is not None and body_block.bbox is not None:
+            bbox = _union_bbox(bbox, body_block.bbox)
+        elif bbox is None:
+            bbox = body_block.bbox
 
+    first_body = body_blocks[0]
     return BlockIR(
         id=title_block.id,
         type="text",
         page_num=title_block.page_num,
         order=title_block.order,
         bbox=bbox,
-        text=" ".join((body_block.text or "").split()),
-        style=body_block.style,
+        text=_joined_block_text(body_blocks),
+        style=first_body.style,
         role="callout",
         metadata={
             "callout_type": "info",
             "title": " ".join((title_block.text or "").split()),
         },
     )
+
+
+def _joined_block_text(blocks: list[BlockIR]) -> str:
+    return " ".join(" ".join((block.text or "").split()) for block in blocks if block.text)
 
 
 def _renumber_blocks(blocks: list[BlockIR]) -> list[BlockIR]:

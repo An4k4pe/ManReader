@@ -324,6 +324,75 @@ class IRBuilderTest(unittest.TestCase):
         self.assertTrue(all(block.role != "callout" for block in ir_page.blocks))
         self.assertTrue(any(block.role == "bullet_list" for block in ir_page.blocks))
 
+    def test_merges_callout_with_multiple_text_body_blocks_inside_region(self):
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock("ABBREVIAZIONI", (10.0, 10.0, 90.0, 22.0)),
+                FakeTextBlock("FOR indica la Forza del personaggio.", (10.0, 30.0, 150.0, 42.0)),
+                FakeTextBlock("AGI indica la sua Agilità.", (10.0, 46.0, 150.0, 58.0)),
+                FakeTextBlock("INT indica la capacità di ragionare.", (10.0, 62.0, 150.0, 74.0)),
+            ],
+            vectors=[
+                FakeAsset((8.0, 8.0, 160.0, 80.0), saved_path="vectors/callout.svg", ext="svg")
+            ],
+        )
+
+        ir_page = self.build_page(page)
+
+        callouts = [block for block in ir_page.blocks if block.role == "callout"]
+        self.assertEqual(len(callouts), 1)
+        self.assertEqual(callouts[0].metadata["title"], "ABBREVIAZIONI")
+        self.assertEqual(
+            callouts[0].text,
+            (
+                "FOR indica la Forza del personaggio. AGI indica la sua Agilità. "
+                "INT indica la capacità di ragionare."
+            ),
+        )
+
+    def test_callout_aggregation_stops_before_text_outside_region(self):
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock("ABBREVIAZIONI", (10.0, 10.0, 90.0, 22.0)),
+                FakeTextBlock(
+                    "FOR indica la Forza del personaggio durante prove fisiche e combattimento.",
+                    (10.0, 30.0, 150.0, 42.0),
+                ),
+                FakeTextBlock("Questo paragrafo è fuori dalla box.", (180.0, 46.0, 260.0, 70.0)),
+            ],
+            vectors=[
+                FakeAsset((8.0, 8.0, 160.0, 80.0), saved_path="vectors/callout.svg", ext="svg")
+            ],
+        )
+
+        ir_page = self.build_page(page)
+
+        callouts = [block for block in ir_page.blocks if block.role == "callout"]
+        self.assertEqual(len(callouts), 1)
+        self.assertEqual(
+            callouts[0].text,
+            "FOR indica la Forza del personaggio durante prove fisiche e combattimento.",
+        )
+        self.assertTrue(
+            any(block.text == "Questo paragrafo è fuori dalla box." for block in ir_page.blocks)
+        )
+
+    def test_does_not_merge_when_text_outside_region_precedes_any_body_fragment(self):
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock("ABBREVIAZIONI", (10.0, 10.0, 90.0, 22.0)),
+                FakeTextBlock("Questo paragrafo è fuori dalla box.", (180.0, 30.0, 260.0, 54.0)),
+                FakeTextBlock("FOR indica la Forza del personaggio.", (10.0, 58.0, 150.0, 70.0)),
+            ],
+            vectors=[
+                FakeAsset((8.0, 8.0, 160.0, 80.0), saved_path="vectors/callout.svg", ext="svg")
+            ],
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertTrue(all(block.role != "callout" for block in ir_page.blocks))
+
     def test_does_not_merge_callout_when_bullet_list_body_is_outside_graphic_region(self):
         body = (
             "✦ Scontroso: fatichi a collaborare con gli altri e tendi a rispondere "
