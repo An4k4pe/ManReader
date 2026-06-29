@@ -145,25 +145,53 @@ def _callout_body_index(blocks: list[BlockIR], title_index: int) -> int | None:
     if not _is_callout_title_block(title_block):
         return None
 
-    index = title_index + 1
-    while index < len(blocks) and _is_callout_separator_block(blocks[index], title_block):
-        index += 1
-
-    if index >= len(blocks):
+    region = _callout_region_for_title(blocks, title_index)
+    if region is None:
         return None
 
-    body_block = blocks[index]
-    if _is_callout_body_block(body_block) and _has_compatible_callout_bbox(title_block, body_block):
-        return index
+    index = title_index + 1
+    while index < len(blocks):
+        block = blocks[index]
+        if block.page_num != title_block.page_num:
+            return None
+
+        if _is_callout_region_graphic(block, region):
+            index += 1
+            continue
+
+        if block.type == "text":
+            if not _block_belongs_to_region(block, region):
+                return None
+            if _looks_like_section_heading_block(block):
+                return None
+            return index if _is_callout_body_block(block) else None
+
+        if block.type == "table" and _block_belongs_to_region(block, region):
+            index += 1
+            continue
+
+        return None
+
     return None
 
 
-def _is_callout_pair(title_block: BlockIR, body_block: BlockIR) -> bool:
-    return (
-        _is_callout_title_block(title_block)
-        and _is_callout_body_block(body_block)
-        and _has_compatible_callout_bbox(title_block, body_block)
-    )
+def _callout_region_for_title(blocks: list[BlockIR], title_index: int) -> BlockIR | None:
+    title_block = blocks[title_index]
+    if title_block.bbox is None:
+        return None
+
+    candidates = [
+        block
+        for block in blocks
+        if block.page_num == title_block.page_num
+        and _is_callout_region_candidate(block)
+        and block.bbox is not None
+        and _title_tied_to_region(title_block.bbox, block.bbox)
+    ]
+    if not candidates:
+        return None
+
+    return min(candidates, key=lambda block: _bbox_area(block.bbox or (0.0, 0.0, 0.0, 0.0)))
 
 
 def _is_callout_title_block(block: BlockIR) -> bool:
@@ -176,7 +204,7 @@ def _is_callout_title_block(block: BlockIR) -> bool:
         return False
     if stripped.startswith(("-", "–", "—")):
         return False
-    if not 2 <= len(words) <= 6:
+    if not 1 <= len(words) <= 6:
         return False
     if not any(character.isalpha() for character in stripped):
         return False
@@ -188,65 +216,158 @@ def _is_callout_title_block(block: BlockIR) -> bool:
 
 
 def _is_callout_body_block(block: BlockIR) -> bool:
-    if block.type != "text" or block.role is not None or not block.text:
+    if block.type != "text" or block.role not in {None, "bullet_list"} or not block.text:
         return False
 
     stripped = " ".join(block.text.split())
     if len(stripped) < 40:
+        return False
+    if stripped.startswith(('"', "“", "”", "-", "–", "—")):
         return False
     if stripped.isupper():
         return False
     return not _looks_like_section_heading_block(block)
 
 
-def _is_callout_separator_block(block: BlockIR, title_block: BlockIR) -> bool:
+def _is_callout_region_candidate(block: BlockIR) -> bool:
+    if block.type not in {"image", "vector"} or block.bbox is None:
+        return False
+    if _bbox_area(block.bbox) <= 0:
+        return False
+    asset = block.asset
+    return asset is None or not (asset.is_background or asset.is_duplicate)
+
+
+def _is_callout_region_graphic(block: BlockIR, region: BlockIR) -> bool:
     if block.type not in {"image", "vector"}:
         return False
-    if block.bbox is None or title_block.bbox is None:
-        return False
-    if block.page_num != title_block.page_num:
-        return False
-
-    # Alcuni box arrivano nel reading flow come titolo, asset grafico del box,
-    # poi corpo. Non riclassifichiamo l'asset: lo saltiamo solo per trovare il
-    # corpo testuale semanticamente collegato al titolo.
-    title_bbox = title_block.bbox
-    horizontal_overlap = min(title_bbox[2], block.bbox[2]) - max(title_bbox[0], block.bbox[0])
-    return horizontal_overlap > 0 and block.bbox[1] >= title_bbox[1] - 2.0
+    if block is region:
+        return True
+    return _block_belongs_to_region(block, region)
 
 
-def _has_compatible_callout_bbox(title_block: BlockIR, body_block: BlockIR) -> bool:
-    if title_block.page_num != body_block.page_num:
-        return False
-    if title_block.bbox is None or body_block.bbox is None:
+def _title_tied_to_region(
+    title_bbox: tuple[float, float, float, float],
+    region_bbox: tuple[float, float, float, float],
+) -> bool:
+    if _title_in_region_top_band(title_bbox, region_bbox):
+        return True
+    if _title_crosses_region_top_edge(title_bbox, region_bbox):
+        return True
+    return _title_immediately_above_region(title_bbox, region_bbox)
+
+
+def _title_in_region_top_band(
+    title_bbox: tuple[float, float, float, float],
+    region_bbox: tuple[float, float, float, float],
+) -> bool:
+    title_width = max(title_bbox[2] - title_bbox[0], 0.0)
+    if title_width <= 0:
         return False
 
-    title_bbox = title_block.bbox
-    body_bbox = body_block.bbox
-    if body_bbox[1] < title_bbox[1]:
+    horizontal_overlap = min(title_bbox[2], region_bbox[2]) - max(title_bbox[0], region_bbox[0])
+    if horizontal_overlap < title_width * 0.80:
         return False
 
-    vertical_gap = body_bbox[1] - title_bbox[3]
-    max_font_size = max(
-        _font_size_from_style(title_block.style) or 0.0,
-        _font_size_from_style(body_block.style) or 0.0,
-        10.0,
+    region_top = region_bbox[1]
+    top_band_height = _region_top_band_height(region_bbox)
+    title_center_y = (title_bbox[1] + title_bbox[3]) / 2.0
+    return title_bbox[3] >= region_top - 3.0 and title_center_y <= region_top + top_band_height
+
+
+def _title_crosses_region_top_edge(
+    title_bbox: tuple[float, float, float, float],
+    region_bbox: tuple[float, float, float, float],
+) -> bool:
+    title_width = max(title_bbox[2] - title_bbox[0], 0.0)
+    if title_width <= 0:
+        return False
+
+    horizontal_overlap = min(title_bbox[2], region_bbox[2]) - max(title_bbox[0], region_bbox[0])
+    if horizontal_overlap < title_width * 0.80:
+        return False
+
+    region_top = region_bbox[1]
+    top_band_height = _region_top_band_height(region_bbox)
+    title_center_y = (title_bbox[1] + title_bbox[3]) / 2.0
+
+    return (
+        title_bbox[1] <= region_top + 3.0
+        and title_bbox[3] >= region_top - 3.0
+        and title_center_y <= region_top + top_band_height
     )
-    if vertical_gap < -2.0 or vertical_gap > max_font_size * 3.0:
-        return False
 
-    title_width = title_bbox[2] - title_bbox[0]
-    body_width = body_bbox[2] - body_bbox[0]
-    if title_width <= 0 or body_width <= 0:
-        return False
 
-    horizontal_overlap = min(title_bbox[2], body_bbox[2]) - max(title_bbox[0], body_bbox[0])
-    has_clear_overlap = horizontal_overlap >= min(title_width, body_width) * 0.5
-    has_compatible_left_edge = abs(title_bbox[0] - body_bbox[0]) <= 12.0
-    body_covers_title = (
-        body_bbox[0] <= title_bbox[0] + 12.0 and body_bbox[2] >= title_bbox[2] - 12.0
+def _region_top_band_height(region_bbox: tuple[float, float, float, float]) -> float:
+    region_height = max(region_bbox[3] - region_bbox[1], 0.0)
+    return min(24.0, max(region_height * 0.25, 12.0))
+
+
+def _title_immediately_above_region(
+    title_bbox: tuple[float, float, float, float],
+    region_bbox: tuple[float, float, float, float],
+) -> bool:
+    vertical_gap = region_bbox[1] - title_bbox[3]
+    if vertical_gap < -2.0 or vertical_gap > 6.0:
+        return False
+    title_width = max(title_bbox[2] - title_bbox[0], 0.0)
+    if title_width <= 0:
+        return False
+    horizontal_overlap = min(title_bbox[2], region_bbox[2]) - max(title_bbox[0], region_bbox[0])
+    return horizontal_overlap >= title_width * 0.80
+
+
+def _block_belongs_to_region(block: BlockIR, region: BlockIR) -> bool:
+    if block.bbox is None or region.bbox is None:
+        return False
+    if block.page_num != region.page_num:
+        return False
+    if _bbox_contains(region.bbox, block.bbox, tolerance=3.0):
+        return True
+    return _bbox_overlap_ratio(block.bbox, region.bbox) >= 0.80
+
+
+def _bbox_area(bbox: tuple[float, float, float, float]) -> float:
+    width = bbox[2] - bbox[0]
+    height = bbox[3] - bbox[1]
+    if width <= 0 or height <= 0:
+        return 0.0
+    return width * height
+
+
+def _bbox_intersection_area(
+    first: tuple[float, float, float, float],
+    second: tuple[float, float, float, float],
+) -> float:
+    x0 = max(first[0], second[0])
+    y0 = max(first[1], second[1])
+    x1 = min(first[2], second[2])
+    y1 = min(first[3], second[3])
+    return _bbox_area((x0, y0, x1, y1))
+
+
+def _bbox_contains(
+    outer: tuple[float, float, float, float],
+    inner: tuple[float, float, float, float],
+    *,
+    tolerance: float = 0.0,
+) -> bool:
+    return (
+        outer[0] - tolerance <= inner[0]
+        and outer[1] - tolerance <= inner[1]
+        and outer[2] + tolerance >= inner[2]
+        and outer[3] + tolerance >= inner[3]
     )
-    return has_clear_overlap or has_compatible_left_edge or body_covers_title
+
+
+def _bbox_overlap_ratio(
+    first: tuple[float, float, float, float],
+    second: tuple[float, float, float, float],
+) -> float:
+    first_area = _bbox_area(first)
+    if first_area <= 0:
+        return 0.0
+    return _bbox_intersection_area(first, second) / first_area
 
 
 def _looks_like_section_heading_block(block: BlockIR) -> bool:

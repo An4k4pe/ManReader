@@ -126,21 +126,40 @@ class IRBuilderTest(unittest.TestCase):
             text_blocks=[
                 FakeTextBlock("CAPACITÀ ALTERNATIVE", (10.0, 10.0, 80.0, 20.0)),
                 FakeTextBlock(body, (10.0, 24.0, 95.0, 44.0)),
+            ],
+            vectors=[
+                FakeAsset((8.0, 8.0, 98.0, 48.0), saved_path="vectors/callout.svg", ext="svg")
+            ],
+        )
+
+        ir_page = self.build_page(page)
+        callouts = [block for block in ir_page.blocks if block.role == "callout"]
+        self.assertEqual(len(callouts), 1)
+        self.assertEqual(callouts[0].type, "text")
+        self.assertEqual(
+            callouts[0].metadata,
+            {"callout_type": "info", "title": "CAPACITÀ ALTERNATIVE"},
+        )
+        self.assertEqual(callouts[0].text, body)
+        self.assertEqual(callouts[0].bbox, (10.0, 10.0, 95.0, 44.0))
+
+    def test_does_not_merge_uppercase_title_and_body_without_graphic_region(self):
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock("CAPACITÀ ALTERNATIVE", (10.0, 10.0, 80.0, 20.0)),
+                FakeTextBlock(
+                    "Questo testo segue un titolo uppercase ma non è dentro una regione grafica condivisa.",
+                    (10.0, 24.0, 95.0, 44.0),
+                ),
             ]
         )
 
         ir_page = self.build_page(page)
-        self.assertEqual(len(ir_page.blocks), 1)
-        self.assertEqual(ir_page.blocks[0].type, "text")
-        self.assertEqual(ir_page.blocks[0].role, "callout")
-        self.assertEqual(
-            ir_page.blocks[0].metadata,
-            {"callout_type": "info", "title": "CAPACITÀ ALTERNATIVE"},
-        )
-        self.assertEqual(ir_page.blocks[0].text, body)
-        self.assertEqual(ir_page.blocks[0].bbox, (10.0, 10.0, 95.0, 44.0))
 
-    def test_merges_callout_when_graphic_asset_sits_between_title_and_body(self):
+        self.assertEqual(len(ir_page.blocks), 2)
+        self.assertTrue(all(block.role != "callout" for block in ir_page.blocks))
+
+    def test_merges_callout_when_title_and_body_share_vector_region(self):
         body = (
             "Se senti che la capacità eroica indicata nella tua professione non è adatta "
             "per il personaggio che vuoi creare, il GM può permetterti di sceglierne un'altra."
@@ -148,30 +167,197 @@ class IRBuilderTest(unittest.TestCase):
         page = FakePage(
             text_blocks=[
                 FakeTextBlock("CAPACITÀ ALTERNATIVE", (10.0, 10.0, 80.0, 20.0)),
-                FakeTextBlock(body, (10.0, 42.0, 95.0, 62.0)),
+                FakeTextBlock(body, (10.0, 24.0, 95.0, 44.0)),
             ],
-            images=[
-                FakeAsset(
-                    (8.0, 21.0, 98.0, 40.0),
-                    saved_path="images/callout-decoration.png",
-                    sha="callout-decoration-sha",
-                )
+            vectors=[
+                FakeAsset((8.0, 8.0, 98.0, 48.0), saved_path="vectors/callout.svg", ext="svg")
             ],
         )
 
         ir_page = self.build_page(page)
 
-        self.assertEqual(len(ir_page.blocks), 2)
-        self.assertEqual(ir_page.blocks[0].type, "text")
-        self.assertEqual(ir_page.blocks[0].role, "callout")
-        self.assertEqual(
-            ir_page.blocks[0].metadata,
-            {"callout_type": "info", "title": "CAPACITÀ ALTERNATIVE"},
+        callouts = [block for block in ir_page.blocks if block.role == "callout"]
+        self.assertEqual(len(callouts), 1)
+        self.assertEqual(callouts[0].metadata["title"], "CAPACITÀ ALTERNATIVE")
+        self.assertTrue(any(block.type == "vector" for block in ir_page.blocks))
+
+    def test_merges_callout_when_title_is_immediately_above_body_region(self):
+        body = (
+            "Il tuo personaggio è un abile individuo con una debolezza importante "
+            "che mette in moto complicazioni e scelte interessanti durante il gioco."
         )
-        self.assertEqual(ir_page.blocks[0].text, body)
-        self.assertEqual(ir_page.blocks[0].bbox, (10.0, 10.0, 95.0, 62.0))
-        self.assertEqual(ir_page.blocks[1].type, "image")
-        self.assertEqual([block.order for block in ir_page.blocks], [1, 2])
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock("DEBOLEZZA", (10.0, 10.0, 55.0, 20.0)),
+                FakeTextBlock(body, (10.0, 26.0, 95.0, 56.0)),
+            ],
+            vectors=[
+                FakeAsset((8.0, 22.0, 98.0, 60.0), saved_path="vectors/callout.svg", ext="svg")
+            ],
+        )
+
+        ir_page = self.build_page(page)
+
+        callouts = [block for block in ir_page.blocks if block.role == "callout"]
+        self.assertEqual(len(callouts), 1)
+        self.assertEqual(callouts[0].metadata["title"], "DEBOLEZZA")
+        self.assertEqual(callouts[0].text, body)
+
+    def test_merges_callout_when_body_is_bullet_list_inside_graphic_region(self):
+        body = (
+            "✦ Istinti da Cacciatore: puoi seguire tracce, percepire pericoli nascosti "
+            "e aiutare il gruppo quando attraversa territori selvaggi."
+        )
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock("CAPACITÀ: ISTINTI DA CACCIATORE", (10.0, 10.0, 90.0, 20.0)),
+                FakeTextBlock(body, (10.0, 26.0, 95.0, 56.0)),
+            ],
+            images=[FakeAsset((8.0, 8.0, 98.0, 60.0), saved_path="images/callout.jpeg")],
+        )
+
+        ir_page = self.build_page(page)
+
+        callouts = [block for block in ir_page.blocks if block.role == "callout"]
+        self.assertEqual(len(callouts), 1)
+        self.assertEqual(callouts[0].metadata["title"], "CAPACITÀ: ISTINTI DA CACCIATORE")
+        self.assertEqual(callouts[0].text, body)
+        self.assertTrue(any(block.type == "image" for block in ir_page.blocks))
+
+    def test_merges_callout_when_title_crosses_graphic_region_top_edge(self):
+        body = (
+            "✦ Istinti da Cacciatore: puoi seguire tracce, percepire pericoli nascosti "
+            "e aiutare il gruppo quando attraversa territori selvaggi."
+        )
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock("CAPACITÀ: ISTINTI DA CACCIATORE", (10.0, 345.2, 180.0, 357.9)),
+                FakeTextBlock(body, (10.0, 371.7, 185.0, 455.1)),
+            ],
+            images=[FakeAsset((8.0, 350.7, 190.0, 472.9), saved_path="images/callout.jpeg")],
+        )
+
+        ir_page = self.build_page(page)
+
+        callouts = [block for block in ir_page.blocks if block.role == "callout"]
+        self.assertEqual(len(callouts), 1)
+        self.assertEqual(callouts[0].metadata["title"], "CAPACITÀ: ISTINTI DA CACCIATORE")
+        self.assertEqual(callouts[0].text, body)
+
+    def test_does_not_merge_callout_when_title_is_too_deep_inside_graphic_region(self):
+        body = (
+            "✦ Scontroso: fatichi a collaborare con gli altri e tendi a rispondere "
+            "in modo brusco anche quando sarebbe meglio tacere."
+        )
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock("CAPACITÀ: SCONTROSO", (10.0, 380.0, 140.0, 392.0)),
+                FakeTextBlock(body, (10.0, 402.0, 185.0, 455.0)),
+            ],
+            images=[FakeAsset((8.0, 350.0, 190.0, 472.0), saved_path="images/callout.jpeg")],
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertTrue(all(block.role != "callout" for block in ir_page.blocks))
+        self.assertTrue(any(block.role == "bullet_list" for block in ir_page.blocks))
+
+    def test_does_not_merge_callout_when_bullet_list_body_is_outside_graphic_region(self):
+        body = (
+            "✦ Scontroso: fatichi a collaborare con gli altri e tendi a rispondere "
+            "in modo brusco anche quando sarebbe meglio tacere."
+        )
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock("CAPACITÀ: SCONTROSO", (10.0, 10.0, 80.0, 20.0)),
+                FakeTextBlock(body, (10.0, 52.0, 95.0, 82.0)),
+            ],
+            images=[FakeAsset((8.0, 8.0, 98.0, 28.0), saved_path="images/callout.jpeg")],
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertTrue(all(block.role != "callout" for block in ir_page.blocks))
+        self.assertTrue(any(block.role == "bullet_list" for block in ir_page.blocks))
+
+    def test_does_not_merge_when_title_outside_region_and_body_inside_region(self):
+        body = (
+            "Il tuo personaggio è un abile individuo con una debolezza importante "
+            "che mette in moto complicazioni e scelte interessanti durante il gioco."
+        )
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock("DEBOLEZZA", (10.0, 10.0, 55.0, 20.0)),
+                FakeTextBlock(body, (10.0, 36.0, 95.0, 66.0)),
+            ],
+            vectors=[
+                FakeAsset((8.0, 32.0, 98.0, 70.0), saved_path="vectors/callout.svg", ext="svg")
+            ],
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertTrue(all(block.role != "callout" for block in ir_page.blocks))
+
+    def test_does_not_merge_when_title_inside_region_and_body_outside_region(self):
+        body = (
+            "Il tuo personaggio è un abile individuo con una debolezza importante "
+            "che mette in moto complicazioni e scelte interessanti durante il gioco."
+        )
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock("DEBOLEZZA", (10.0, 10.0, 55.0, 20.0)),
+                FakeTextBlock(body, (10.0, 52.0, 95.0, 82.0)),
+            ],
+            vectors=[
+                FakeAsset((8.0, 8.0, 98.0, 28.0), saved_path="vectors/callout.svg", ext="svg")
+            ],
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertTrue(all(block.role != "callout" for block in ir_page.blocks))
+
+    def test_does_not_use_full_page_region_as_callout_evidence(self):
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock("CAPACITÀ ALTERNATIVE", (10.0, 10.0, 80.0, 20.0)),
+                FakeTextBlock(
+                    "Questo testo sarebbe compatibile, ma lo sfondo pagina non è una box callout.",
+                    (10.0, 24.0, 95.0, 44.0),
+                ),
+            ],
+            images=[FakeAsset((0.0, 0.0, 100.0, 100.0), is_background=True)],
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertEqual(len(ir_page.blocks), 2)
+        self.assertTrue(all(block.role != "callout" for block in ir_page.blocks))
+
+    def test_heading_does_not_steal_body_from_later_box_region(self):
+        body = (
+            "Se senti che la capacità eroica indicata nella tua professione non è adatta "
+            "per il personaggio che vuoi creare, il GM può permetterti di sceglierne un'altra."
+        )
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock("CAPACITÀ EROICHE", (10.0, 10.0, 80.0, 20.0)),
+                FakeTextBlock("CAPACITÀ ALTERNATIVE", (10.0, 34.0, 80.0, 44.0)),
+                FakeTextBlock(body, (10.0, 50.0, 95.0, 70.0)),
+            ],
+            vectors=[
+                FakeAsset((8.0, 32.0, 98.0, 74.0), saved_path="vectors/callout.svg", ext="svg")
+            ],
+        )
+
+        ir_page = self.build_page(page)
+
+        callouts = [block for block in ir_page.blocks if block.role == "callout"]
+        self.assertEqual(len(callouts), 1)
+        self.assertEqual(callouts[0].metadata["title"], "CAPACITÀ ALTERNATIVE")
+        self.assertEqual(ir_page.blocks[0].text, "CAPACITÀ EROICHE")
+        self.assertIsNone(ir_page.blocks[0].role)
 
     def test_keeps_dash_attribution_outside_callout(self):
         page = FakePage(
@@ -226,6 +412,28 @@ class IRBuilderTest(unittest.TestCase):
         self.assertIsNone(ir_page.blocks[0].role)
         self.assertIsNone(ir_page.blocks[1].role)
 
+    def test_known_section_headings_without_shared_region_do_not_become_callouts(self):
+        for title in ["MAGO", "MAGIA", "MERCANTE", "STUDIOSO", "ABILITÀ"]:
+            with self.subTest(title=title):
+                page = FakePage(
+                    text_blocks=[
+                        FakeTextBlock(title, (10.0, 10.0, 80.0, 20.0)),
+                        FakeTextBlock(
+                            "Questo testo di sezione resta nel normale flusso senza una box grafica condivisa.",
+                            (10.0, 24.0, 95.0, 44.0),
+                        ),
+                    ],
+                    vectors=[
+                        FakeAsset(
+                            (0.0, 70.0, 100.0, 90.0), saved_path="vectors/decor.svg", ext="svg"
+                        )
+                    ],
+                )
+
+                ir_page = self.build_page(page)
+
+                self.assertTrue(all(block.role != "callout" for block in ir_page.blocks))
+
     def test_callout_merge_preserves_following_bullet_list(self):
         body = (
             "Se senti che la capacità eroica indicata nella tua professione non è adatta "
@@ -236,15 +444,19 @@ class IRBuilderTest(unittest.TestCase):
                 FakeTextBlock("CAPACITÀ ALTERNATIVE", (10.0, 10.0, 80.0, 20.0)),
                 FakeTextBlock(body, (10.0, 24.0, 95.0, 44.0)),
                 FakeTextBlock("✦ Abilità: Osservazione, Furtività", (10.0, 60.0, 95.0, 72.0)),
-            ]
+            ],
+            vectors=[
+                FakeAsset((8.0, 8.0, 98.0, 48.0), saved_path="vectors/callout.svg", ext="svg")
+            ],
         )
 
         ir_page = self.build_page(page)
 
-        self.assertEqual(len(ir_page.blocks), 2)
-        self.assertEqual(ir_page.blocks[0].role, "callout")
-        self.assertEqual(ir_page.blocks[1].role, "bullet_list")
-        self.assertEqual(ir_page.blocks[1].metadata, {"marker": "✦"})
+        callouts = [block for block in ir_page.blocks if block.role == "callout"]
+        bullets = [block for block in ir_page.blocks if block.role == "bullet_list"]
+        self.assertEqual(len(callouts), 1)
+        self.assertEqual(len(bullets), 1)
+        self.assertEqual(bullets[0].metadata, {"marker": "✦"})
 
     def test_splits_inline_trait_bullets_onto_separate_lines(self):
         page = FakePage(
