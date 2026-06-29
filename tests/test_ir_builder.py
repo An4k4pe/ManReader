@@ -262,6 +262,68 @@ class IRBuilderTest(unittest.TestCase):
         self.assertTrue(all(block.role != "callout" for block in ir_page.blocks))
         self.assertTrue(any(block.role == "bullet_list" for block in ir_page.blocks))
 
+    def test_merges_callout_when_unrelated_non_text_asset_sits_before_body(self):
+        body = (
+            "✦ Scontroso: fatichi a collaborare con gli altri e tendi a rispondere "
+            "in modo brusco anche quando sarebbe meglio tacere."
+        )
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock("CAPACITÀ: SCONTROSO", (120.0, 10.0, 190.0, 22.0)),
+                FakeTextBlock(body, (120.0, 40.0, 195.0, 78.0)),
+            ],
+            images=[FakeAsset((118.0, 8.0, 198.0, 82.0), saved_path="images/right-callout.jpeg")],
+            tables=[FakeAsset((10.0, 28.0, 80.0, 54.0), saved_path="tables/left-table.csv")],
+        )
+
+        ir_page = self.build_page(page)
+
+        callouts = [block for block in ir_page.blocks if block.role == "callout"]
+        self.assertEqual(len(callouts), 1)
+        self.assertEqual(callouts[0].metadata["title"], "CAPACITÀ: SCONTROSO")
+        self.assertEqual(callouts[0].text, body)
+        self.assertTrue(any(block.type == "table" for block in ir_page.blocks))
+
+    def test_does_not_skip_text_outside_region_before_callout_body(self):
+        body = (
+            "✦ Scontroso: fatichi a collaborare con gli altri e tendi a rispondere "
+            "in modo brusco anche quando sarebbe meglio tacere."
+        )
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock("CAPACITÀ: SCONTROSO", (120.0, 10.0, 190.0, 22.0)),
+                FakeTextBlock("Testo normale fuori dalla box", (10.0, 28.0, 80.0, 40.0)),
+                FakeTextBlock(body, (120.0, 44.0, 195.0, 78.0)),
+            ],
+            images=[FakeAsset((118.0, 8.0, 198.0, 82.0), saved_path="images/right-callout.jpeg")],
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertTrue(all(block.role != "callout" for block in ir_page.blocks))
+        self.assertTrue(any(block.role == "bullet_list" for block in ir_page.blocks))
+
+    def test_does_not_merge_when_asset_is_skipped_but_bullet_body_is_outside_region(self):
+        body = (
+            "✦ Scontroso: fatichi a collaborare con gli altri e tendi a rispondere "
+            "in modo brusco anche quando sarebbe meglio tacere."
+        )
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock("CAPACITÀ: SCONTROSO", (120.0, 10.0, 190.0, 22.0)),
+                FakeTextBlock(body, (10.0, 44.0, 85.0, 78.0)),
+            ],
+            images=[
+                FakeAsset((118.0, 8.0, 198.0, 82.0), saved_path="images/right-callout.jpeg"),
+                FakeAsset((10.0, 28.0, 80.0, 40.0), saved_path="images/left-decor.jpeg"),
+            ],
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertTrue(all(block.role != "callout" for block in ir_page.blocks))
+        self.assertTrue(any(block.role == "bullet_list" for block in ir_page.blocks))
+
     def test_does_not_merge_callout_when_bullet_list_body_is_outside_graphic_region(self):
         body = (
             "✦ Scontroso: fatichi a collaborare con gli altri e tendi a rispondere "

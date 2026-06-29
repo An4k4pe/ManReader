@@ -166,11 +166,8 @@ def _callout_body_index(blocks: list[BlockIR], title_index: int) -> int | None:
                 return None
             return index if _is_callout_body_block(block) else None
 
-        if block.type == "table" and _block_belongs_to_region(block, region):
-            index += 1
-            continue
-
-        return None
+        index += 1
+        continue
 
     return None
 
