@@ -1666,6 +1666,104 @@ def _bbox_overlaps_any(bbox: tuple, excluded: list[tuple], threshold: float = 0.
     return False
 
 
+def _text_block_is_duplicate_table_text(
+    text_block: TextBlock,
+    tables: Sequence[TableBlock],
+    overlap_threshold: float = 0.3,
+) -> bool:
+    """Scarta solo il testo che duplica una tabella estratta.
+
+    Le bbox tabellari ricostruite possono includere sfondi/cornici o box
+    decorativi più ampi della tabella reale. La sovrapposizione geometrica da
+    sola non basta: prima di rimuovere un TextBlock verifichiamo che il testo
+    sia effettivamente presente nel CSV della tabella.
+    """
+    if not tables:
+        return False
+
+    text = text_block.text.strip()
+    if not text:
+        return False
+
+    for table in tables:
+        if _bbox_overlap_ratio(text_block.bbox, table.bbox) <= overlap_threshold:
+            continue
+        if _text_matches_table_rows(text, table.rows):
+            return True
+
+    return False
+
+
+def _text_matches_table_rows(text: str, rows: Sequence[Sequence[str]]) -> bool:
+    normalized_text = _normalize_table_duplicate_text(text)
+    if not normalized_text:
+        return False
+
+    row_texts = [
+        _normalize_table_duplicate_text(" ".join(cell for cell in row if cell.strip()))
+        for row in rows
+    ]
+    table_text = _normalize_table_duplicate_text(
+        " ".join(cell for row in rows for cell in row if cell.strip())
+    )
+
+    if _short_text_is_table_row_token(normalized_text, rows):
+        return True
+
+    # Non eliminare titoli/etichette monoverbo sovrapposti a box decorativi:
+    # possono coincidere con una colonna della tabella vicina ma essere testo
+    # leggibile autonomo, come il titolo di un callout.
+    if len(normalized_text.split()) < 2:
+        return False
+
+    if any(normalized_text == row_text or normalized_text in row_text for row_text in row_texts):
+        return True
+
+    return _table_token_coverage(normalized_text, table_text) >= 0.8
+
+
+def _short_text_is_table_row_token(text: str, rows: Sequence[Sequence[str]]) -> bool:
+    tokens = text.split()
+    if len(tokens) != 1:
+        return False
+    token = tokens[0]
+    if not (_LOOSE_ROW_FIRST_TOKEN_RE.match(token) or _is_die_header(token)):
+        return False
+
+    first_column_values = {
+        _normalize_table_duplicate_text(row[0])
+        for row in rows
+        if row and _normalize_table_duplicate_text(row[0])
+    }
+    return token in first_column_values
+
+
+def _table_token_coverage(text: str, table_text: str) -> float:
+    text_tokens = [token for token in text.split() if len(token) > 2]
+    if len(text_tokens) < 2:
+        return 0.0
+
+    table_tokens = table_text.split()
+    if not table_tokens:
+        return 0.0
+
+    remaining = list(table_tokens)
+    matched = 0
+    for token in text_tokens:
+        try:
+            remaining.remove(token)
+        except ValueError:
+            continue
+        matched += 1
+
+    return matched / len(text_tokens)
+
+
+def _normalize_table_duplicate_text(text: str) -> str:
+    clean = _re.sub(r"[^\wÀ-ÖØ-öø-ÿ]+", " ", text, flags=_re.UNICODE).lower()
+    return " ".join(clean.split())
+
+
 def _bbox_area(bbox: tuple[float, float, float, float]) -> float:
     width = max(0.0, bbox[2] - bbox[0])
     height = max(0.0, bbox[3] - bbox[1])
@@ -1800,6 +1898,92 @@ def _rebuild_text_blocks_from_block_hints(
         index += len(group)
 
     return rebuilt
+
+
+def _recover_missing_text_blocks_from_block_hints(
+    text_blocks: list[TextBlock],
+    block_hints: Sequence[tuple[float, float, float, float, str, int, int]],
+    excluded_tables: Sequence[TableBlock],
+) -> list[TextBlock]:
+    """Recupera testo visibile da get_text("blocks") ma assente nel dict.
+
+    Alcuni PDF mettono testo reale sopra fondi/cornici grafiche: PyMuPDF può
+    esporlo in get_text("blocks") anche quando la struttura dict non produce
+    un TextBlock utile. Usiamo i block hints come fallback, ma solo se non
+    duplicano blocchi già presenti o contenuto tabellare già estratto.
+    """
+    recovered = list(text_blocks)
+    for block in block_hints:
+        if len(block) < 7 or block[6] != 0:
+            continue
+
+        text = _text_from_block(block)
+        if not text:
+            continue
+        if _block_hint_looks_like_page_number(text):
+            continue
+
+        bbox = (float(block[0]), float(block[1]), float(block[2]), float(block[3]))
+        candidate = TextBlock(
+            spans=[
+                TextSpan(
+                    text=text,
+                    font="",
+                    size=10.0,
+                    bold=False,
+                    italic=False,
+                    bbox=bbox,
+                )
+            ],
+            bbox=bbox,
+        )
+
+        if _text_block_is_already_represented(candidate, recovered):
+            continue
+        if _text_block_is_duplicate_table_text(candidate, excluded_tables):
+            continue
+        if _is_noise_block(candidate.spans):
+            continue
+
+        recovered.append(candidate)
+
+    return sorted(recovered, key=lambda block: (block.bbox[1], block.bbox[0]))
+
+
+def _block_hint_looks_like_page_number(text: str) -> bool:
+    """Evita che il fallback da get_text("blocks") recuperi numeri pagina.
+
+    I numeri pagina possono non arrivare dal dict oppure non essere marcati
+    come bold; recuperarli dai block hints li rimette nel reading flow. I
+    numeri tabellari veri restano protetti dal normale path dict/table.
+    """
+    clean = text.strip()
+    return clean.isdigit() and len(clean) <= 3
+
+
+def _text_block_is_already_represented(
+    candidate: TextBlock,
+    text_blocks: Sequence[TextBlock],
+) -> bool:
+    candidate_text = _normalize_table_duplicate_text(candidate.text)
+    if not candidate_text:
+        return True
+
+    for text_block in text_blocks:
+        existing_text = _normalize_table_duplicate_text(text_block.text)
+        if not existing_text:
+            continue
+
+        if candidate_text == existing_text:
+            return True
+
+        if (
+            _bbox_contains(text_block.bbox, candidate.bbox)
+            or _bbox_overlap_ratio(candidate.bbox, text_block.bbox) >= 0.8
+        ) and (candidate_text in existing_text or existing_text in candidate_text):
+            return True
+
+    return False
 
 
 def _text_block_from_single_dict_match_if_better(match: _DictBlockMatch) -> TextBlock | None:
@@ -2580,8 +2764,7 @@ class PDFExtractor:
         if self.config.extract_tables:
             tables = self._extract_tables(plumb_page, fitz_page, page_num, describer)
 
-        table_asset_regions = [table.bbox for table in tables]
-        text_blocks = self._extract_text(fitz_page, width, table_asset_regions)
+        text_blocks = self._extract_text(fitz_page, width, tables)
 
         return PageData(
             page_num=page_num,
@@ -3065,7 +3248,7 @@ class PDFExtractor:
         self,
         page,
         width: float,
-        excluded_bboxes: list[tuple],
+        excluded_tables: Sequence[TableBlock],
     ) -> list[TextBlock]:
         raw = page.get_text("dict")
         text_blocks: list[TextBlock] = []
@@ -3074,8 +3257,6 @@ class PDFExtractor:
             if block.get("type") != 0:
                 continue
             bbox = tuple(block["bbox"])
-            if self._overlaps_any(bbox, excluded_bboxes):
-                continue
 
             spans: list[TextSpan] = []
             for line in block.get("lines", []):
@@ -3096,11 +3277,17 @@ class PDFExtractor:
                     )
 
             if spans and not _is_noise_block(spans):
-                text_blocks.append(TextBlock(spans=spans, bbox=bbox))
+                text_block = TextBlock(spans=spans, bbox=bbox)
+                if not _text_block_is_duplicate_table_text(text_block, excluded_tables):
+                    text_blocks.append(text_block)
 
         block_hints = page.get_text("blocks")
         text_blocks = _rebuild_text_blocks_from_block_hints(text_blocks, block_hints)
-
+        text_blocks = _recover_missing_text_blocks_from_block_hints(
+            text_blocks,
+            block_hints,
+            excluded_tables,
+        )
         # Determina layout colonne per questa pagina
         forced = self.config.columns
         if forced == 1:

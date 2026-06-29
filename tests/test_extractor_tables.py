@@ -2,6 +2,8 @@ import unittest
 
 from extractor import (
     TableBlock,
+    TextBlock,
+    TextSpan,
     _bbox_contains,
     _bbox_overlaps_any,
     _find_table_regions,
@@ -9,7 +11,9 @@ from extractor import (
     _rebuild_numbered_table_from_words,
     _rebuild_tables_from_vector_regions,
     _rebuild_temporal_units_table_from_words,
+    _recover_missing_text_blocks_from_block_hints,
     _table_fragments_non_empty_in_region,
+    _text_block_is_duplicate_table_text,
 )
 
 
@@ -36,6 +40,135 @@ class FakePage:
 
 
 class ExtractorTablesTest(unittest.TestCase):
+    def test_recovers_missing_prose_from_block_hints(self):
+        text_blocks = []
+        block_hints = [
+            (
+                79.5,
+                347.5,
+                282.6,
+                490.9,
+                "Il tuo personaggio è un abile individuo che rischia la pelle per l'onore.",
+                0,
+                0,
+            )
+        ]
+
+        recovered = _recover_missing_text_blocks_from_block_hints(
+            text_blocks,
+            block_hints,
+            excluded_tables=[],
+        )
+
+        self.assertEqual(len(recovered), 1)
+        self.assertIn("Il tuo personaggio è un abile individuo", recovered[0].text)
+
+    def test_recovered_block_hint_does_not_duplicate_existing_text_block(self):
+        existing = _text_block(
+            "Il tuo personaggio è un abile individuo che rischia la pelle per l'onore.",
+            (79.5, 347.5, 282.6, 490.9),
+        )
+        block_hints = [
+            (
+                79.5,
+                347.5,
+                282.6,
+                490.9,
+                "Il tuo personaggio è un abile individuo che rischia la pelle per l'onore.",
+                0,
+                0,
+            )
+        ]
+
+        recovered = _recover_missing_text_blocks_from_block_hints(
+            [existing],
+            block_hints,
+            excluded_tables=[],
+        )
+        self.assertEqual(len(recovered), 1)
+
+    def test_recovered_block_hint_still_excludes_real_table_text(self):
+        table = TableBlock(
+            rows=[
+                ["D20", "DEBOLEZZA"],
+                ["1", "Credulone. Credo a tutto ciò che mi viene detto."],
+                ["2", "Avido. Voglio la parte più grande del bottino."],
+            ],
+            bbox=(50.0, 300.0, 300.0, 520.0),
+            page_num=27,
+            index=0,
+        )
+        block_hints = [
+            (
+                60.0,
+                410.0,
+                290.0,
+                430.0,
+                "1 Credulone. Credo a tutto ciò che mi viene detto.",
+                0,
+                0,
+            )
+        ]
+
+        recovered = _recover_missing_text_blocks_from_block_hints(
+            [],
+            block_hints,
+            excluded_tables=[table],
+        )
+
+        self.assertEqual(recovered, [])
+
+    def test_text_overlapping_decorative_table_bbox_is_kept_when_not_table_content(self):
+        table = TableBlock(
+            rows=[
+                ["D20", "DEBOLEZZA"],
+                ["1", "Credulone. Credo a tutto ciò che mi viene detto."],
+                ["2", "Avido. Voglio la parte più grande del bottino."],
+            ],
+            bbox=(50.0, 300.0, 300.0, 520.0),
+            page_num=27,
+            index=0,
+        )
+        text_block = _text_block(
+            "Il tuo personaggio è un abile individuo che rischia la pelle per l'onore.",
+            (79.0, 347.0, 282.0, 390.0),
+        )
+
+        self.assertFalse(_text_block_is_duplicate_table_text(text_block, [table]))
+
+    def test_text_overlapping_real_table_content_is_excluded(self):
+        table = TableBlock(
+            rows=[
+                ["D20", "DEBOLEZZA"],
+                ["1", "Credulone. Credo a tutto ciò che mi viene detto."],
+                ["2", "Avido. Voglio la parte più grande del bottino."],
+            ],
+            bbox=(50.0, 300.0, 300.0, 520.0),
+            page_num=27,
+            index=0,
+        )
+        text_block = _text_block(
+            "1 Credulone. Credo a tutto ciò che mi viene detto.",
+            (60.0, 410.0, 290.0, 430.0),
+        )
+
+        self.assertTrue(_text_block_is_duplicate_table_text(text_block, [table]))
+
+    def test_single_word_callout_title_overlapping_table_header_is_kept(self):
+        table = TableBlock(
+            rows=[
+                ["D20", "DEBOLEZZA"],
+                ["1", "Credulone. Credo a tutto ciò che mi viene detto."],
+                ["2", "Avido. Voglio la parte più grande del bottino."],
+            ],
+            bbox=(50.0, 300.0, 300.0, 520.0),
+            page_num=27,
+            index=0,
+        )
+        text_block = _text_block("DEBOLEZZA", (79.0, 321.0, 213.0, 334.0))
+
+        self.assertFalse(_text_block_is_duplicate_table_text(text_block, [table]))
+
     def test_find_table_regions_includes_single_row_candidate_bbox(self):
         page = FakePage([FakeTable((10, 20, 100, 40))])
 
@@ -884,6 +1017,22 @@ class ExtractorTablesTest(unittest.TestCase):
 
         self.assertTrue(_bbox_contains(fallback_region, fragment.bbox))
         self.assertEqual(_table_fragments_non_empty_in_region([fragment], fallback_region), 4)
+
+
+def _text_block(text: str, bbox: tuple[float, float, float, float]) -> TextBlock:
+    return TextBlock(
+        spans=[
+            TextSpan(
+                text=text,
+                font="TestFont",
+                size=10.0,
+                bold=False,
+                italic=False,
+                bbox=bbox,
+            )
+        ],
+        bbox=bbox,
+    )
 
 
 if __name__ == "__main__":
