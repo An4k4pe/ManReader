@@ -1,6 +1,6 @@
 import unittest
 
-from extractor import TextBlock, TextSpan
+from extractor import TextBlock, TextSpan, _split_text_block_by_horizontal_clusters
 
 
 class ExtractorTextJoinTest(unittest.TestCase):
@@ -90,6 +90,58 @@ class ExtractorTextJoinTest(unittest.TestCase):
         )
 
         self.assertEqual(block.text, "DOMANDE")
+
+    def test_splits_raw_block_with_two_distinct_horizontal_clusters(self):
+        block = _block(
+            [
+                _span("UMANO", (62.0, 74.0, 108.0, 88.0)),
+                _span("Gli umani sono recenti.", (62.0, 90.0, 290.0, 103.0)),
+                _span("Cercano gloria e conoscenza.", (63.0, 106.0, 295.0, 119.0)),
+                _span("di gloria, oro e conoscenza.", (63.0, 194.0, 172.0, 207.0)),
+                _span("✦", (333.0, 192.0, 341.0, 203.0)),
+                _span("Punti Volontà: 3", (346.0, 191.0, 418.0, 203.0)),
+                _span("Quando tiri su un’abilità,", (332.0, 204.0, 524.0, 216.0)),
+                _span("puoi usare un’altra abilità.", (332.0, 217.0, 523.0, 229.0)),
+            ]
+        )
+
+        blocks = _split_text_block_by_horizontal_clusters(block)
+
+        self.assertEqual(len(blocks), 2)
+        self.assertEqual(
+            blocks[0].text,
+            "UMANO Gli umani sono recenti. Cercano gloria e conoscenza. di gloria, oro e conoscenza.",
+        )
+        self.assertEqual(
+            blocks[1].text,
+            "✦ Punti Volontà: 3 Quando tiri su un’abilità, puoi usare un’altra abilità.",
+        )
+        self.assertEqual(blocks[0].bbox, (62.0, 74.0, 295.0, 207.0))
+        self.assertEqual(blocks[1].bbox, (332.0, 191.0, 524.0, 229.0))
+
+    def test_does_not_split_normal_single_column_paragraph(self):
+        block = _block(
+            [
+                _span("Prima riga del paragrafo.", (62.0, 74.0, 285.0, 88.0)),
+                _span("Seconda riga del paragrafo.", (63.0, 90.0, 290.0, 103.0)),
+                _span("Terza riga del paragrafo.", (62.5, 106.0, 295.0, 119.0)),
+                _span("Quarta riga del paragrafo.", (63.5, 122.0, 288.0, 135.0)),
+            ]
+        )
+
+        self.assertEqual(_split_text_block_by_horizontal_clusters(block), [block])
+
+    def test_does_not_split_small_x_variations(self):
+        block = _block(
+            [
+                _span("Prima riga indentata.", (62.0, 74.0, 250.0, 88.0)),
+                _span("Seconda riga normale.", (78.0, 90.0, 290.0, 103.0)),
+                _span("Terza riga normale.", (64.0, 106.0, 295.0, 119.0)),
+                _span("Quarta riga normale.", (82.0, 122.0, 288.0, 135.0)),
+            ]
+        )
+
+        self.assertEqual(_split_text_block_by_horizontal_clusters(block), [block])
 
 
 def test_merges_word_with_single_letter_suffix_fragment(self):

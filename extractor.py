@@ -1812,12 +1812,110 @@ def _best_text_block_for_bbox(
     return best_block
 
 
+@dataclass(frozen=True)
+class _TextLineGroup:
+    spans: list[TextSpan]
+    bbox: tuple[float, float, float, float]
+
+
 @dataclass
 class _DictBlockMatch:
     dict_bbox: tuple[float, float, float, float]
     dict_text: str
     matched_block: tuple[float, float, float, float, str, int, int] | None
     source_spans: list[TextSpan] | None = None
+
+
+def _split_text_block_by_horizontal_clusters(text_block: TextBlock) -> list[TextBlock]:
+    """Split a raw PyMuPDF block when its internal lines form separate x bands."""
+    line_groups = _line_groups_from_text_block(text_block)
+    clusters = _horizontal_line_clusters(line_groups)
+    if clusters is None:
+        return [text_block]
+    return [_text_block_from_line_groups(cluster) for cluster in clusters]
+
+
+def _line_groups_from_text_block(text_block: TextBlock) -> list[_TextLineGroup]:
+    clean_spans = [span for span in text_block.spans if span.text.strip()]
+    if not clean_spans:
+        return []
+
+    line_groups: list[list[TextSpan]] = []
+    for span in clean_spans:
+        span_center = (span.bbox[1] + span.bbox[3]) / 2.0
+        for group in line_groups:
+            group_bbox = _union_bboxes([item.bbox for item in group])
+            group_center = (group_bbox[1] + group_bbox[3]) / 2.0
+            group_height = max(1.0, group_bbox[3] - group_bbox[1])
+            horizontal_gap = max(span.bbox[0] - group_bbox[2], group_bbox[0] - span.bbox[2], 0.0)
+            if (
+                abs(span_center - group_center) <= max(3.0, group_height * 0.45)
+                and horizontal_gap <= 24.0
+            ):
+                group.append(span)
+                break
+        else:
+            line_groups.append([span])
+
+    lines: list[_TextLineGroup] = []
+    for group in line_groups:
+        ordered = sorted(group, key=lambda span: span.bbox[0])
+        lines.append(
+            _TextLineGroup(spans=ordered, bbox=_union_bboxes([span.bbox for span in ordered]))
+        )
+    return lines
+
+
+def _horizontal_line_clusters(
+    line_groups: list[_TextLineGroup],
+) -> list[list[_TextLineGroup]] | None:
+    if len(line_groups) < 4:
+        return None
+
+    ordered_by_x = sorted(line_groups, key=lambda line: line.bbox[0])
+    gaps = [
+        ordered_by_x[index + 1].bbox[0] - ordered_by_x[index].bbox[0]
+        for index in range(len(ordered_by_x) - 1)
+    ]
+    if not gaps:
+        return None
+
+    split_index = max(range(len(gaps)), key=gaps.__getitem__)
+    left = ordered_by_x[: split_index + 1]
+    right = ordered_by_x[split_index + 1 :]
+    if len(left) < 2 or len(right) < 2:
+        return None
+
+    left_bbox = _union_bboxes([line.bbox for line in left])
+    right_bbox = _union_bboxes([line.bbox for line in right])
+    x0_gap = right[0].bbox[0] - left[-1].bbox[0]
+    column_gap = right_bbox[0] - left_bbox[2]
+    vertical_overlap = min(left_bbox[3], right_bbox[3]) - max(left_bbox[1], right_bbox[1])
+
+    if x0_gap < 100.0:
+        return None
+    if column_gap < 12.0:
+        return None
+    if vertical_overlap < 5.0:
+        return None
+
+    return [
+        sorted(left, key=lambda line: (line.bbox[1], line.bbox[0])),
+        sorted(right, key=lambda line: (line.bbox[1], line.bbox[0])),
+    ]
+
+
+def _text_block_from_line_groups(line_groups: list[_TextLineGroup]) -> TextBlock:
+    spans = [span for line in line_groups for span in line.spans]
+    return TextBlock(spans=spans, bbox=_union_bboxes([line.bbox for line in line_groups]))
+
+
+def _dict_match_group_has_distinct_horizontal_clusters(group: list[_DictBlockMatch]) -> bool:
+    spans = [span for match in group for span in (match.source_spans or [])]
+    if not spans:
+        return False
+    bbox = _union_bboxes([span.bbox for span in spans])
+    return len(_split_text_block_by_horizontal_clusters(TextBlock(spans=spans, bbox=bbox))) > 1
 
 
 def _group_consecutive_dict_block_matches(
@@ -1846,6 +1944,8 @@ def _text_block_from_dict_match_group(group: list[_DictBlockMatch]) -> TextBlock
     if matched_block is None:
         return None
     if any(match.matched_block != matched_block for match in group):
+        return None
+    if _dict_match_group_has_distinct_horizontal_clusters(group):
         return None
 
     block_hint_text = _text_from_block(matched_block)
@@ -1940,6 +2040,8 @@ def _recover_missing_text_blocks_from_block_hints(
 
         if _text_block_is_already_represented(candidate, recovered):
             continue
+        if _text_block_is_represented_by_combined_blocks(candidate, recovered):
+            continue
         if _text_block_is_duplicate_table_text(candidate, excluded_tables):
             continue
         if _is_noise_block(candidate.spans):
@@ -1959,6 +2061,31 @@ def _block_hint_looks_like_page_number(text: str) -> bool:
     """
     clean = text.strip()
     return clean.isdigit() and len(clean) <= 3
+
+
+def _text_block_is_represented_by_combined_blocks(
+    candidate: TextBlock,
+    text_blocks: Sequence[TextBlock],
+) -> bool:
+    candidate_text = _normalize_table_duplicate_text(candidate.text)
+    if not candidate_text:
+        return True
+
+    covered_texts: list[str] = []
+    for text_block in text_blocks:
+        existing_text = _normalize_table_duplicate_text(text_block.text)
+        if not existing_text:
+            continue
+        if not _bbox_contains(candidate.bbox, text_block.bbox):
+            continue
+        if existing_text not in candidate_text:
+            continue
+        covered_texts.append(existing_text)
+
+    if len(covered_texts) < 2:
+        return False
+    covered_length = sum(len(text) for text in covered_texts)
+    return covered_length >= len(candidate_text) * 0.8
 
 
 def _text_block_is_already_represented(
@@ -3278,8 +3405,9 @@ class PDFExtractor:
 
             if spans and not _is_noise_block(spans):
                 text_block = TextBlock(spans=spans, bbox=bbox)
-                if not _text_block_is_duplicate_table_text(text_block, excluded_tables):
-                    text_blocks.append(text_block)
+                for split_block in _split_text_block_by_horizontal_clusters(text_block):
+                    if not _text_block_is_duplicate_table_text(split_block, excluded_tables):
+                        text_blocks.append(split_block)
 
         block_hints = page.get_text("blocks")
         text_blocks = _rebuild_text_blocks_from_block_hints(text_blocks, block_hints)
