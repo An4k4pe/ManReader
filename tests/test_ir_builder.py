@@ -393,6 +393,40 @@ class IRBuilderTest(unittest.TestCase):
 
         self.assertTrue(all(block.role != "callout" for block in ir_page.blocks))
 
+    def test_merges_two_side_by_side_callouts_by_matching_each_region(self):
+        right_body = (
+            "✦ Rancoroso: quando subisci un torto, ricordi l'offesa e ottieni "
+            "motivazione per rispondere al momento giusto."
+        )
+        left_body = (
+            "✦ Difficile da Prendere: sai divincolarti rapidamente quando qualcuno "
+            "prova a bloccarti o trascinarti via."
+        )
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock("CAPACITÀ: RANCOROSO", (120.0, 10.0, 190.0, 22.0)),
+                FakeTextBlock("CAPACITÀ: DIFFICILE DA PRENDERE", (10.0, 11.0, 112.0, 23.0)),
+                FakeTextBlock(right_body, (122.0, 40.0, 195.0, 78.0)),
+                FakeTextBlock(left_body, (12.0, 41.0, 110.0, 79.0)),
+            ],
+            images=[
+                FakeAsset((118.0, 18.0, 198.0, 82.0), saved_path="images/right-callout.jpeg"),
+                FakeAsset((8.0, 19.0, 115.0, 83.0), saved_path="images/left-callout.jpeg"),
+            ],
+        )
+
+        ir_page = self.build_page(page)
+
+        callouts = [block for block in ir_page.blocks if block.role == "callout"]
+        self.assertEqual(len(callouts), 2)
+        callout_by_title = {block.metadata["title"]: block.text for block in callouts}
+        self.assertEqual(callout_by_title["CAPACITÀ: RANCOROSO"], right_body)
+        self.assertEqual(callout_by_title["CAPACITÀ: DIFFICILE DA PRENDERE"], left_body)
+        self.assertNotEqual(
+            callout_by_title["CAPACITÀ: RANCOROSO"],
+            callout_by_title["CAPACITÀ: DIFFICILE DA PRENDERE"],
+        )
+
     def test_does_not_merge_callout_when_bullet_list_body_is_outside_graphic_region(self):
         body = (
             "✦ Scontroso: fatichi a collaborare con gli altri e tendi a rispondere "

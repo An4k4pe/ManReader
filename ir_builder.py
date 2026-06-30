@@ -122,35 +122,31 @@ def _build_blocks(page) -> list[BlockIR]:
 
 def _merge_callout_blocks(blocks: list[BlockIR]) -> list[BlockIR]:
     merged: list[BlockIR] = []
-    index = 0
+    consumed_body_indexes: set[int] = set()
 
-    while index < len(blocks):
-        current = blocks[index]
-        body_indexes = _callout_body_indexes(blocks, index)
+    for index, current in enumerate(blocks):
+        if index in consumed_body_indexes:
+            continue
+
+        body_indexes = _callout_body_indexes(blocks, index, consumed_body_indexes)
 
         if body_indexes:
-            body_index_set = set(body_indexes)
+            consumed_body_indexes.update(body_indexes)
             merged.append(
                 _build_callout_block(current, [blocks[body_index] for body_index in body_indexes])
             )
-            merged.extend(
-                block
-                for block_index, block in enumerate(
-                    blocks[index + 1 : body_indexes[-1] + 1],
-                    start=index + 1,
-                )
-                if block_index not in body_index_set
-            )
-            index = body_indexes[-1] + 1
             continue
 
         merged.append(current)
-        index += 1
 
     return merged
 
 
-def _callout_body_indexes(blocks: list[BlockIR], title_index: int) -> list[int] | None:
+def _callout_body_indexes(
+    blocks: list[BlockIR],
+    title_index: int,
+    consumed_body_indexes: set[int] | None = None,
+) -> list[int] | None:
     title_block = blocks[title_index]
     if not _is_callout_title_block(title_block):
         return None
@@ -159,9 +155,14 @@ def _callout_body_indexes(blocks: list[BlockIR], title_index: int) -> list[int] 
     if region is None:
         return None
 
+    consumed_body_indexes = consumed_body_indexes or set()
     body_indexes: list[int] = []
     index = title_index + 1
     while index < len(blocks):
+        if index in consumed_body_indexes:
+            index += 1
+            continue
+
         block = blocks[index]
         if block.page_num != title_block.page_num:
             return _valid_callout_body_indexes(blocks, body_indexes)
@@ -172,6 +173,11 @@ def _callout_body_indexes(blocks: list[BlockIR], title_index: int) -> list[int] 
 
         if block.type == "text":
             if not _block_belongs_to_region(block, region):
+                if not body_indexes and _is_other_callout_title_for_different_region(
+                    blocks, index, region
+                ):
+                    index += 1
+                    continue
                 return _valid_callout_body_indexes(blocks, body_indexes)
             if not _is_callout_body_fragment_block(block):
                 return _valid_callout_body_indexes(blocks, body_indexes)
@@ -183,6 +189,21 @@ def _callout_body_indexes(blocks: list[BlockIR], title_index: int) -> list[int] 
         continue
 
     return _valid_callout_body_indexes(blocks, body_indexes)
+
+
+def _is_other_callout_title_for_different_region(
+    blocks: list[BlockIR],
+    title_index: int,
+    selected_region: BlockIR,
+) -> bool:
+    title_block = blocks[title_index]
+    if not _is_callout_title_block(title_block):
+        return False
+    if _block_belongs_to_region(title_block, selected_region):
+        return False
+
+    other_region = _callout_region_for_title(blocks, title_index)
+    return other_region is not None and other_region is not selected_region
 
 
 def _callout_region_for_title(blocks: list[BlockIR], title_index: int) -> BlockIR | None:
