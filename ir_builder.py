@@ -84,8 +84,11 @@ def _is_reading_flow_asset(asset: object) -> bool:
 def _build_blocks(page) -> list[BlockIR]:
     page_num = int(page.page_num)
     elements = []
+    table_bboxes = _reading_flow_table_bboxes(page)
 
     for index, block in enumerate(getattr(page, "text_blocks", []), start=1):
+        if _text_block_covered_by_table(block, table_bboxes):
+            continue
         y, x = _sort_position(block)
         elements.append((y, x, "text", index, block))
 
@@ -118,6 +121,32 @@ def _build_blocks(page) -> list[BlockIR]:
             blocks.append(_build_asset_block(item, kind, page_num, index, order))
 
     return _renumber_blocks(_merge_callout_blocks(blocks))
+
+
+def _reading_flow_table_bboxes(page) -> list[tuple[float, float, float, float]]:
+    bboxes: list[tuple[float, float, float, float]] = []
+    for asset in getattr(page, "tables", []):
+        if not _is_reading_flow_asset(asset):
+            continue
+        bbox = _bbox_tuple(getattr(asset, "bbox", None))
+        if bbox is not None and _bbox_area(bbox) > 0:
+            bboxes.append(bbox)
+    return bboxes
+
+
+def _text_block_covered_by_table(
+    block: object,
+    table_bboxes: list[tuple[float, float, float, float]],
+) -> bool:
+    text_bbox = _bbox_tuple(getattr(block, "bbox", None))
+    if text_bbox is None or _bbox_area(text_bbox) <= 0:
+        return False
+
+    return any(
+        _bbox_contains(table_bbox, text_bbox, tolerance=1.5)
+        or _bbox_overlap_ratio(text_bbox, table_bbox) >= 0.90
+        for table_bbox in table_bboxes
+    )
 
 
 def _merge_callout_blocks(blocks: list[BlockIR]) -> list[BlockIR]:

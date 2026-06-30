@@ -106,6 +106,66 @@ class IRBuilderTest(unittest.TestCase):
 
         self.assertEqual([block.text for block in ir_page.blocks], ["first", "second"])
 
+    def test_excludes_text_block_inside_table_bbox_from_reading_flow(self):
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock("1–3 Giovane, meno punti attributo", (20.0, 20.0, 80.0, 30.0)),
+                FakeTextBlock("Testo fuori tabella", (20.0, 70.0, 80.0, 82.0)),
+            ],
+            tables=[FakeAsset((10.0, 10.0, 90.0, 40.0), saved_path="tables/table.csv", ext="csv")],
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertNotIn(
+            "1–3 Giovane, meno punti attributo", [block.text for block in ir_page.blocks]
+        )
+        self.assertIn("Testo fuori tabella", [block.text for block in ir_page.blocks])
+        self.assertTrue(any(block.type == "table" for block in ir_page.blocks))
+
+    def test_preserves_text_block_outside_table_bbox(self):
+        page = FakePage(
+            text_blocks=[FakeTextBlock("Paragrafo normale", (20.0, 60.0, 80.0, 72.0))],
+            tables=[FakeAsset((10.0, 10.0, 90.0, 40.0), saved_path="tables/table.csv", ext="csv")],
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertIn("Paragrafo normale", [block.text for block in ir_page.blocks])
+
+    def test_preserves_note_below_table_bbox(self):
+        note = "* Sei abilità allenate. † Fino a un massimo di 18."
+        page = FakePage(
+            text_blocks=[FakeTextBlock(note, (10.0, 43.0, 90.0, 55.0))],
+            tables=[FakeAsset((10.0, 10.0, 90.0, 40.0), saved_path="tables/table.csv", ext="csv")],
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertIn(note, [block.text for block in ir_page.blocks])
+
+    def test_preserves_text_near_table_with_small_overlap(self):
+        text = "Testo vicino alla tabella"
+        page = FakePage(
+            text_blocks=[FakeTextBlock(text, (20.0, 38.0, 80.0, 50.0))],
+            tables=[FakeAsset((10.0, 10.0, 90.0, 40.0), saved_path="tables/table.csv", ext="csv")],
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertIn(text, [block.text for block in ir_page.blocks])
+
+    def test_preserves_text_with_partial_table_overlap_below_threshold(self):
+        text = "Testo parzialmente sovrapposto"
+        page = FakePage(
+            text_blocks=[FakeTextBlock(text, (20.0, 35.0, 80.0, 55.0))],
+            tables=[FakeAsset((10.0, 10.0, 90.0, 40.0), saved_path="tables/table.csv", ext="csv")],
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertIn(text, [block.text for block in ir_page.blocks])
+
     def test_marks_text_with_question_marker_as_bullet_list(self):
         page = FakePage(
             text_blocks=[FakeTextBlock("❖ Domanda uno ❖ Domanda due", (10.0, 10.0, 50.0, 20.0))]
