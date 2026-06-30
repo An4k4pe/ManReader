@@ -1910,6 +1910,106 @@ def _text_block_from_line_groups(line_groups: list[_TextLineGroup]) -> TextBlock
     return TextBlock(spans=spans, bbox=_union_bboxes([line.bbox for line in line_groups]))
 
 
+def _sort_local_two_column_zones(
+    blocks: list[TextBlock],
+    page_width: float,
+    page_height: float,
+) -> list[TextBlock]:
+    """Reorder local two-column bands on pages that are otherwise single-column."""
+    ordered = sorted(blocks, key=lambda block: (block.bbox[1], block.bbox[0]))
+    result: list[TextBlock] = []
+    index = 0
+
+    while index < len(ordered):
+        block = ordered[index]
+        if _block_outside_local_column_body(block, page_height) or _local_column_zone_boundary(
+            block,
+            page_width,
+        ):
+            result.append(block)
+            index += 1
+            continue
+
+        band = [block]
+        cursor = index + 1
+        while cursor < len(ordered):
+            candidate = ordered[cursor]
+            if _block_outside_local_column_body(candidate, page_height):
+                break
+            if _local_column_zone_boundary(candidate, page_width):
+                break
+            previous = band[-1]
+            vertical_gap = candidate.bbox[1] - previous.bbox[3]
+            if vertical_gap > 42.0:
+                break
+            band.append(candidate)
+            cursor += 1
+
+        result.extend(_sort_local_two_column_band(band, page_width))
+        index = cursor
+
+    return result
+
+
+def _block_outside_local_column_body(block: TextBlock, page_height: float) -> bool:
+    return block.bbox[1] < page_height * 0.06 or block.bbox[1] > page_height * 0.92
+
+
+def _local_column_zone_boundary(block: TextBlock, page_width: float) -> bool:
+    width = block.bbox[2] - block.bbox[0]
+    if width >= page_width * 0.55:
+        return True
+    return block.avg_font_size >= 16.0 and width >= page_width * 0.20
+
+
+def _sort_local_two_column_band(band: list[TextBlock], page_width: float) -> list[TextBlock]:
+    if len(band) < 5:
+        return band
+
+    split_x = _local_two_column_split_x(band, page_width)
+    if split_x is None:
+        return band
+
+    left = [block for block in band if block.bbox[0] < split_x]
+    right = [block for block in band if block.bbox[0] >= split_x]
+    if len(left) < 2 or len(right) < 2:
+        return band
+
+    left_bbox = _union_bboxes([block.bbox for block in left])
+    right_bbox = _union_bboxes([block.bbox for block in right])
+    if min(left_bbox[3], right_bbox[3]) - max(left_bbox[1], right_bbox[1]) < 24.0:
+        return band
+
+    return sorted(left, key=lambda block: (block.bbox[1], block.bbox[0])) + sorted(
+        right,
+        key=lambda block: (block.bbox[1], block.bbox[0]),
+    )
+
+
+def _local_two_column_split_x(band: list[TextBlock], page_width: float) -> float | None:
+    starts = sorted((block.bbox[0], index, block) for index, block in enumerate(band))
+    gaps = [starts[index + 1][0] - starts[index][0] for index in range(len(starts) - 1)]
+    if not gaps:
+        return None
+
+    split_index = max(range(len(gaps)), key=gaps.__getitem__)
+    gap = gaps[split_index]
+    if gap < 70.0:
+        return None
+
+    split_x = (starts[split_index][0] + starts[split_index + 1][0]) / 2.0
+    if not (page_width * 0.25 <= split_x <= page_width * 0.55):
+        return None
+
+    left = [block for start, _, block in starts[: split_index + 1] if start < split_x]
+    right = [block for start, _, block in starts[split_index + 1 :] if start >= split_x]
+    if not left or not right:
+        return None
+    if min(block.bbox[0] for block in right) - max(block.bbox[0] for block in left) < 70.0:
+        return None
+    return split_x
+
+
 def _dict_match_group_has_distinct_horizontal_clusters(group: list[_DictBlockMatch]) -> bool:
     spans = [span for match in group for span in (match.source_spans or [])]
     if not spans:
@@ -2891,7 +2991,7 @@ class PDFExtractor:
         if self.config.extract_tables:
             tables = self._extract_tables(plumb_page, fitz_page, page_num, describer)
 
-        text_blocks = self._extract_text(fitz_page, width, tables)
+        text_blocks = self._extract_text(fitz_page, width, height, tables)
 
         return PageData(
             page_num=page_num,
@@ -3375,6 +3475,7 @@ class PDFExtractor:
         self,
         page,
         width: float,
+        height: float,
         excluded_tables: Sequence[TableBlock],
     ) -> list[TextBlock]:
         raw = page.get_text("dict")
@@ -3432,6 +3533,7 @@ class PDFExtractor:
             self._col_stats[2] += 1
         else:
             text_blocks.sort(key=lambda b: b.bbox[1])
+            text_blocks = _sort_local_two_column_zones(text_blocks, width, height)
             self._col_stats[1] += 1
 
         return text_blocks

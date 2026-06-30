@@ -1,6 +1,11 @@
 import unittest
 
-from extractor import TextBlock, TextSpan, _split_text_block_by_horizontal_clusters
+from extractor import (
+    TextBlock,
+    TextSpan,
+    _sort_local_two_column_zones,
+    _split_text_block_by_horizontal_clusters,
+)
 
 
 class ExtractorTextJoinTest(unittest.TestCase):
@@ -143,6 +148,79 @@ class ExtractorTextJoinTest(unittest.TestCase):
 
         self.assertEqual(_split_text_block_by_horizontal_clusters(block), [block])
 
+    def test_sorts_local_two_column_band_inside_single_column_page(self):
+        blocks = [
+            _text_block("left intro", (62.0, 460.0, 296.0, 500.0)),
+            _text_block("right intro", (314.0, 462.0, 550.0, 536.0)),
+            _text_block("left values", (62.0, 510.0, 296.0, 560.0)),
+            _text_block("right force", (314.0, 546.0, 470.0, 560.0)),
+            _text_block("right constitution", (314.0, 570.0, 500.0, 584.0)),
+            _text_block("left box title", (139.0, 584.0, 221.0, 597.0)),
+            _text_block("right agility", (314.0, 594.0, 549.0, 607.0)),
+            _text_block("left box body", (79.0, 611.0, 279.0, 682.0)),
+            _text_block("right intelligence", (314.0, 618.0, 549.0, 643.0)),
+            _text_block("right will", (314.0, 654.0, 508.0, 667.0)),
+            _text_block("right charisma", (314.0, 678.0, 477.0, 691.0)),
+        ]
+
+        sorted_blocks = _sort_local_two_column_zones(blocks, page_width=612.0, page_height=790.0)
+
+        self.assertEqual(
+            [block.text for block in sorted_blocks],
+            [
+                "left intro",
+                "left values",
+                "left box title",
+                "left box body",
+                "right intro",
+                "right force",
+                "right constitution",
+                "right agility",
+                "right intelligence",
+                "right will",
+                "right charisma",
+            ],
+        )
+
+    def test_preserves_heading_before_local_two_column_band(self):
+        blocks = [
+            _text_block("heading", (200.0, 410.0, 405.0, 456.0), size=24.0),
+            _text_block("left first", (62.0, 462.0, 296.0, 500.0)),
+            _text_block("right first", (314.0, 462.0, 550.0, 536.0)),
+            _text_block("left second", (62.0, 510.0, 296.0, 560.0)),
+            _text_block("right second", (314.0, 546.0, 470.0, 560.0)),
+            _text_block("right third", (314.0, 570.0, 500.0, 584.0)),
+        ]
+
+        sorted_blocks = _sort_local_two_column_zones(blocks, page_width=612.0, page_height=790.0)
+
+        self.assertEqual(
+            [block.text for block in sorted_blocks],
+            ["heading", "left first", "left second", "right first", "right second", "right third"],
+        )
+
+    def test_does_not_reorder_single_column_page(self):
+        blocks = [
+            _text_block("line one", (62.0, 100.0, 296.0, 120.0)),
+            _text_block("line two", (65.0, 130.0, 292.0, 150.0)),
+            _text_block("line three", (70.0, 160.0, 298.0, 180.0)),
+            _text_block("line four", (62.0, 190.0, 290.0, 210.0)),
+            _text_block("line five", (68.0, 220.0, 294.0, 240.0)),
+        ]
+
+        self.assertEqual(_sort_local_two_column_zones(blocks, 612.0, 790.0), blocks)
+
+    def test_does_not_treat_small_indents_as_two_columns(self):
+        blocks = [
+            _text_block("line one", (62.0, 100.0, 250.0, 120.0)),
+            _text_block("line two", (90.0, 130.0, 292.0, 150.0)),
+            _text_block("line three", (74.0, 160.0, 298.0, 180.0)),
+            _text_block("line four", (108.0, 190.0, 290.0, 210.0)),
+            _text_block("line five", (80.0, 220.0, 294.0, 240.0)),
+        ]
+
+        self.assertEqual(_sort_local_two_column_zones(blocks, 612.0, 790.0), blocks)
+
 
 def test_merges_word_with_single_letter_suffix_fragment(self):
     block = _block(
@@ -197,11 +275,25 @@ def _block(spans: list[TextSpan]) -> TextBlock:
     return TextBlock(spans=spans, bbox=(0.0, 0.0, 100.0, 100.0))
 
 
-def _span(text: str, bbox: tuple[float, float, float, float]) -> TextSpan:
+def _text_block(
+    text: str,
+    bbox: tuple[float, float, float, float],
+    *,
+    size: float = 10.0,
+) -> TextBlock:
+    return TextBlock(spans=[_span(text, bbox, size=size)], bbox=bbox)
+
+
+def _span(
+    text: str,
+    bbox: tuple[float, float, float, float],
+    *,
+    size: float = 10.0,
+) -> TextSpan:
     return TextSpan(
         text=text,
         font="TestFont",
-        size=10.0,
+        size=size,
         bold=False,
         italic=False,
         bbox=bbox,
