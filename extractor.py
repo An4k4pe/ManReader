@@ -33,6 +33,7 @@ import statistics
 from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
@@ -2152,6 +2153,68 @@ def _recover_missing_text_blocks_from_block_hints(
     return sorted(recovered, key=lambda block: (block.bbox[1], block.bbox[0]))
 
 
+def _deduplicate_overlapping_text_blocks(text_blocks: Sequence[TextBlock]) -> list[TextBlock]:
+    deduplicated: list[TextBlock] = []
+
+    for candidate in text_blocks:
+        duplicate_index = _overlapping_text_duplicate_index(candidate, deduplicated)
+        if duplicate_index is None:
+            deduplicated.append(candidate)
+            continue
+        if _text_block_quality_score(candidate) > _text_block_quality_score(
+            deduplicated[duplicate_index]
+        ):
+            deduplicated[duplicate_index] = candidate
+
+    return deduplicated
+
+
+def _overlapping_text_duplicate_index(
+    candidate: TextBlock,
+    text_blocks: Sequence[TextBlock],
+) -> int | None:
+    candidate_bbox = candidate.bbox
+    candidate_text = _normalize_text_duplicate_text(candidate.text)
+    if not candidate_text:
+        return None
+
+    for index, text_block in enumerate(text_blocks):
+        existing_bbox = text_block.bbox
+        if not (
+            _bbox_contains(existing_bbox, candidate_bbox, tolerance=1.5)
+            or _bbox_contains(candidate_bbox, existing_bbox, tolerance=1.5)
+            or _bbox_overlap_ratio(candidate_bbox, existing_bbox) >= 0.95
+        ):
+            continue
+
+        existing_text = _normalize_text_duplicate_text(text_block.text)
+        if _text_duplicate_similarity(candidate_text, existing_text) >= 0.96:
+            return index
+
+    return None
+
+
+def _normalize_text_duplicate_text(text: str) -> str:
+    clean = _re.sub(r"[^\wÀ-ÖØ-öø-ÿ]+", " ", text, flags=_re.UNICODE).casefold()
+    return " ".join(clean.split())
+
+
+def _text_duplicate_similarity(first: str, second: str) -> float:
+    if not first or not second:
+        return 0.0
+    if first == second:
+        return 1.0
+    if first.replace(" ", "") == second.replace(" ", ""):
+        return 1.0
+    return SequenceMatcher(None, first, second).ratio()
+
+
+def _text_block_quality_score(text_block: TextBlock) -> tuple[int, int]:
+    text = " ".join(text_block.text.split())
+    normalized = _normalize_text_duplicate_text(text)
+    return (len(normalized.split()), len(text))
+
+
 def _block_hint_looks_like_page_number(text: str) -> bool:
     """Evita che il fallback da get_text("blocks") recuperi numeri pagina.
 
@@ -3517,6 +3580,7 @@ class PDFExtractor:
             block_hints,
             excluded_tables,
         )
+        text_blocks = _deduplicate_overlapping_text_blocks(text_blocks)
         # Determina layout colonne per questa pagina
         forced = self.config.columns
         if forced == 1:

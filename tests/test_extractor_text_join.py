@@ -3,6 +3,7 @@ import unittest
 from extractor import (
     TextBlock,
     TextSpan,
+    _deduplicate_overlapping_text_blocks,
     _sort_local_two_column_zones,
     _split_text_block_by_horizontal_clusters,
 )
@@ -147,6 +148,33 @@ class ExtractorTextJoinTest(unittest.TestCase):
         )
 
         self.assertEqual(_split_text_block_by_horizontal_clusters(block), [block])
+
+    def test_deduplicates_overlapping_nearly_identical_text_preferring_spaced_version(self):
+        fused = _text_block(
+            "PUNTI VOLONTÀ (PV) Il numero massimo di PVè pari al tuo valore.",
+            (314.6, 350.2, 543.5, 415.5),
+        )
+        spaced = _text_block(
+            "PUNTI VOLONTÀ (PV) Il numero massimo di PV è pari al tuo valore.",
+            (314.6, 350.2, 543.5, 415.5),
+        )
+
+        deduplicated = _deduplicate_overlapping_text_blocks([fused, spaced])
+
+        self.assertEqual(len(deduplicated), 1)
+        self.assertEqual(deduplicated[0].text, spaced.text)
+
+    def test_does_not_deduplicate_nearby_different_text_blocks(self):
+        first = _text_block(
+            "PUNTI FERITA Questo valore determina i danni.", (314.0, 266.0, 540.0, 331.0)
+        )
+        second = _text_block(
+            "PUNTI VOLONTÀ Questo valore serve per la magia.", (314.0, 350.0, 543.0, 415.0)
+        )
+
+        deduplicated = _deduplicate_overlapping_text_blocks([first, second])
+
+        self.assertEqual([block.text for block in deduplicated], [first.text, second.text])
 
     def test_sorts_local_two_column_band_inside_single_column_page(self):
         blocks = [
