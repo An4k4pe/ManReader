@@ -68,17 +68,43 @@ class IRBuilderTest(unittest.TestCase):
         document = build_document_ir([page], source_path="manual.pdf")
         return document.pages[0]
 
-    def test_orders_text_blocks_on_same_row_left_to_right(self):
+    def test_preserves_extractor_text_block_order_instead_of_yx_sorting(self):
         page = FakePage(
             text_blocks=[
-                FakeTextBlock("second", (40.0, 10.0, 50.0, 20.0)),
-                FakeTextBlock("first", (10.0, 10.0, 20.0, 20.0)),
+                FakeTextBlock("left top", (10.0, 10.0, 30.0, 20.0)),
+                FakeTextBlock("left lower", (10.0, 40.0, 30.0, 50.0)),
+                FakeTextBlock("right top", (60.0, 12.0, 80.0, 22.0)),
+                FakeTextBlock("right lower", (60.0, 42.0, 80.0, 52.0)),
             ]
         )
 
         ir_page = self.build_page(page)
 
-        self.assertEqual([block.text for block in ir_page.blocks], ["first", "second"])
+        self.assertEqual(
+            [block.text for block in ir_page.blocks],
+            ["left top", "left lower", "right top", "right lower"],
+        )
+
+    def test_interleaves_assets_without_reordering_text_blocks(self):
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock("left top", (10.0, 10.0, 30.0, 20.0)),
+                FakeTextBlock("left lower", (10.0, 40.0, 30.0, 50.0)),
+                FakeTextBlock("right top", (60.0, 12.0, 80.0, 22.0)),
+            ],
+            images=[FakeAsset((5.0, 30.0, 35.0, 35.0), saved_path="images/mid.png")],
+            vectors=[FakeAsset((5.0, 5.0, 35.0, 8.0), saved_path="vectors/top.svg", ext="svg")],
+        )
+
+        ir_page = self.build_page(page)
+
+        text_blocks = [block for block in ir_page.blocks if block.type == "text"]
+        self.assertEqual(
+            [block.text for block in text_blocks], ["left top", "left lower", "right top"]
+        )
+        self.assertEqual(
+            [block.type for block in ir_page.blocks], ["vector", "text", "image", "text", "text"]
+        )
 
     def test_merges_adjacent_text_fragments_on_same_row(self):
         page = FakePage(

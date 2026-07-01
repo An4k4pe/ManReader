@@ -83,32 +83,33 @@ def _is_reading_flow_asset(asset: object) -> bool:
 
 def _build_blocks(page) -> list[BlockIR]:
     page_num = int(page.page_num)
-    elements = []
+    text_elements = []
+    asset_elements = []
     table_bboxes = _reading_flow_table_bboxes(page)
 
     for index, block in enumerate(getattr(page, "text_blocks", []), start=1):
         if _text_block_covered_by_table(block, table_bboxes):
             continue
         y, x = _sort_position(block)
-        elements.append((y, x, "text", index, block))
+        text_elements.append((y, x, "text", index, block))
 
     for index, asset in enumerate(getattr(page, "images", []), start=1):
         if _is_reading_flow_asset(asset):
             y, x = _sort_position(asset)
-            elements.append((y, x, "image", index, asset))
+            asset_elements.append((y, x, "image", index, asset))
 
     for index, asset in enumerate(getattr(page, "vectors", []), start=1):
         if _is_reading_flow_asset(asset):
             y, x = _sort_position(asset)
-            elements.append((y, x, "vector", index, asset))
+            asset_elements.append((y, x, "vector", index, asset))
 
     for index, asset in enumerate(getattr(page, "tables", []), start=1):
         if _is_reading_flow_asset(asset):
             y, x = _sort_position(asset)
-            elements.append((y, x, "table", index, asset))
+            asset_elements.append((y, x, "table", index, asset))
 
-    sorted_elements = sorted(elements, key=lambda e: (e[0], e[1]))
-    merged_elements = _merge_adjacent_text_elements(sorted_elements)
+    ordered_elements = _interleave_assets_preserving_text_order(text_elements, asset_elements)
+    merged_elements = _merge_adjacent_text_elements(ordered_elements)
 
     blocks = []
     for order, (_, _, kind, index, item) in enumerate(
@@ -121,6 +122,25 @@ def _build_blocks(page) -> list[BlockIR]:
             blocks.append(_build_asset_block(item, kind, page_num, index, order))
 
     return _renumber_blocks(_merge_callout_blocks(blocks))
+
+
+def _interleave_assets_preserving_text_order(
+    text_elements: list[tuple[float, float, str, int, object]],
+    asset_elements: list[tuple[float, float, str, int, object]],
+) -> list[tuple[float, float, str, int, object]]:
+    ordered_assets = sorted(asset_elements, key=lambda element: (element[0], element[1]))
+    ordered: list[tuple[float, float, str, int, object]] = []
+    asset_index = 0
+
+    for text_element in text_elements:
+        text_y = text_element[0]
+        while asset_index < len(ordered_assets) and ordered_assets[asset_index][0] <= text_y:
+            ordered.append(ordered_assets[asset_index])
+            asset_index += 1
+        ordered.append(text_element)
+
+    ordered.extend(ordered_assets[asset_index:])
+    return ordered
 
 
 def _reading_flow_table_bboxes(page) -> list[tuple[float, float, float, float]]:
