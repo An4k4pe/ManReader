@@ -3599,33 +3599,52 @@ class PDFExtractor:
         self, blocks: list[TextBlock], split_x: float, page_width: float
     ) -> list[TextBlock]:
         """
-        Ordina blocchi per doppia colonna separando quelli a piena larghezza
-        (titoli, intestazioni di sezione) dai blocchi di colonna veri.
-
-        I blocchi piu larghi del 60% della pagina vengono trattati come
-        full-width e posizionati prima/dopo i blocchi di colonna in base
-        alla loro posizione Y relativa alla zona colonnata.
+        Ordina blocchi per doppia colonna preservando la continuita di colonna
+        dentro zone verticali separate da heading full-width/cross-gutter.
         """
-        fw_limit = page_width * 0.60
-        full_w = sorted(
-            [b for b in blocks if (b.bbox[2] - b.bbox[0]) >= fw_limit], key=lambda b: b.bbox[1]
+        ordered = sorted(blocks, key=lambda block: (block.bbox[1], block.bbox[0]))
+        result: list[TextBlock] = []
+        zone: list[TextBlock] = []
+
+        for block in ordered:
+            if self._double_column_zone_boundary(block, split_x, page_width):
+                result.extend(self._sort_double_column_zone(zone, split_x))
+                zone = []
+                result.append(block)
+            else:
+                zone.append(block)
+
+        result.extend(self._sort_double_column_zone(zone, split_x))
+        return result
+
+    @staticmethod
+    def _double_column_zone_boundary(
+        block: TextBlock,
+        split_x: float,
+        page_width: float,
+    ) -> bool:
+        width = block.bbox[2] - block.bbox[0]
+        if width >= page_width * 0.60:
+            return True
+        crosses_gutter = block.bbox[0] < split_x < block.bbox[2]
+        return crosses_gutter and block.avg_font_size >= 16.0 and width >= page_width * 0.20
+
+    @staticmethod
+    def _sort_double_column_zone(zone: list[TextBlock], split_x: float) -> list[TextBlock]:
+        trailing = sorted(
+            [
+                block
+                for block in zone
+                if block.bbox[0] < split_x < block.bbox[2] and block.avg_font_size < 9.5
+            ],
+            key=lambda b: b.bbox[1],
         )
-        col_b = [b for b in blocks if (b.bbox[2] - b.bbox[0]) < fw_limit]
-
-        if not col_b:
-            return full_w
-
-        col_top = min(b.bbox[1] for b in col_b)
-        col_bottom = max(b.bbox[3] for b in col_b)
-
-        fw_above = [b for b in full_w if b.bbox[3] <= col_top]
-        fw_below = [b for b in full_w if b.bbox[1] >= col_bottom]
-        fw_inside = [b for b in full_w if b not in fw_above and b not in fw_below]
-
-        left = sorted([b for b in col_b if b.bbox[0] < split_x], key=lambda b: b.bbox[1])
-        right = sorted([b for b in col_b if b.bbox[0] >= split_x], key=lambda b: b.bbox[1])
-
-        return fw_above + fw_inside + left + right + fw_below
+        left = sorted([block for block in zone if block.bbox[0] < split_x], key=lambda b: b.bbox[1])
+        left = [block for block in left if block not in trailing]
+        right = sorted(
+            [block for block in zone if block.bbox[0] >= split_x], key=lambda b: b.bbox[1]
+        )
+        return left + right + trailing
 
     @staticmethod
     def _overlaps_any(bbox: tuple, excluded: list[tuple], threshold: float = 0.3) -> bool:
