@@ -98,7 +98,19 @@ def _should_start_new_paragraph(previous: BlockIR, current: BlockIR) -> bool:
 
     vertical_gap = current.bbox[1] - previous.bbox[3]
     font_size = _paragraph_font_size(previous.style, current.style)
+    if _looks_like_column_transition(previous.bbox, current.bbox, font_size):
+        return True
     return vertical_gap >= font_size * 1.2
+
+
+def _looks_like_column_transition(
+    previous_bbox: tuple[float, float, float, float],
+    current_bbox: tuple[float, float, float, float],
+    font_size: float,
+) -> bool:
+    current_is_higher = current_bbox[1] < previous_bbox[1] - font_size * 1.2
+    horizontal_gap = current_bbox[0] - previous_bbox[2]
+    return current_is_higher and horizontal_gap >= font_size * 1.2
 
 
 def _is_quote_attribution_block(

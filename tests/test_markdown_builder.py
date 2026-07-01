@@ -69,6 +69,56 @@ class MarkdownBuilderTest(unittest.TestCase):
             markdown,
         )
 
+    def test_column_transition_with_negative_vertical_gap_starts_new_paragraph(self):
+        document = _document(
+            [
+                _text(
+                    "b1",
+                    "MOVIMENTO Questo valore si basa sulla tua AGI.",
+                    bbox=(62.4, 158.2, 290.8, 211.5),
+                    style={"avg_font_size": "12"},
+                ),
+                _text(
+                    "b2",
+                    "DANNO BONUS Il danno bonus aumenta il danno inflitto.",
+                    bbox=(314.6, 110.2, 547.3, 163.5),
+                    style={"avg_font_size": "12"},
+                ),
+            ]
+        )
+
+        markdown = build_markdown(document)
+
+        self.assertIn(
+            "MOVIMENTO Questo valore si basa sulla tua AGI.\n\n"
+            "DANNO BONUS Il danno bonus aumenta il danno inflitto.",
+            markdown,
+        )
+        self.assertNotIn("AGI. DANNO BONUS", markdown)
+
+    def test_same_column_fragment_with_negative_vertical_gap_stays_same_paragraph(self):
+        document = _document(
+            [
+                _text(
+                    "b1",
+                    "Prima frase.",
+                    bbox=(62.4, 158.2, 290.8, 211.5),
+                    style={"avg_font_size": "12"},
+                ),
+                _text(
+                    "b2",
+                    "continua nella stessa colonna",
+                    bbox=(70.0, 150.0, 300.0, 163.5),
+                    style={"avg_font_size": "12"},
+                ),
+            ]
+        )
+
+        markdown = build_markdown(document)
+
+        self.assertIn("Prima frase. continua nella stessa colonna", markdown)
+        self.assertNotIn("Prima frase.\n\ncontinua nella stessa colonna", markdown)
+
     def test_wide_vertical_gap_without_strong_punctuation_stays_same_paragraph(self):
         document = _document(
             [
