@@ -31,6 +31,7 @@ class FakeAsset:
         is_background: bool = False,
         is_duplicate: bool = False,
         sha: str | None = None,
+        classification: str | None = None,
     ) -> None:
         self.bbox = bbox
         self.saved_path = saved_path
@@ -39,6 +40,7 @@ class FakeAsset:
         self.is_background = is_background
         self.is_duplicate = is_duplicate
         self.sha = sha
+        self.classification = classification
 
 
 class FakePage:
@@ -105,6 +107,116 @@ class IRBuilderTest(unittest.TestCase):
         self.assertEqual(
             [block.type for block in ir_page.blocks], ["vector", "text", "image", "text", "text"]
         )
+
+    def test_decorative_image_does_not_enter_reading_flow(self):
+        page = FakePage(
+            text_blocks=[FakeTextBlock("text", (10.0, 20.0, 30.0, 30.0))],
+            images=[
+                FakeAsset(
+                    (5.0, 5.0, 35.0, 35.0),
+                    saved_path="images/decorative.png",
+                    classification=" decorative ",
+                )
+            ],
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertEqual([block.type for block in ir_page.blocks], ["text"])
+
+    def test_decorative_vector_does_not_enter_reading_flow(self):
+        page = FakePage(
+            text_blocks=[FakeTextBlock("text", (10.0, 20.0, 30.0, 30.0))],
+            vectors=[
+                FakeAsset(
+                    (5.0, 5.0, 35.0, 35.0),
+                    saved_path="vectors/decorative.svg",
+                    ext="svg",
+                    classification="Decorative",
+                )
+            ],
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertEqual([block.type for block in ir_page.blocks], ["text"])
+
+    def test_readable_or_unclassified_image_remains_in_reading_flow(self):
+        page = FakePage(
+            images=[
+                FakeAsset(
+                    (5.0, 5.0, 35.0, 35.0),
+                    saved_path="images/readable.png",
+                    classification="readable",
+                ),
+                FakeAsset((40.0, 5.0, 70.0, 35.0), saved_path="images/unclassified.png"),
+            ]
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertEqual([block.type for block in ir_page.blocks], ["image", "image"])
+        assets = [block.asset for block in ir_page.blocks]
+        self.assertTrue(all(asset is not None for asset in assets))
+        self.assertEqual(
+            [asset.classification for asset in assets if asset is not None], ["readable", None]
+        )
+
+    def test_table_remains_in_reading_flow_with_no_classification(self):
+        page = FakePage(
+            tables=[FakeAsset((5.0, 5.0, 35.0, 35.0), saved_path="tables/table.csv", ext="csv")]
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertEqual([block.type for block in ir_page.blocks], ["table"])
+        asset = ir_page.blocks[0].asset
+        self.assertIsNotNone(asset)
+        if asset is not None:
+            self.assertEqual(asset.classification, "table")
+
+    def test_structural_image_without_callout_does_not_remain_in_reading_flow(self):
+        page = FakePage(
+            text_blocks=[FakeTextBlock("ordinary text", (10.0, 40.0, 90.0, 55.0))],
+            images=[
+                FakeAsset(
+                    (8.0, 8.0, 98.0, 60.0),
+                    saved_path="images/frame.jpeg",
+                    classification="STRUCTURAL",
+                )
+            ],
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertEqual([block.type for block in ir_page.blocks], ["text"])
+
+    def test_structural_vector_can_define_callout_region_but_is_removed_after_merge(self):
+        body = (
+            "✦ Punti Volontà: 3 Puoi attivare questa capacità per ottenere un vantaggio "
+            "quando la situazione lo consente."
+        )
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock("CAPACITÀ: CORAGGIOSO", (10.0, 10.0, 90.0, 20.0)),
+                FakeTextBlock(body, (10.0, 26.0, 95.0, 56.0)),
+            ],
+            vectors=[
+                FakeAsset(
+                    (8.0, 8.0, 98.0, 60.0),
+                    saved_path="vectors/callout-frame.svg",
+                    ext="svg",
+                    classification=" Structural ",
+                )
+            ],
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertEqual([block.type for block in ir_page.blocks], ["text"])
+        self.assertEqual(ir_page.blocks[0].role, "callout")
+        self.assertEqual(ir_page.blocks[0].metadata["title"], "CAPACITÀ: CORAGGIOSO")
+        self.assertEqual(ir_page.blocks[0].text, body)
 
     def test_merges_adjacent_text_fragments_on_same_row(self):
         page = FakePage(

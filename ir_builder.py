@@ -75,10 +75,22 @@ def _sort_position(item: object) -> tuple[float, float]:
     return (bbox[1], bbox[0])
 
 
-def _is_reading_flow_asset(asset: object) -> bool:
+def _asset_explicit_classification(asset: object) -> str | None:
+    classification = getattr(asset, "classification", None)
+    if not isinstance(classification, str):
+        return None
+    normalized = classification.strip().lower()
+    return normalized or None
+
+
+def _is_reading_flow_asset(asset: object, kind: str | None = None) -> bool:
     # Background, decorations, and duplicates can stay in the asset index,
     # but they should not enter the IR reading flow.
-    return not (getattr(asset, "is_background", False) or getattr(asset, "is_duplicate", False))
+    if getattr(asset, "is_background", False) or getattr(asset, "is_duplicate", False):
+        return False
+    if kind == "table":
+        return True
+    return _asset_explicit_classification(asset) not in {"background", "decorative"}
 
 
 def _build_blocks(page) -> list[BlockIR]:
@@ -94,17 +106,17 @@ def _build_blocks(page) -> list[BlockIR]:
         text_elements.append((y, x, "text", index, block))
 
     for index, asset in enumerate(getattr(page, "images", []), start=1):
-        if _is_reading_flow_asset(asset):
+        if _is_reading_flow_asset(asset, "image"):
             y, x = _sort_position(asset)
             asset_elements.append((y, x, "image", index, asset))
 
     for index, asset in enumerate(getattr(page, "vectors", []), start=1):
-        if _is_reading_flow_asset(asset):
+        if _is_reading_flow_asset(asset, "vector"):
             y, x = _sort_position(asset)
             asset_elements.append((y, x, "vector", index, asset))
 
     for index, asset in enumerate(getattr(page, "tables", []), start=1):
-        if _is_reading_flow_asset(asset):
+        if _is_reading_flow_asset(asset, "table"):
             y, x = _sort_position(asset)
             asset_elements.append((y, x, "table", index, asset))
 
@@ -121,7 +133,8 @@ def _build_blocks(page) -> list[BlockIR]:
         else:
             blocks.append(_build_asset_block(item, kind, page_num, index, order))
 
-    return _renumber_blocks(_merge_callout_blocks(blocks))
+    merged_blocks = _merge_callout_blocks(blocks)
+    return _renumber_blocks(_drop_structural_graphic_assets(merged_blocks))
 
 
 def _interleave_assets_preserving_text_order(
@@ -146,7 +159,7 @@ def _interleave_assets_preserving_text_order(
 def _reading_flow_table_bboxes(page) -> list[tuple[float, float, float, float]]:
     bboxes: list[tuple[float, float, float, float]] = []
     for asset in getattr(page, "tables", []):
-        if not _is_reading_flow_asset(asset):
+        if not _is_reading_flow_asset(asset, "table"):
             continue
         bbox = _bbox_tuple(getattr(asset, "bbox", None))
         if bbox is not None and _bbox_area(bbox) > 0:
@@ -189,6 +202,18 @@ def _merge_callout_blocks(blocks: list[BlockIR]) -> list[BlockIR]:
         merged.append(current)
 
     return merged
+
+
+def _drop_structural_graphic_assets(blocks: list[BlockIR]) -> list[BlockIR]:
+    return [
+        block
+        for block in blocks
+        if not (
+            block.type in {"image", "vector"}
+            and block.asset is not None
+            and _asset_explicit_classification(block.asset) == "structural"
+        )
+    ]
 
 
 def _callout_body_indexes(
@@ -780,7 +805,7 @@ def _classification_for(kind: str, asset: object) -> str | None:
         return "background"
     if kind == "table":
         return "table"
-    return None
+    return _asset_explicit_classification(asset)
 
 
 def _bbox_tuple(bbox: object) -> tuple[float, float, float, float] | None:
