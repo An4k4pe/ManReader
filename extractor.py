@@ -2543,6 +2543,7 @@ class ImageBlock:
     is_duplicate: bool = False
     """True se questo hash e gia stato salvato in una pagina precedente.
     Il file esiste gia su disco; nell'EPUB l'occorrenza viene saltata."""
+    classification: str | None = None
 
 
 @dataclass
@@ -2554,6 +2555,7 @@ class VectorBlock:
     index: int
     saved_path: str | None = None
     description: str | None = None
+    classification: str | None = None
 
 
 @dataclass
@@ -2575,6 +2577,171 @@ class PageData:
     tables: list[TableBlock]
     width: float
     height: float
+
+
+def _classify_page_visual_assets(
+    images: Sequence[ImageBlock],
+    vectors: Sequence[VectorBlock],
+    text_blocks: Sequence[TextBlock],
+    tables: Sequence[TableBlock],
+    page_width: float,
+    page_height: float,
+) -> None:
+    for image in images:
+        if image.classification:
+            continue
+        image.classification = _classification_for_visual_asset(
+            image.bbox,
+            text_blocks,
+            tables,
+            page_width,
+            page_height,
+            is_vector=False,
+        )
+
+    for vector in vectors:
+        if vector.classification:
+            continue
+        vector.classification = _classification_for_visual_asset(
+            vector.bbox,
+            text_blocks,
+            tables,
+            page_width,
+            page_height,
+            is_vector=True,
+        )
+
+
+def _classification_for_visual_asset(
+    bbox: BBox,
+    text_blocks: Sequence[TextBlock],
+    tables: Sequence[TableBlock],
+    page_width: float,
+    page_height: float,
+    *,
+    is_vector: bool,
+) -> str | None:
+    page_area = max(page_width * page_height, 1.0)
+    asset_area = _bbox_area(bbox)
+    if asset_area <= 0:
+        return None
+
+    if is_vector and _asset_associated_with_table(bbox, tables):
+        return "structural"
+
+    if _asset_is_box_like_text_region(bbox, text_blocks, page_area):
+        return "structural"
+
+    if _asset_is_small_marginal_decoration(bbox, text_blocks, page_width, page_height, page_area):
+        return "decorative"
+
+    if is_vector and _asset_is_thin_layout_vector(bbox, page_area):
+        return "decorative"
+
+    return None
+
+
+def _asset_associated_with_table(bbox: BBox, tables: Sequence[TableBlock]) -> bool:
+    return any(
+        _bbox_contains(table.bbox, bbox, tolerance=4.0)
+        or _bbox_overlap_ratio(bbox, table.bbox) >= 0.80
+        or _bbox_overlap_ratio(table.bbox, bbox) >= 0.80
+        for table in tables
+    )
+
+
+def _asset_is_box_like_text_region(
+    bbox: BBox,
+    text_blocks: Sequence[TextBlock],
+    page_area: float,
+) -> bool:
+    asset_area = _bbox_area(bbox)
+    area_ratio = asset_area / page_area
+    if not (0.006 <= area_ratio <= 0.28):
+        return False
+
+    contained_text = [
+        block
+        for block in text_blocks
+        if _bbox_contains(bbox, block.bbox, tolerance=3.0)
+        or _bbox_overlap_ratio(block.bbox, bbox) >= 0.90
+    ]
+    if not contained_text:
+        return False
+
+    text_union = _union_bboxes([block.bbox for block in contained_text])
+    text_area_ratio = _bbox_area(text_union) / asset_area
+    return text_area_ratio <= 0.70
+
+
+def _asset_is_small_marginal_decoration(
+    bbox: BBox,
+    text_blocks: Sequence[TextBlock],
+    page_width: float,
+    page_height: float,
+    page_area: float,
+) -> bool:
+    asset_area = _bbox_area(bbox)
+    width = bbox[2] - bbox[0]
+    height = bbox[3] - bbox[1]
+    if asset_area / page_area > 0.004:
+        return False
+    if width > page_width * 0.20 or height > page_height * 0.12:
+        return False
+    in_header_footer = bbox[3] <= page_height * 0.09 or bbox[1] >= page_height * 0.91
+    in_side_margin = bbox[2] <= page_width * 0.08 or bbox[0] >= page_width * 0.92
+    if not (in_header_footer or in_side_margin):
+        return False
+    if _asset_may_be_decorated_initial(bbox, text_blocks, page_width, page_height):
+        return False
+    return not any(_bbox_contains(bbox, block.bbox, tolerance=1.0) for block in text_blocks)
+
+
+def _asset_may_be_decorated_initial(
+    bbox: BBox,
+    text_blocks: Sequence[TextBlock],
+    page_width: float,
+    page_height: float,
+) -> bool:
+    """Return True for assets that may be decorated drop caps.
+
+    A decorated initial is usually close to the left edge of a text block,
+    vertically aligned with the first lines, and sized like a few text lines.
+    It must not be treated as generic marginal decoration.
+    """
+    width = bbox[2] - bbox[0]
+    height = bbox[3] - bbox[1]
+    if width <= 0 or height <= 0:
+        return False
+
+    # Header/footer ornaments are not drop caps.
+    if bbox[3] <= page_height * 0.09 or bbox[1] >= page_height * 0.91:
+        return False
+
+    for block in text_blocks:
+        bx0, by0, _bx1, by1 = block.bbox
+        line_region_height = by1 - by0
+        if line_region_height <= 0:
+            continue
+
+        vertically_aligned = bbox[1] <= by0 + line_region_height * 0.9 and bbox[3] >= by0
+        near_text_left_edge = abs(bbox[2] - bx0) <= page_width * 0.08
+        slightly_left_of_text = bbox[0] <= bx0
+        dropcap_sized = line_region_height * 0.35 <= height <= line_region_height * 2.5
+
+        if vertically_aligned and near_text_left_edge and slightly_left_of_text and dropcap_sized:
+            return True
+
+    return False
+
+
+def _asset_is_thin_layout_vector(bbox: BBox, page_area: float) -> bool:
+    width = bbox[2] - bbox[0]
+    height = bbox[3] - bbox[1]
+    if width <= 0 or height <= 0:
+        return False
+    aspect_ratio = max(width / height, height / width)
+    return aspect_ratio >= 18.0 and _bbox_area(bbox) / page_area <= 0.01
 
 
 # ---------------------------------------------------------------------------
@@ -3079,6 +3246,7 @@ class PDFExtractor:
             tables = self._extract_tables(plumb_page, fitz_page, page_num, describer)
 
         text_blocks = self._extract_text(fitz_page, width, height, tables)
+        _classify_page_visual_assets(images, vectors, text_blocks, tables, width, height)
 
         return PageData(
             page_num=page_num,
