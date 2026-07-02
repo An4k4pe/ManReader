@@ -2013,10 +2013,34 @@ def _local_two_column_split_x(band: list[TextBlock], page_width: float) -> float
 
 def _dict_match_group_has_distinct_horizontal_clusters(group: list[_DictBlockMatch]) -> bool:
     spans = [span for match in group for span in (match.source_spans or [])]
-    if not spans:
+    if spans:
+        bbox = _union_bboxes([span.bbox for span in spans])
+        if len(_split_text_block_by_horizontal_clusters(TextBlock(spans=spans, bbox=bbox))) > 1:
+            return True
+    return _dict_match_group_has_distinct_bbox_clusters(group)
+
+
+def _dict_match_group_has_distinct_bbox_clusters(group: list[_DictBlockMatch]) -> bool:
+    bboxes = [match.dict_bbox for match in group]
+    if len(bboxes) < 2:
         return False
-    bbox = _union_bboxes([span.bbox for span in spans])
-    return len(_split_text_block_by_horizontal_clusters(TextBlock(spans=spans, bbox=bbox))) > 1
+
+    starts = sorted((bbox[0], bbox) for bbox in bboxes)
+    gaps = [starts[index + 1][0] - starts[index][0] for index in range(len(starts) - 1)]
+    if not gaps:
+        return False
+
+    split_index = max(range(len(gaps)), key=gaps.__getitem__)
+    if gaps[split_index] < 70.0:
+        return False
+
+    left = [bbox for _, bbox in starts[: split_index + 1]]
+    right = [bbox for _, bbox in starts[split_index + 1 :]]
+    left_bbox = _union_bboxes(left)
+    right_bbox = _union_bboxes(right)
+    column_gap = right_bbox[0] - left_bbox[2]
+    vertical_overlap = min(left_bbox[3], right_bbox[3]) - max(left_bbox[1], right_bbox[1])
+    return column_gap >= 12.0 and vertical_overlap >= 5.0
 
 
 def _group_consecutive_dict_block_matches(

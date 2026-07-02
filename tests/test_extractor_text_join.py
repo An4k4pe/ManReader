@@ -4,6 +4,8 @@ from extractor import (
     TextBlock,
     TextSpan,
     _deduplicate_overlapping_text_blocks,
+    _rebuild_text_blocks_from_block_hints,
+    _recover_missing_text_blocks_from_block_hints,
     _sort_local_two_column_zones,
     _split_text_block_by_horizontal_clusters,
 )
@@ -148,6 +150,50 @@ class ExtractorTextJoinTest(unittest.TestCase):
         )
 
         self.assertEqual(_split_text_block_by_horizontal_clusters(block), [block])
+
+    def test_rebuild_does_not_use_fused_cross_column_block_hint(self):
+        title = _text_block("CAPACITÀ: PALMIPEDE", (369.0, 669.0, 495.0, 682.0), bold=True)
+        body = _text_block(
+            "✦ Punti Volontà: — Essendo un elfo, puoi meditare.",
+            (79.0, 660.0, 276.0, 743.0),
+        )
+        block_hints = [
+            (
+                79.0,
+                660.0,
+                495.0,
+                743.0,
+                "CAPACITÀ: PALMIPEDE ✦Punti Volontà: — Essendo un elfo, puoi meditare.",
+                0,
+                0,
+            )
+        ]
+
+        rebuilt = _rebuild_text_blocks_from_block_hints([title, body], block_hints)
+
+        self.assertEqual([block.text for block in rebuilt], [title.text, body.text])
+
+    def test_recovery_does_not_add_fused_hint_when_separate_blocks_cover_it(self):
+        title = _text_block("CAPACITÀ: PALMIPEDE", (369.0, 669.0, 495.0, 682.0), bold=True)
+        body = _text_block(
+            "✦ Punti Volontà: — Essendo un elfo, puoi meditare.",
+            (79.0, 660.0, 276.0, 743.0),
+        )
+        block_hints = [
+            (
+                79.0,
+                660.0,
+                495.0,
+                743.0,
+                "CAPACITÀ: PALMIPEDE ✦Punti Volontà: — Essendo un elfo, puoi meditare.",
+                0,
+                0,
+            )
+        ]
+
+        recovered = _recover_missing_text_blocks_from_block_hints([title, body], block_hints, [])
+
+        self.assertEqual([block.text for block in recovered], [body.text, title.text])
 
     def test_deduplicates_overlapping_nearly_identical_text_preferring_spaced_version(self):
         fused = _text_block(
@@ -308,8 +354,9 @@ def _text_block(
     bbox: tuple[float, float, float, float],
     *,
     size: float = 10.0,
+    bold: bool = False,
 ) -> TextBlock:
-    return TextBlock(spans=[_span(text, bbox, size=size)], bbox=bbox)
+    return TextBlock(spans=[_span(text, bbox, size=size, bold=bold)], bbox=bbox)
 
 
 def _span(
@@ -317,12 +364,13 @@ def _span(
     bbox: tuple[float, float, float, float],
     *,
     size: float = 10.0,
+    bold: bool = False,
 ) -> TextSpan:
     return TextSpan(
         text=text,
         font="TestFont",
         size=size,
-        bold=False,
+        bold=bold,
         italic=False,
         bbox=bbox,
     )
