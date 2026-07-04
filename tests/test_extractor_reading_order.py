@@ -29,6 +29,92 @@ def make_block(
 
 
 class ExtractorReadingOrderTest(unittest.TestCase):
+    def test_narrow_left_column_body_crossing_split_is_not_moved_after_right_column(self):
+        extractor = object.__new__(PDFExtractor)
+        split_x = 250.0
+
+        blocks = [
+            make_block(
+                "left intro",
+                (62.0, 138.0, 299.0, 247.0),
+                size=10.0,
+            ),
+            make_block(
+                "left title",
+                (157.0, 281.0, 203.0, 294.0),
+                size=10.0,
+                bold=True,
+            ),
+            make_block(
+                "right intro",
+                (314.0, 138.0, 551.0, 223.0),
+                size=10.0,
+            ),
+            make_block(
+                "right title",
+                (409.0, 239.0, 455.0, 252.0),
+                size=10.0,
+                bold=True,
+            ),
+            make_block(
+                "right body",
+                (332.0, 269.0, 530.0, 412.0),
+                size=9.0,
+            ),
+            make_block(
+                "left body",
+                (79.0, 308.0, 278.0, 403.0),
+                size=9.0,
+            ),
+            make_block(
+                "footer",
+                (225.0, 750.0, 375.0, 760.0),
+                size=7.0,
+            ),
+        ]
+
+        ordered = extractor._sort_double_column(
+            blocks,
+            split_x,
+            PAGE_WIDTH,
+        )
+
+        self.assertEqual(len(ordered), len(blocks))
+        self.assertEqual(
+            sorted(id(block) for block in ordered),
+            sorted(id(block) for block in blocks),
+        )
+        self.assertEqual(
+            [block.text for block in ordered],
+            [
+                "left intro",
+                "left title",
+                "left body",
+                "right intro",
+                "right title",
+                "right body",
+                "footer",
+            ],
+        )
+
+    def test_balanced_cross_split_non_trailing_block_is_preserved(self):
+        extractor = object.__new__(PDFExtractor)
+        split_x = 250.0
+
+        balanced = make_block(
+            "balanced body",
+            (200.0, 300.0, 300.0, 330.0),
+            size=10.0,
+        )
+
+        ordered = extractor._sort_double_column(
+            [balanced],
+            split_x,
+            PAGE_WIDTH,
+        )
+
+        self.assertEqual([block.text for block in ordered], ["balanced body"])
+
     def test_double_column_order_is_split_into_zones_by_cross_gutter_heading(self):
         extractor = object.__new__(PDFExtractor)
         blocks = [

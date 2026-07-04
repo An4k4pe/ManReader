@@ -4322,21 +4322,43 @@ class PDFExtractor:
         return crosses_gutter and block.avg_font_size >= 16.0 and width >= page_width * 0.20
 
     @staticmethod
-    def _sort_double_column_zone(zone: list[TextBlock], split_x: float) -> list[TextBlock]:
-        trailing = sorted(
-            [
-                block
-                for block in zone
-                if block.bbox[0] < split_x < block.bbox[2] and block.avg_font_size < 9.5
-            ],
-            key=lambda b: b.bbox[1],
+    def _sort_double_column_zone(
+        zone: list[TextBlock],
+        split_x: float,
+    ) -> list[TextBlock]:
+        def left_share(block: TextBlock) -> float:
+            width = max(block.bbox[2] - block.bbox[0], 1.0)
+            left_width = max(0.0, min(split_x, block.bbox[2]) - block.bbox[0])
+            return left_width / width
+
+        left: list[TextBlock] = []
+        right: list[TextBlock] = []
+        trailing: list[TextBlock] = []
+
+        for block in zone:
+            crosses_split = block.bbox[0] < split_x < block.bbox[2]
+
+            if not crosses_split:
+                if block.bbox[0] < split_x:
+                    left.append(block)
+                else:
+                    right.append(block)
+                continue
+
+            share = left_share(block)
+
+            if block.avg_font_size < 9.5 and 0.35 <= share <= 0.65:
+                trailing.append(block)
+            elif share < 0.35:
+                right.append(block)
+            else:
+                left.append(block)
+
+        return (
+            sorted(left, key=lambda block: block.bbox[1])
+            + sorted(right, key=lambda block: block.bbox[1])
+            + sorted(trailing, key=lambda block: block.bbox[1])
         )
-        left = sorted([block for block in zone if block.bbox[0] < split_x], key=lambda b: b.bbox[1])
-        left = [block for block in left if block not in trailing]
-        right = sorted(
-            [block for block in zone if block.bbox[0] >= split_x], key=lambda b: b.bbox[1]
-        )
-        return left + right + trailing
 
     @staticmethod
     def _overlaps_any(bbox: tuple, excluded: list[tuple], threshold: float = 0.3) -> bool:
