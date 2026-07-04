@@ -32,6 +32,8 @@ class FakeAsset:
         is_duplicate: bool = False,
         sha: str | None = None,
         classification: str | None = None,
+        role: str | None = None,
+        status: str | None = None,
     ) -> None:
         self.bbox = bbox
         self.saved_path = saved_path
@@ -41,6 +43,8 @@ class FakeAsset:
         self.is_duplicate = is_duplicate
         self.sha = sha
         self.classification = classification
+        self.role = role
+        self.status = status
 
 
 class FakePage:
@@ -161,6 +165,34 @@ class IRBuilderTest(unittest.TestCase):
         self.assertEqual(
             [asset.classification for asset in assets if asset is not None], ["readable", None]
         )
+
+    def test_preserves_dropcap_asset_even_when_decorative(self):
+        page = FakePage(
+            text_blocks=[
+                FakeTextBlock("’avventuriero che interpreti...", (30.0, 20.0, 90.0, 42.0)),
+            ],
+            images=[
+                FakeAsset(
+                    (10.0, 18.0, 28.0, 46.0),
+                    saved_path="images/p0001_dropcap_0001.png",
+                    classification="decorative",
+                    role="dropcap",
+                    status="unresolved",
+                )
+            ],
+        )
+
+        ir_page = self.build_page(page)
+
+        self.assertEqual([block.type for block in ir_page.blocks], ["image", "text"])
+        dropcap = ir_page.blocks[0]
+        self.assertEqual(dropcap.role, "dropcap")
+        self.assertEqual(dropcap.metadata["status"], "unresolved")
+        self.assertEqual(dropcap.metadata["source"], "page_crop")
+        self.assertIsNotNone(dropcap.asset)
+        if dropcap.asset is not None:
+            self.assertEqual(dropcap.asset.path, "images/p0001_dropcap_0001.png")
+            self.assertEqual(dropcap.asset.classification, "decorative")
 
     def test_table_remains_in_reading_flow_with_no_classification(self):
         page = FakePage(

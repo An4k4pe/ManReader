@@ -79,7 +79,10 @@ def build_markdown(document: DocumentIR) -> str:
                     parts.append(current_paragraph)
                     current_paragraph = ""
                 previous_text_block = None
-                parts.append(_render_asset(block.asset, block.page_num, block.type))
+                if block.role == "dropcap":
+                    parts.append(_render_dropcap_placeholder(block))
+                else:
+                    parts.append(_render_asset(block.asset, block.page_num, block.type))
             index += 1
 
     if current_paragraph:
@@ -300,6 +303,24 @@ def _render_callout(block: BlockIR) -> str:
 
     body_lines = [f"> {line.strip()}" if line.strip() else ">" for line in body.splitlines()]
     return "\n".join([header, ">", *body_lines])
+
+
+def _render_dropcap_placeholder(block: BlockIR) -> str:
+    asset = block.asset
+    path = asset.path if asset is not None and asset.path else "#"
+    status = block.metadata.get("status") or "unresolved"
+    bbox = _format_bbox(block.bbox)
+
+    return (
+        f"<!-- dropcap: {status}; image: {path}; page: {block.page_num}; "
+        f'bbox: {bbox}; alt: "Capolettera decorato non risolto" -->'
+    )
+
+
+def _format_bbox(bbox: tuple[float, float, float, float] | None) -> str:
+    if bbox is None:
+        return "[]"
+    return "[" + ", ".join(f"{value:.1f}" for value in bbox) + "]"
 
 
 def _render_asset(asset: AssetIR, page_num: int, block_type: str) -> str:

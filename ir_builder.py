@@ -83,7 +83,42 @@ def _asset_explicit_classification(asset: object) -> str | None:
     return normalized or None
 
 
+def _asset_role(asset: object) -> str | None:
+    role = getattr(asset, "role", None)
+    if not isinstance(role, str):
+        return None
+    normalized = role.strip().lower()
+    return normalized or None
+
+
+def _is_dropcap_asset(asset: object) -> bool:
+    return _asset_role(asset) == "dropcap"
+
+
+def _asset_status(asset: object) -> str | None:
+    status = getattr(asset, "status", None)
+    if not isinstance(status, str):
+        return None
+    normalized = status.strip().lower()
+    return normalized or None
+
+
+def _asset_block_role_and_metadata(asset: object) -> tuple[str | None, dict[str, str]]:
+    if not _is_dropcap_asset(asset):
+        return None, {}
+
+    return "dropcap", {
+        "status": _asset_status(asset) or "unresolved",
+        "source": "page_crop",
+    }
+
+
 def _is_reading_flow_asset(asset: object, kind: str | None = None) -> bool:
+    # Drop caps are visually decorative but semantically meaningful: preserve
+    # the unresolved crop before the generic clutter filters can discard it.
+    if _is_dropcap_asset(asset):
+        return True
+
     # Background, decorations, and duplicates can stay in the asset index,
     # but they should not enter the IR reading flow.
     if getattr(asset, "is_background", False) or getattr(asset, "is_duplicate", False):
@@ -211,6 +246,7 @@ def _drop_structural_graphic_assets(blocks: list[BlockIR]) -> list[BlockIR]:
         if not (
             block.type in {"image", "vector"}
             and block.asset is not None
+            and block.role != "dropcap"
             and _asset_explicit_classification(block.asset) == "structural"
         )
     ]
@@ -743,6 +779,7 @@ def _text_block_role_and_metadata(text: str) -> tuple[str | None, dict[str, str]
 def _build_asset_block(asset: object, kind: str, page_num: int, index: int, order: int) -> BlockIR:
     fallback_id = f"{_page_id(page_num)}_a{index:04d}_{kind}"
     sha = _asset_sha(asset, fallback_id)
+    role, metadata = _asset_block_role_and_metadata(asset)
     asset_ir = AssetIR(
         id=f"asset:{sha}",
         sha=sha,
@@ -765,6 +802,8 @@ def _build_asset_block(asset: object, kind: str, page_num: int, index: int, orde
         order=order,
         bbox=_bbox_tuple(getattr(asset, "bbox", None)),
         asset=asset_ir,
+        role=role,
+        metadata=metadata,
     )
 
 

@@ -187,6 +187,25 @@ class MarkdownBuilderTest(unittest.TestCase):
         self.assertIn("> Descrizione: Mappa del dungeon", markdown)
         self.assertIn("> Descrizione: Mappa del dungeon\n\nDopo asset", markdown)
 
+    def test_dropcap_renders_comment_and_keeps_following_text_raw(self):
+        document = _document(
+            [
+                _dropcap_block(),
+                _text("b1", "’avventuriero che interpreti..."),
+            ]
+        )
+
+        markdown = build_markdown(document)
+
+        self.assertIn("<!-- dropcap: unresolved;", markdown)
+        self.assertIn("image: images/p0001_dropcap_0001.png", markdown)
+        self.assertIn("page: 1", markdown)
+        self.assertIn("bbox: [10.0, 18.0, 28.0, 46.0]", markdown)
+        self.assertIn('alt: "Capolettera decorato non risolto"', markdown)
+        self.assertIn("’avventuriero che interpreti...", markdown)
+        self.assertNotIn("L'avventuriero", markdown)
+        self.assertNotIn("![", markdown)
+
     def test_renders_asset_as_text_link_not_markdown_embed(self):
         document = _document([_asset_block()])
 
@@ -609,6 +628,26 @@ def _asset_block() -> BlockIR:
             path="/assets/map.png",
             title="Mappa",
             description="Mappa del dungeon",
+        ),
+    )
+
+
+def _dropcap_block() -> BlockIR:
+    return BlockIR(
+        id="b-dropcap",
+        type="image",
+        page_num=1,
+        order=1,
+        bbox=(10.0, 18.0, 28.0, 46.0),
+        role="dropcap",
+        metadata={"status": "unresolved", "source": "page_crop"},
+        asset=AssetIR(
+            id="asset-dropcap",
+            sha="sha-dropcap",
+            kind="image",
+            path="images/p0001_dropcap_0001.png",
+            title=None,
+            description=None,
         ),
     )
 

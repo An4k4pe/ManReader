@@ -2544,6 +2544,8 @@ class ImageBlock:
     """True se questo hash e gia stato salvato in una pagina precedente.
     Il file esiste gia su disco; nell'EPUB l'occorrenza viene saltata."""
     classification: str | None = None
+    role: str | None = None
+    status: str | None = None
 
 
 @dataclass
@@ -2808,6 +2810,246 @@ def _asset_may_be_decorated_initial(
     return False
 
 
+def _starts_like_missing_initial(text: str) -> bool:
+    """Return True when text looks like it lost a graphic initial.
+
+    This only marks suspicious starts; it must be combined with geometry.
+    It must never be used to infer or repair the missing letter.
+    """
+    stripped = text.lstrip()
+    if not stripped:
+        return False
+
+    first = stripped[0]
+    return first in {"’", "'", "ʼ", ",", ".", ";", ":", "!", "?"} or first.islower()
+
+
+def _matching_dropcap_first_line_bbox(
+    bbox: BBox,
+    text_blocks: Sequence[TextBlock],
+    tables: Sequence[TableBlock],
+    page_width: float,
+    page_height: float,
+) -> BBox | None:
+    """Return the first text line geometrically associated with a drop-cap candidate."""
+    width = bbox[2] - bbox[0]
+    height = bbox[3] - bbox[1]
+    page_area = max(page_width * page_height, 1.0)
+    asset_area = _bbox_area(bbox)
+
+    if width <= 0 or height <= 0 or asset_area <= 0:
+        return None
+
+    # Header and footer ornaments are not drop caps.
+    if bbox[3] <= page_height * 0.09 or bbox[1] >= page_height * 0.91:
+        return None
+
+    # Exclude panels, portraits, side art, and other large visual regions.
+    if asset_area / page_area > 0.02:
+        return None
+    if width > page_width * 0.18 or height > page_height * 0.14:
+        return None
+
+    if _asset_associated_with_table(bbox, tables):
+        return None
+
+    for block in text_blocks:
+        if not _starts_like_missing_initial(block.text):
+            continue
+
+        first_line_bbox = _first_line_bbox(block)
+        if first_line_bbox is None:
+            continue
+
+        text_x0, text_y0, _text_x1, text_y1 = first_line_bbox
+        line_height = max(text_y1 - text_y0, 1.0)
+
+        vertically_aligned = bbox[1] <= text_y0 + line_height * 1.4 and bbox[3] >= text_y0
+        near_text_start = abs(bbox[2] - text_x0) <= max(
+            30.0,
+            page_width * 0.06,
+        )
+        left_or_indented = bbox[0] <= text_x0 and text_x0 <= bbox[2] + max(
+            8.0,
+            line_height * 0.8,
+        )
+        compatible_height = line_height <= height <= line_height * 4.8
+
+        if vertically_aligned and near_text_start and left_or_indented and compatible_height:
+            return first_line_bbox
+
+    return None
+
+
+def _asset_may_be_unresolved_dropcap(
+    bbox: BBox,
+    text_blocks: Sequence[TextBlock],
+    tables: Sequence[TableBlock],
+    page_width: float,
+    page_height: float,
+) -> bool:
+    """Return True when a raw graphic bbox is compatible with a missing initial.
+
+    Suspicious text is only contextual evidence. Geometry remains the dominant
+    signal and this helper never infers or repairs the missing character.
+    """
+    return (
+        _matching_dropcap_first_line_bbox(
+            bbox,
+            text_blocks,
+            tables,
+            page_width,
+            page_height,
+        )
+        is not None
+    )
+
+
+def _first_line_bbox(block: TextBlock) -> BBox | None:
+    spans = [span for span in block.spans if span.text.strip()]
+    if not spans:
+        return block.bbox
+
+    first_span = min(spans, key=lambda span: (span.bbox[1], span.bbox[0]))
+    first_center_y = (first_span.bbox[1] + first_span.bbox[3]) / 2.0
+    first_height = max(first_span.bbox[3] - first_span.bbox[1], 1.0)
+
+    line_spans = [
+        span
+        for span in spans
+        if abs(((span.bbox[1] + span.bbox[3]) / 2.0) - first_center_y)
+        <= max(3.0, first_height * 0.45)
+    ]
+    if not line_spans:
+        return first_span.bbox
+
+    return _union_bboxes([span.bbox for span in line_spans])
+
+
+def _expand_bbox_to_page(
+    bbox: BBox,
+    page_width: float,
+    page_height: float,
+    padding: float,
+) -> BBox:
+    return (
+        max(0.0, bbox[0] - padding),
+        max(0.0, bbox[1] - padding),
+        min(page_width, bbox[2] + padding),
+        min(page_height, bbox[3] + padding),
+    )
+
+
+def _bbox_from_rect(rect: object) -> BBox | None:
+    try:
+        fitz_rect = fitz.Rect(rect)
+    except Exception:
+        return None
+
+    if fitz_rect.is_empty or fitz_rect.is_infinite:
+        return None
+
+    return (
+        float(fitz_rect.x0),
+        float(fitz_rect.y0),
+        float(fitz_rect.x1),
+        float(fitz_rect.y1),
+    )
+
+
+def _raw_dropcap_bboxes(page: Any) -> list[BBox]:
+    """Collect raw image and drawing rectangles exposed by PyMuPDF."""
+    bboxes: list[BBox] = []
+
+    try:
+        image_infos = page.get_images(full=True)
+    except Exception:
+        image_infos = []
+
+    for image_info in image_infos:
+        if not image_info:
+            continue
+
+        try:
+            rects = page.get_image_rects(image_info[0])
+        except Exception:
+            continue
+
+        for rect in rects:
+            bbox = _bbox_from_rect(rect)
+            if bbox is not None:
+                bboxes.append(bbox)
+
+    try:
+        drawings = page.get_drawings()
+    except Exception:
+        drawings = []
+
+    for drawing in drawings:
+        if not isinstance(drawing, dict):
+            continue
+
+        bbox = _bbox_from_rect(drawing.get("rect"))
+        if bbox is not None:
+            bboxes.append(bbox)
+
+    return bboxes
+
+
+def _dropcap_overlap_ratio_against_smaller(first: BBox, second: BBox) -> float:
+    smaller_area = min(_bbox_area(first), _bbox_area(second))
+    if smaller_area <= 0.0:
+        return 0.0
+    return _bbox_intersection_area(first, second) / smaller_area
+
+
+def _dropcap_bboxes_overlap(first: BBox, second: BBox) -> bool:
+    return (
+        _bbox_contains(first, second, tolerance=2.0)
+        or _bbox_contains(second, first, tolerance=2.0)
+        or _dropcap_overlap_ratio_against_smaller(first, second) >= 0.75
+    )
+
+
+def _dropcap_candidate_score(
+    candidate: tuple[BBox, BBox],
+) -> tuple[float, float]:
+    bbox, first_line_bbox = candidate
+    return (
+        abs(bbox[1] - first_line_bbox[1]),
+        abs(bbox[2] - first_line_bbox[0]),
+    )
+
+
+def _dedupe_dropcap_bboxes(
+    candidates: Sequence[tuple[BBox, BBox]],
+) -> list[BBox]:
+    """Deduplicate candidates associated with the same first text line."""
+    deduped: list[tuple[BBox, BBox]] = []
+
+    for candidate in candidates:
+        bbox, first_line_bbox = candidate
+        duplicate_index = next(
+            (
+                index
+                for index, (existing_bbox, existing_first_line_bbox) in enumerate(deduped)
+                if first_line_bbox == existing_first_line_bbox
+                and _dropcap_bboxes_overlap(bbox, existing_bbox)
+            ),
+            None,
+        )
+
+        if duplicate_index is None:
+            deduped.append(candidate)
+            continue
+
+        if _dropcap_candidate_score(candidate) < _dropcap_candidate_score(deduped[duplicate_index]):
+            deduped[duplicate_index] = candidate
+
+    deduped.sort(key=lambda candidate: (candidate[0][1], candidate[0][0]))
+    return [bbox for bbox, _first_line_bbox in deduped]
+
+
 def _asset_is_thin_layout_vector(bbox: BBox, page_area: float) -> bool:
     width = bbox[2] - bbox[0]
     height = bbox[3] - bbox[1]
@@ -2815,6 +3057,29 @@ def _asset_is_thin_layout_vector(bbox: BBox, page_area: float) -> bool:
         return False
     aspect_ratio = max(width / height, height / width)
     return aspect_ratio >= 18.0 and _bbox_area(bbox) / page_area <= 0.01
+
+
+def _dropcap_bboxes(
+    page: Any,
+    text_blocks: Sequence[TextBlock],
+    tables: Sequence[TableBlock],
+    page_width: float,
+    page_height: float,
+) -> list[BBox]:
+    candidates: list[tuple[BBox, BBox]] = []
+
+    for bbox in _raw_dropcap_bboxes(page):
+        first_line_bbox = _matching_dropcap_first_line_bbox(
+            bbox,
+            text_blocks,
+            tables,
+            page_width,
+            page_height,
+        )
+        if first_line_bbox is not None:
+            candidates.append((bbox, first_line_bbox))
+
+    return _dedupe_dropcap_bboxes(candidates)
 
 
 # ---------------------------------------------------------------------------
@@ -3320,6 +3585,15 @@ class PDFExtractor:
 
         text_blocks = self._extract_text(fitz_page, width, height, tables)
         _classify_page_visual_assets(images, vectors, text_blocks, tables, width, height)
+        self._preserve_unresolved_dropcaps(
+            fitz_page,
+            page_num,
+            images,
+            text_blocks,
+            tables,
+            width,
+            height,
+        )
 
         return PageData(
             page_num=page_num,
@@ -3330,6 +3604,95 @@ class PDFExtractor:
             width=width,
             height=height,
         )
+
+    def _preserve_unresolved_dropcaps(
+        self,
+        page: fitz.Page,
+        page_num: int,
+        images: list[ImageBlock],
+        text_blocks: Sequence[TextBlock],
+        tables: Sequence[TableBlock],
+        page_width: float,
+        page_height: float,
+    ) -> None:
+        """Export likely graphic drop caps as unresolved semantic image crops.
+
+        The crop preserves evidence for later AI, OCR, or manual review. It never
+        infers the missing letter and never changes the extracted text.
+        """
+        bboxes = _dropcap_bboxes(
+            page,
+            text_blocks,
+            tables,
+            page_width,
+            page_height,
+        )
+
+        next_image_index = (
+            max(
+                (image.index for image in images),
+                default=-1,
+            )
+            + 1
+        )
+
+        for crop_index, bbox in enumerate(bboxes, start=1):
+            exported = self._export_dropcap_crop(
+                page,
+                page_num,
+                bbox,
+                crop_index,
+            )
+            if exported is None:
+                continue
+
+            img_bytes, saved_path, crop_bbox = exported
+            images.append(
+                ImageBlock(
+                    image_data=img_bytes,
+                    ext="png",
+                    bbox=crop_bbox,
+                    page_num=page_num,
+                    index=next_image_index,
+                    saved_path=saved_path,
+                    description="Capolettera decorato non risolto",
+                    is_background=False,
+                    is_duplicate=False,
+                    classification=None,
+                    role="dropcap",
+                    status="unresolved",
+                )
+            )
+            next_image_index += 1
+
+    def _export_dropcap_crop(
+        self,
+        page: fitz.Page,
+        page_num: int,
+        bbox: BBox,
+        index: int,
+    ) -> tuple[bytes, str, BBox] | None:
+        crop_bbox = _expand_bbox_to_page(
+            bbox,
+            float(page.rect.width),
+            float(page.rect.height),
+            padding=2.0,
+        )
+
+        try:
+            clip = fitz.Rect(*crop_bbox)
+            if clip.is_empty or clip.width < 2.0 or clip.height < 2.0:
+                return None
+
+            pix = page.get_pixmap(matrix=fitz.Matrix(2.0, 2.0), clip=clip)
+            img_bytes = pix.tobytes("png")
+
+            save_path = self.images_dir / f"p{page_num + 1:04d}_dropcap_{index:04d}.png"
+            save_path.write_bytes(img_bytes)
+            return img_bytes, str(save_path), crop_bbox
+        except Exception as exc:
+            print(f"\n  [warn] dropcap crop p{page_num + 1} #{index}: {exc}")
+            return None
 
     # -----------------------------------------------------------------------
     # Immagini raster
