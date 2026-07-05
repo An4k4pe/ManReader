@@ -2,7 +2,7 @@
 
 ## Stato corrente
 
-Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.8.
+Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.9.
 
 L'architettura target e il piano generale di migrazione sono approvati.
 
@@ -236,9 +236,9 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 La milestone corrente è:
 
-> **Milestone 2 — cattura PyMuPDF shadow**
+> **Milestone 3 — normalizzazione**
 
-### Stato della Milestone 1
+### Stato delle milestone precedenti
 
 La Milestone 1 è completata. Sono presenti e approvati:
 
@@ -247,55 +247,68 @@ La Milestone 1 è completata. Sono presenti e approvati:
 - `primitive_model.py`;
 - `tests/test_capture_primitive_models.py`.
 
-I contratti distinguono capture backend, primitive canoniche, risorsa raster e occorrenza, e non sono collegati alla pipeline legacy.
+La Milestone 2 è completata. Sono presenti e approvati:
 
-### Obiettivo della Milestone 2
+- `pymupdf_capture.py`;
+- `tests/test_pymupdf_capture.py`;
+- `tests/test_pymupdf_visual_capture.py`.
 
-Produrre una `BackendPageCapture` reale tramite PyMuPDF in shadow mode, senza cambiare l'output autorevole.
+La capture PyMuPDF copre geometria, text run raw, immagini raster e drawing
+vettoriali senza usare i modelli elaborati della pipeline legacy.
+
+### Obiettivo della Milestone 3
+
+Produrre una `NormalizedPrimitivePage` reale a partire da
+`BackendPageCapture`, senza cambiare l'output autorevole.
 
 Primo percorso previsto:
 
 ```text
-PDF
-→ adapter PyMuPDF shadow
-→ BackendPageCapture
+BackendPageCapture
+→ adapter di normalizzazione
+→ NormalizedPrimitivePage
 → diagnostica o confronto controllato
 ```
 
 ### Scope iniziale autorizzabile
 
-Il primo micro-step della milestone può includere soltanto ciò che Chat A approva esplicitamente fra:
+Il primo micro-step può includere soltanto:
 
-- geometria pagina;
-- metadati backend;
-- text run raw;
-- identità di sorgente, pagina e capture;
-- serializzazione o diagnostica shadow controllata;
-- test sintetici del nuovo adapter.
-
-Immagini, drawing, link e annotazioni devono essere aggiunti solo in micro-step successivi o se inclusi esplicitamente nel task.
+- conversione uno-a-uno delle osservazioni testuali;
+- conversione uno-a-uno delle occorrenze raster;
+- conversione uno-a-uno dei drawing;
+- coordinate canoniche;
+- identità deterministiche;
+- source observation reference;
+- test sintetici di assenza di perdita.
 
 ### Vincoli della milestone
 
-- non derivare la capture da `PageData`;
-- non usare `TextBlock`, `ImageBlock`, `VectorBlock` o `TableBlock` come raw canonico;
+- non derivare le primitive da `PageData`;
+- non usare `TextBlock`, `ImageBlock`, `VectorBlock` o `TableBlock`;
 - nessuna modifica al risultato Markdown o EPUB;
 - nessuna sostituzione del percorso legacy;
 - nessun refactor generale di `extractor.py`;
-- nessuna ricostruzione testuale, deduplicazione, classificazione o reading order nella capture;
-- nessun ruolo semantico o decisione editoriale;
+- nessuna ricostruzione di paragrafi;
+- nessuna deduplicazione;
+- nessuna classificazione `decorative`, `structural`, `table`, `callout`,
+  `dropcap` o `marginalia`;
+- nessun reading order;
+- nessuna fusione di primitive equivalenti nel primo commit;
 - nessun region graph, profilo, workspace completo, AI o IR 2;
 - nessuna nuova dipendenza senza decisione esplicita;
-- ogni output shadow deve essere diagnostico e chiaramente separato dagli output utente;
+- dump e diagnostica restano locali e non committati;
 - lo smoke DB va eseguito solo se il micro-step può influire sulla pipeline legacy.
 
 ### Criteri minimi
 
-- adapter indipendente dai modelli legacy elaborati;
-- `BackendPageCapture` costruibile da una pagina reale;
-- testo raw conservato senza trim, join o normalizzazione;
-- coordinate e rotazione dichiarate coerentemente;
-- nessuna perdita silenziosa delle osservazioni coperte;
+- `NormalizedPrimitivePage` costruibile da una capture reale;
+- una primitiva per ogni osservazione coperta;
+- coordinate canoniche coerenti;
+- source reference conservata;
+- identità deterministiche;
+- nessuna perdita silenziosa;
+- nessuna semantica nelle primitive;
 - test mirati verdi;
 - Ruff e BasedPyright verdi;
 - suite legacy invariata quando pertinente;
