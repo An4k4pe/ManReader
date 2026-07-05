@@ -1,6 +1,6 @@
 # ManReader — Stato progetto
 
-## Versione corrente: v0.7 — migrazione architetturale incrementale
+## Versione corrente: v0.8 — cattura shadow PyMuPDF
 
 ## 1. Decisione di fase
 
@@ -8,7 +8,9 @@ La fase di progettazione globale è conclusa.
 
 La proposta architetturale A-0.2 è stata revisionata criticamente da Chat B e consolidata da Chat A. La direzione target, gli invarianti e l'ordine generale della migrazione sono approvati.
 
-Il progetto entra ora in **Modalità I — implementazione incrementale**.
+Il progetto è in **Modalità I — implementazione incrementale**.
+
+La **Milestone 1 — contratto minimo di cattura e primitive** è completata. La milestone corrente è la **Milestone 2 — cattura PyMuPDF shadow**.
 
 Questo cambio di fase non autorizza una riscrittura generale della pipeline. Ogni modifica deve:
 
@@ -454,41 +456,83 @@ Non entra nelle prime milestone implementative.
 - fixture benchmark annotate;
 - stato Git noto.
 
-### Milestone 1 — Contratto minimo di cattura e primitive
+### Milestone 1 — Contratto minimo di cattura e primitive — completata
 
-Introdurre soltanto modelli dati backend-neutral o backend-descrittivi, senza collegarli alla pipeline.
+La milestone ha introdotto modelli dati backend-neutral e immutabili, senza collegarli alla pipeline legacy.
 
-Scope previsto:
+File introdotti:
 
-- `PageGeometry`;
+- `geometry_model.py`;
+- `capture_model.py`;
+- `primitive_model.py`;
+- `tests/test_capture_primitive_models.py`.
+
+Contratti introdotti:
+
+- `PageGeometry` e tipi geometrici condivisi;
 - `BackendPageCapture`;
-- osservazioni testo/immagine/drawing;
+- osservazioni testo, immagine, drawing, link e annotazione;
+- `CaptureError` strutturato;
+- `DrawingCommand` tipizzato e backend-neutral;
 - `TextPrimitive`;
 - `ImageOccurrencePrimitive`;
 - `DrawingPrimitive`;
-- `NormalizedPrimitivePage`;
-- test dei modelli.
+- `NormalizedPrimitivePage`.
 
-Vincoli:
+Decisioni consolidate:
 
-- nessuna modifica a `extractor.py`;
-- nessuna modifica a `ir_builder.py`;
-- nessuna modifica ai renderer;
-- nessun nuovo output;
-- nessuna dipendenza nuova;
-- nessun import PyMuPDF/pdfplumber nei modelli.
+- capture e primitive sono dataclass immutabili;
+- le coordinate capture dichiarano unità e sistema di coordinate;
+- le primitive usano coordinate canoniche in punti, origine in alto a sinistra e asse Y verso il basso;
+- la trasformazione affine usa la convenzione `(a, b, c, d, e, f)` con `x' = a*x + c*y + e` e `y' = b*x + d*y + f`;
+- rotazione sorgente e trasformazione applicata restano concetti distinti;
+- occorrenza raster e risorsa backend sono separate;
+- `resource_ref` resta confinato alla capture;
+- ogni primitiva v1 conserva una singola source observation;
+- i drawing conservano comandi geometrici tipizzati senza payload PyMuPDF opaco;
+- le primitive non contengono ruoli semantici, classificazioni, reading order o decisioni editoriali.
 
-### Milestone 2 — Cattura PyMuPDF shadow
+Verifiche di chiusura:
 
-Per pagine selezionate:
+- Ruff verde;
+- BasedPyright: 0 errori, 0 warning, 0 note;
+- 27 test mirati verdi;
+- suite completa: 270 test verdi, incluso smoke DB;
+- nessuna modifica alla pipeline legacy, a IR 1.0 o ai renderer.
+
+### Milestone 2 — Cattura PyMuPDF shadow — corrente
+
+Obiettivo:
 
 ```text
 PDF
+→ adapter PyMuPDF shadow
 → BackendPageCapture
-→ JSON diagnostico
+→ JSON diagnostico o confronto in memoria
 ```
 
-La pipeline legacy continua a produrre l'output.
+La pipeline legacy continua a produrre l'output autorevole.
+
+Vincoli iniziali:
+
+- il nuovo adapter non deve derivare da `PageData`;
+- nessuna modifica all'output Markdown o EPUB;
+- nessuna sostituzione del percorso legacy;
+- nessun refactor generale di `extractor.py`;
+- nessuna normalizzazione semantica o ricostruzione del testo nella capture;
+- nessun ruolo o classificazione definitiva;
+- i dati shadow devono essere chiaramente distinguibili dagli output utente;
+- ogni micro-step deve dichiarare pagine, primitive e osservazioni effettivamente coperte.
+
+Primo obiettivo operativo da progettare:
+
+- adapter PyMuPDF indipendente;
+- cattura della geometria pagina e delle text run raw su pagine selezionate;
+- metadati backend e identità della capture;
+- test sintetici e diagnostica controllata;
+- nessun cambiamento del comportamento legacy.
+
+Immagini, drawing, link e annotazioni possono essere aggiunti in micro-step successivi della stessa milestone dopo la verifica del primo adapter reale.
 
 ### Milestone 3 — Normalizzazione
 
@@ -630,8 +674,24 @@ Chat B viene usata quando servono:
 
 Zed agent non decide l'architettura e non fa commit.
 
-## 16. Primo passo operativo
+## 16. Prossimo passo operativo
 
-Dopo il commit documentale di `State.md` e `AGENTS.MD`, il primo task implementativo sarà la **Milestone 1 — contratto minimo di cattura e primitive**.
+Il prossimo task implementativo appartiene alla **Milestone 2 — cattura PyMuPDF shadow**.
 
-Il task dovrà essere preparato come micro-commit senza collegamento alla pipeline e senza modifica dell'output.
+Prima di preparare il commit, Chat A deve definire un micro-step limitato, con file ammessi e vietati, che produca una `BackendPageCapture` reale senza cambiare l'output legacy.
+
+## 17. Ultimo avanzamento verificato
+
+La Milestone 1 è stata chiusa con un commit dedicato contenente esclusivamente i nuovi contratti e i relativi test.
+
+Stato successivo approvato:
+
+```text
+Milestone 2
+→ adapter PyMuPDF shadow
+→ BackendPageCapture reale
+→ confronto diagnostico
+→ pipeline legacy invariata
+```
+
+La modifica per rendere lo smoke DB opt-in è considerata utile, ma non è ancora implementata e deve restare un micro-commit separato.

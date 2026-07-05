@@ -2,7 +2,7 @@
 
 ## Stato corrente
 
-Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.7.
+Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.8.
 
 L'architettura target e il piano generale di migrazione sono approvati.
 
@@ -236,54 +236,70 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 La milestone corrente è:
 
-> **Milestone 1 — contratto minimo di cattura e primitive**
+> **Milestone 2 — cattura PyMuPDF shadow**
 
-### Obiettivo
+### Stato della Milestone 1
 
-Definire il confine dati fra osservazione backend e primitive normalizzate senza collegarlo alla pipeline corrente.
+La Milestone 1 è completata. Sono presenti e approvati:
 
-### Modelli previsti
+- `geometry_model.py`;
+- `capture_model.py`;
+- `primitive_model.py`;
+- `tests/test_capture_primitive_models.py`.
 
-Capture:
+I contratti distinguono capture backend, primitive canoniche, risorsa raster e occorrenza, e non sono collegati alla pipeline legacy.
 
-- `PageGeometry`;
-- `BackendPageCapture`;
-- `BackendTextObservation`;
-- `BackendImageObservation`;
-- `BackendDrawingObservation`;
-- eventuali tipi minimi per link e annotazioni, solo se inclusi nello scope approvato.
+### Obiettivo della Milestone 2
 
-Primitive:
+Produrre una `BackendPageCapture` reale tramite PyMuPDF in shadow mode, senza cambiare l'output autorevole.
 
-- `TextPrimitive`;
-- `ImageOccurrencePrimitive`;
-- `DrawingPrimitive`;
-- `NormalizedPrimitivePage`.
+Primo percorso previsto:
+
+```text
+PDF
+→ adapter PyMuPDF shadow
+→ BackendPageCapture
+→ diagnostica o confronto controllato
+```
+
+### Scope iniziale autorizzabile
+
+Il primo micro-step della milestone può includere soltanto ciò che Chat A approva esplicitamente fra:
+
+- geometria pagina;
+- metadati backend;
+- text run raw;
+- identità di sorgente, pagina e capture;
+- serializzazione o diagnostica shadow controllata;
+- test sintetici del nuovo adapter.
+
+Immagini, drawing, link e annotazioni devono essere aggiunti solo in micro-step successivi o se inclusi esplicitamente nel task.
 
 ### Vincoli della milestone
 
-- nessuna modifica a `extractor.py`;
-- nessuna modifica a `ir_builder.py`;
-- nessuna modifica a `ir_model.py`, `ir_store.py` o `ir_validate.py`;
-- nessuna modifica a `markdown_builder.py` o `epub_builder.py`;
-- nessuna modifica a `main.py`;
-- nessun collegamento alla pipeline;
-- nessun output diverso;
-- nessuna dipendenza nuova;
-- nessun import di PyMuPDF o pdfplumber nei modelli;
-- niente region graph, profili, workspace completo, decision log, AI o IR 2 in questo commit.
+- non derivare la capture da `PageData`;
+- non usare `TextBlock`, `ImageBlock`, `VectorBlock` o `TableBlock` come raw canonico;
+- nessuna modifica al risultato Markdown o EPUB;
+- nessuna sostituzione del percorso legacy;
+- nessun refactor generale di `extractor.py`;
+- nessuna ricostruzione testuale, deduplicazione, classificazione o reading order nella capture;
+- nessun ruolo semantico o decisione editoriale;
+- nessun region graph, profilo, workspace completo, AI o IR 2;
+- nessuna nuova dipendenza senza decisione esplicita;
+- ogni output shadow deve essere diagnostico e chiaramente separato dagli output utente;
+- lo smoke DB va eseguito solo se il micro-step può influire sulla pipeline legacy.
 
 ### Criteri minimi
 
-- modelli costruibili e tipizzati;
-- primitive immutabili;
-- bbox e coordinate rappresentate in modo coerente;
-- riferimenti alla sorgente espliciti;
-- nessun ruolo semantico nei modelli;
-- test mirati;
-- suite legacy invariata.
-
-La scelta dei nomi file e dei campi definitivi deve essere approvata nel task preparato da Chat A prima dell'implementazione.
+- adapter indipendente dai modelli legacy elaborati;
+- `BackendPageCapture` costruibile da una pagina reale;
+- testo raw conservato senza trim, join o normalizzazione;
+- coordinate e rotazione dichiarate coerentemente;
+- nessuna perdita silenziosa delle osservazioni coperte;
+- test mirati verdi;
+- Ruff e BasedPyright verdi;
+- suite legacy invariata quando pertinente;
+- diff limitato ai file autorizzati.
 
 ## Migrazione e shadow mode
 
