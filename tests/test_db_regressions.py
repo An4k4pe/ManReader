@@ -18,7 +18,7 @@ DB_MARKDOWN = DB_OUTPUT_DIR / "DB.md"
 @unittest.skipUnless(
     os.environ.get("MANREADER_RUN_DB_SMOKE") == "1",
     "DB smoke disabled; set MANREADER_RUN_DB_SMOKE=1 to enable",
-
+)
 class DBRegressionSmokeTests(unittest.TestCase):
     """Local smoke regressions for DB.pdf cases stabilized during development.
 
