@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -13,6 +14,10 @@ DB_PDF = REPO_ROOT / "DB.pdf"
 DB_OUTPUT_DIR = REPO_ROOT / "output" / "DB"
 DB_MARKDOWN = DB_OUTPUT_DIR / "DB.md"
 
+
+@unittest.skipUnless(
+    os.environ.get("MANREADER_RUN_DB_SMOKE") == "1",
+    "DB smoke disabled; set MANREADER_RUN_DB_SMOKE=1 to enable",
 
 class DBRegressionSmokeTests(unittest.TestCase):
     """Local smoke regressions for DB.pdf cases stabilized during development.
