@@ -1,111 +1,182 @@
-# ManReader
+# ManReader — Regole per agenti e sviluppo
 
-Obiettivo:
-Convertire manuali PDF TTRPG in EPUB e Markdown semantici.
+## Stato corrente
 
-Vincoli:
+Il progetto è in fase di progettazione globale v0.6.
 
-- Elaborazione 100% locale
-- Python 3.12+
-- Open source preferito
-- Nessun servizio cloud obbligatorio
+La pipeline attuale è una baseline legacy funzionante. Non deve essere rimossa o rifattorizzata finché non sono approvati:
 
-Stack:
+- architettura target;
+- piano di migrazione;
+- compatibilità;
+- test di non regressione;
+- primo step operativo.
 
-- PyMuPDF
-- Docling
-- EbookLib
-- Ollama
-- Qwen2.5-VL
-- SQLite
+`State.md` è la fonte aggiornata sullo stato e sulle decisioni di fase.
 
-Priorità attuali:
+## Obiettivo
 
-1. Output Markdown
-2. Intermediate Representation (IR)
-3. Entity Extraction
-4. Cross-linking EPUB
+Convertire manuali PDF TTRPG in Markdown ed EPUB semantici, preservando il contenuto e permettendo revisione, profili riutilizzabili e AI locale opzionale.
 
-Regole:
+## Vincoli permanenti
 
-- Soluzioni semplici prima di quelle complesse
-- Non introdurre framework inutili
-- Mantenere compatibilità con PDF digitali e scansioni
+- elaborazione locale;
+- nessun servizio cloud obbligatorio;
+- Python 3.12+;
+- dipendenze minime;
+- open source preferito;
+- compatibilità con PDF digitali e, in futuro, scansioni;
+- nessuna invenzione del contenuto mancante;
+- output e decisioni verificabili;
+- nessun commit automatico.
 
-# Regola AI enrichment
+## Toolchain corrente
 
-L'AI locale non deve riscrivere direttamente il contenuto estratto dal PDF.
+Core attuale:
 
-Pipeline:
+- PyMuPDF;
+- pdfplumber;
+- EbookLib;
+- Pillow;
+- requests;
+- Ollama opzionale.
 
-1. estrazione deterministica → document_ir.json
-2. AI enrichment → enriched_ir.json
-3. modifiche sicure auto-applicate sopra soglia
-4. casi dubbi → review_queue.json
-5. correzioni manuali → human_overrides.json
+Qualità:
 
-Soglie iniziali:
+- Ruff;
+- BasedPyright;
+- unittest.
 
-- confidence >= 0.85: auto-apply
-- 0.60 <= confidence < 0.85: review_queue
-- confidence < 0.60: issues
+Non introdurre nuove dipendenze o framework GUI senza decisione architetturale e motivazione.
 
-L'utente deve poter correggere nome file, descrizione, alt text e classificazione.
+## Fase progettuale
 
-# Stile commenti
+Durante la fase progettuale:
 
-- Tutti i moduli devono avere una docstring iniziale.
-- Tutte le funzioni pubbliche devono avere una docstring.
-- Commentare il "perché", non il "cosa".
-- Non rimuovere commenti esistenti senza motivo.
-- Aggiornare i commenti quando il comportamento cambia.
-- Preferire nomi chiari a commenti superflui.
+- non modificare codice funzionale;
+- non preparare commit;
+- non avviare refactor di `extractor.py`;
+- non aggiungere euristiche specifiche per i manuali benchmark;
+- non scegliere il framework GUI;
+- non implementare workspace, profili o AI calibration;
+- produrre documenti, schemi, alternative, rischi e piani di migrazione.
 
-# Dipendenze
+Chat A decide.
+Chat B revisiona.
+Zed agent non riceve task progettuali.
 
-- Usare il minor numero possibile di librerie.
-- Preferire sempre la standard library.
-- Ogni nuova dipendenza deve essere giustificata.
-- Non introdurre librerie per funzionalità semplici già coperte dalla standard library.
-- Evitare dipendenze fragili o non essenziali.
-- Separare dipendenze opzionali, come AI/OCR/export, dalle dipendenze core.
+## Refactor
 
-# Qualità codice
+La regola non è “niente refactor ampi”, ma:
 
-Il codice deve essere compatibile con:
+> niente refactor ampi non progettati.
 
-- Ruff
-- BasedPyright
+Un refactor approvato può spostare responsabilità fuori da `extractor.py`, `ir_builder.py` o altri moduli, purché:
 
-Ogni commit deve passare:
+- sia previsto dal documento architetturale;
+- abbia una migrazione incrementale;
+- preservi la baseline finché il nuovo percorso non è verificato;
+- sia diviso in commit testabili;
+- abbia rollback chiaro;
+- non mescoli riorganizzazione e cambi funzionali non necessari.
 
-ruff check .
-basedpyright
+Le responsabilità correnti dei moduli sono descrittive, non vincoli permanenti della futura architettura.
 
-# Layout complessi TTRPG
+## Principi architetturali in valutazione
 
-Molti manuali hanno colonne variabili, box, callout, sfondi, strisce decorative e immagini ripetute.
+La progettazione deve mantenere separati:
 
-La logica di estrazione layout esistente non va rimossa durante il refactor IR.
+```text
+primitive osservate
+→ regioni e relazioni
+→ semantica
+→ IR
+→ renderer
+```
 
-La IR deve preservare:
+Inoltre:
 
-- ordine di lettura;
-- bbox;
-- numero pagina;
-- classificazione asset;
-- segnalazione di background/decorative/duplicate;
-- eventuali box o blocchi speciali quando saranno riconosciuti.
+- core headless;
+- CLI e GUI come client;
+- workspace persistente per raw, candidati e review;
+- output finale separato;
+- profili salvabili/importabili/versionati;
+- archetipi di pagina;
+- AI locale opzionale tramite JSON validabili;
+- nessun codice generato dall'AI per manuale;
+- tracciabilità delle decisioni.
 
-I builder Markdown/EPUB non devono reinterpretare il PDF:
-devono consumare la IR.
+Questi principi sono direzione approvata di massima, ma gli schemi e i moduli definitivi devono ancora essere progettati.
 
-# Asset ricorrenti e reading flow
+## Regole AI
 
-Il riconoscimento di sfondi, decorazioni e immagini duplicate deve avvenire in extractor.py/deduplicator.py tramite euristiche deterministiche, non AI.
+L'AI locale può proporre:
 
-ir_builder.py non deve riclassificare gli asset: deve solo rispettare i flag prodotti dall’estrazione.
+- classificazioni;
+- archetipi;
+- mapping glifi;
+- anomalie;
+- decisioni di review.
 
-Gli asset con is_background=True o is_duplicate=True non devono entrare nel flusso leggibile principale della IR.
+Non deve:
 
-In futuro, gli asset duplicati dovranno essere tracciati tramite asset canonico e lista occorrenze/pagine, così che eventuali note o link puntino sempre alla prima occorrenza.
+- riscrivere direttamente il contenuto estratto;
+- generare codice specifico per un manuale;
+- cancellare file;
+- applicare modifiche irreversibili senza validazione;
+- sostituire il profilo persistente.
+
+Ogni proposta AI deve riferirsi a ID stabili e passare da schema validation e policy checks.
+
+## Dati e output
+
+Durante la futura pipeline:
+
+- workspace e output finale devono essere separati;
+- candidati non approvati non entrano nell'output;
+- raw e primitive non devono essere distrutti prematuramente;
+- asset fisico, regione layout e blocco semantico sono entità diverse;
+- profili e decisioni devono essere leggibili e modificabili;
+- i file generati non vanno committati.
+
+## Regole operative di implementazione
+
+Quando si tornerà all'implementazione:
+
+- leggere `State.md` e questo file;
+- un task per commit;
+- file ammessi e vietati;
+- niente hardcode su manuale, pagina, titolo, filename o parola;
+- non usare `git add .`;
+- non committare output, workspace, dump o diagnostica;
+- test sintetici per nuove regole;
+- benchmark reali per generalizzazione;
+- verificare:
+  - Ruff;
+  - BasedPyright;
+  - test mirati;
+  - suite completa;
+  - diff;
+  - `git status --short`.
+
+I builder e la GUI non devono reinterpretare direttamente il PDF: devono consumare dati del core.
+
+## Baseline da preservare
+
+Finché la nuova pipeline non è attiva, restano non-regressione:
+
+- callout DB stabilizzati;
+- tabelle DB e filtro testo duplicato;
+- classificazione clutter;
+- immagini readable;
+- reading order DB, incluso MONETE/CIMELIO;
+- dropcap irrisolti senza invenzione;
+- IR e Markdown correnti.
+
+## Aggiornamento documenti
+
+Aggiornare:
+
+- `State.md` a fine milestone o cambio di fase;
+- `AGENTS.MD` quando cambiano regole permanenti o pipeline approvata;
+- workflow due-chat quando cambiano ruoli e modalità operative.

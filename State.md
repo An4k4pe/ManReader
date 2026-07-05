@@ -1,507 +1,373 @@
 # ManReader — Stato progetto
 
-## Versione corrente: v0.5
+## Versione corrente: v0.6 — fase progettuale globale
 
-## 1. Obiettivo e principi
+## 1. Decisione di fase
 
-ManReader converte manuali PDF per giochi di ruolo in output semantici leggibili, con priorità a Markdown ed EPUB.
+ManReader entra temporaneamente in una fase di progettazione globale.
 
-Principi correnti:
+La pipeline corrente rimane la baseline funzionante e non deve essere riscritta o smontata finché non esiste un'architettura approvata, un piano di migrazione e una strategia di non regressione.
 
-- pipeline locale e deterministica;
-- AI/OCR opzionali solo come enrichment o revisione;
-- correzioni il più possibile upstream;
-- builder Markdown basato sulla IR, senza reinterpretare direttamente il PDF;
-- commit piccoli, verificabili e limitati a un problema reale;
-- niente hardcode su manuale, pagina, titolo, filename o parola;
-- asset decorativi e strutturali preservabili come metadata, ma esclusi dal reading flow;
-- tabelle reali preservate come asset leggibili;
-- nessuna ricostruzione automatica di contenuto non presente nel text layer.
+Durante questa fase:
 
-## 2. Architettura corrente
+- non aggiungere nuove euristiche locali salvo regressioni bloccanti;
+- non avviare refactor di `extractor.py` senza progetto approvato;
+- non preparare commit funzionali;
+- usare i manuali campione per definire requisiti, invarianti e casi limite;
+- separare chiaramente progettazione, revisione architetturale e implementazione;
+- aggiornare questo file quando cambia la fase del progetto.
 
-### 2.1 Pipeline principale
+Il refactor di `extractor.py` è ammesso e probabilmente necessario, ma solo dopo aver deciso i confini della nuova pipeline.
+
+## 2. Obiettivo del prodotto
+
+ManReader converte manuali PDF TTRPG in output semantici leggibili, con priorità a Markdown ed EPUB.
+
+Obiettivi permanenti:
+
+- elaborazione locale;
+- core utilizzabile senza servizi cloud;
+- conservazione del contenuto originale senza invenzioni;
+- output verificabile e correggibile;
+- supporto sia a PDF digitali sia, in futuro, a scansioni;
+- AI/OCR opzionali e separati dal nucleo deterministico;
+- profili dei manuali salvabili, importabili e riutilizzabili;
+- revisione visuale gestibile anche da un utente non tecnico.
+
+## 3. Baseline corrente
+
+### 3.1 Pipeline legacy
 
 ```text
 PDF
 → extractor.py
-→ PageData / text_blocks / images / vectors / tables
+→ PageData / TextBlock / ImageBlock / VectorBlock / TableBlock
 → ir_builder.py
 → DocumentIR
 → markdown_builder.py
 → Markdown
 ```
 
-L’EPUB è ancora parzialmente su un percorso legacy e non è completamente allineato alla IR.
+L'EPUB è ancora parzialmente legacy e non è completamente IR-first.
 
-### 2.2 Moduli
+### 3.2 Responsabilità correnti
 
 - `main.py` — CLI e orchestrazione.
 - `config.py` — parametri layout.
-- `extractor.py` — estrazione testo, immagini, vettoriali e tabelle; TOC; colonne; filtro ripetizioni; classificazione asset; rilevamento dropcap grafici.
-- `deduplicator.py` — deduplicazione asset grafici ripetuti.
-- `describer.py` — descrizioni AI locali tramite Ollama.
-- `ir_model.py` — dataclass IR: `DocumentIR`, `PageIR`, `BlockIR`, `AssetIR`, review/override/entity model.
-- `ir_store.py` — persistenza JSON della IR.
-- `ir_validate.py` — validazione leggera della IR.
-- `ir_builder.py` — costruzione del reading flow e classificazione semantica.
-- `markdown_builder.py` — rendering Markdown dalla IR.
-- `epub_builder.py` — generazione EPUB; non ancora pienamente IR-first.
-- `asset_manager.py` — applicazione post-build di rename/edit da `asset_index.csv`.
-- `requirements.txt` — dipendenze principali.
+- `extractor.py` — accesso PDF, estrazione testo/immagini/vector/tabelle, ricostruzione testo, colonne, reading order, filtro ripetizioni, classificazione asset e dropcap.
+- `deduplicator.py` — deduplicazione asset.
+- `ir_model.py` — modelli della IR corrente.
+- `ir_builder.py` — reading flow finale e parte della classificazione semantica.
+- `ir_store.py` — persistenza JSON.
+- `ir_validate.py` — validazione IR.
+- `markdown_builder.py` — rendering Markdown.
+- `epub_builder.py` — rendering EPUB legacy/parzialmente IR.
+- `describer.py` — AI locale opzionale tramite Ollama.
+- `asset_manager.py` — applicazione post-build delle modifiche da `asset_index.csv`.
 
-## 3. Funzionalità implementate
+`extractor.py` svolge troppe responsabilità. Questo è un problema architetturale riconosciuto, non ancora un task di refactor operativo.
 
-### 3.1 Estrazione e layout
+## 4. Baseline stabilizzata su DB
 
-- Estrazione testo con TOC embedded come fonte principale per i capitoli.
-- Euristiche font come fallback.
-- Rilevamento colonne per pagina.
-- Ordinamento prudente per layout a colonne e zone locali.
-- Filtro statistico di header/footer/watermark ripetuti.
-- Estrazione immagini raster, vettoriali SVG e tabelle CSV.
-- Rebuild prudente dei blocchi PyMuPDF: i block hint fusi o cross-column non devono sostituire blocchi `dict` separabili geometricamente.
-- Split prudente di blocchi raw con cluster orizzontali distinti.
-- Deduplicazione di `TextBlock` sovrapposti o quasi identici.
-- Merge testuale prudente per frammenti adiacenti.
+Restano validi come non-regressione:
 
-### 3.2 IR e builder
-
-- Dataclass IR disponibili:
-  - `DocumentIR`
-  - `PageIR`
-  - `BlockIR`
-  - `AssetIR`
-  - `AIProposal`
-  - `ReviewItem`
-  - `HumanOverride`
-  - `Issue`
-  - `EntityIR`
-- IR salvata sempre in `output/<book>/ir/document_ir.json`.
-- Validazione tramite `ir_validate.py`.
-- Markdown generato dalla IR.
-- CLI `--format epub|markdown|both`.
-- Default ancora `epub`.
-- Asset con `is_background=True` o `is_duplicate=True` esclusi dal reading flow.
-- Asset classificati `decorative` esclusi dal reading flow.
-- Asset classificati `structural` disponibili durante il riconoscimento dei callout e rimossi dal flusso finale.
-- Tabelle preservate nel reading flow come CSV.
-- Asset con ruolo semantico `dropcap` hanno precedenza sul filtro clutter.
-
-## 4. Milestone stabilizzate
-
-### 4.1 Callout e box testuali
-
-Il riconoscimento prudente dei callout è stabilizzato sui casi DB pagine 8–30.
-
-Principi:
-
-- approccio region-first;
-- title e body devono appartenere geometricamente alla stessa regione grafica;
-- supporto a body `role="bullet_list"`;
-- supporto a body composto da più blocchi;
-- asset non testuali fuori regione possono essere ignorati durante la ricerca del body;
+- callout region-first sui casi DB verificati;
 - supporto a callout affiancati;
-- impedito il doppio consumo dello stesso body;
-- rendering Markdown come callout Obsidian `> [!INFO]`;
-- evitare ulteriori scan permissivi senza una regressione concreta.
-
-Casi verificati:
-
-- `TU E GLI ALTRI`
-- `ABBREVIAZIONI`
-- `CREARE IL TUO PERSONAGGIO`
-- `CAPACITÀ: ADATTABILE`
-- `CAPACITÀ: RANCOROSO`
-- `CAPACITÀ: DIFFICILE DA PRENDERE`
-- `CAPACITÀ: PACE INTERIORE`
-- `CAPACITÀ: SCONTROSO`
-- `CAPACITÀ: PALMIPEDE`
-- `CAPACITÀ: ISTINTI DA CACCIATORE`
-- `ALTRI METODI`
-- `MAGIA` pagina 22
-- `MAGIA` pagina 28
-- `DEBOLEZZA`
-- `CAPACITÀ ALTERNATIVE`
-- `CIMELIO`
-- `MONETE`
-
-Follow-up separato:
-
-- distinguere colore, stile e tipo dei box;
-- aggiungere eventuali metadata visuali come `callout_color`, `callout_kind`, `region_bbox`, `visual_classification`;
-- valutare AI locale opzionale su crop del callout, non sull’intera pagina.
-
-### 4.2 Tabelle nel reading flow
-
-Implementato il filtro IR per evitare duplicazione del testo tabellare:
-
-- i blocchi testo contenuti o fortemente sovrapposti alla bbox di una tabella riconosciuta vengono esclusi dal flusso leggibile;
-- il CSV resta l’asset leggibile;
-- note esterne alla bbox della tabella vengono preservate;
-- la regola è geometrica, non testuale.
-
-Caso verificato:
-
-- DB pagina 26, `EFFETTI DELL’ETÀ`: rimosse le righe duplicate dal Markdown, preservata la nota sotto tabella e preservato `p26_tbl1.csv`.
-
-### 4.3 Pulizia clutter asset nel Markdown
-
-Implementata una classificazione geometrica conservativa lato extractor per image/vector.
-
-Classificazioni usate:
-
-- `decorative`
-- `structural`
-- `table`
-- `None` per readable o incerti
-
-Comportamento:
-
-- piccoli glifi marginali, decorazioni header/footer, titolo e corner ad alta confidenza → `decorative`;
-- fondi box/callout, table-background e vector associati a tabelle → `structural`;
-- immagini grandi, centrali, illustrative o ambigue → `None`;
-- tabelle CSV sempre preservate;
-- nessuna whitelist di file, pagine, titoli o parole;
-- asset esportati comunque nelle cartelle `extracted/`.
-
-Verifica DB pagine 8–15:
-
-- `[Immagine:]`: 29 → 7
-- `[Vettoriale:]`: 11 → 0
-- `[Tabella:]`: 10 → 10
-- immagini readable note preservate;
-- callout preservati;
-- asset fisici ancora esportati.
-
-Verifica DB pagine 8–30:
-
-- Markdown pulito e callout ancora leggibili;
-- asset residui principalmente illustrazioni e tabelle reali;
-- un vector residuo su pagina 29 da diagnosticare separatamente.
-
-### 4.4 Capolettere grafici irrisolti
-
-Implementato supporto per capolettere grafici non presenti nel text layer.
-
-Principi:
-
-- nessuna lettera viene inventata;
-- nessuna correzione automatica del testo;
-- nessun OCR o AI nella fase deterministica;
-- la geometria è il segnale dominante;
-- apostrofo, minuscola o punteggiatura iniziale sono segnali contestuali validi;
-- i candidati vengono ricavati da raw image rect e raw drawing rect PyMuPDF;
-- candidati sovrapposti associati alla stessa prima riga vengono deduplicati;
-- viene scelto il candidato meglio allineato all’inizio della prima riga;
-- il capolettera viene esportato come page crop PNG;
-- `ImageBlock.role = "dropcap"`;
-- `status = "unresolved"`;
-- la IR preserva ruolo, stato, bbox, pagina e path;
-- il Markdown emette un commento placeholder;
-- il testo raw resta invariato.
-
-Forma Markdown:
-
-```markdown
-<!-- dropcap: unresolved; image: ...; page: ...; bbox: [...]; alt: "Capolettera decorato non risolto" -->
-```
-
-Verifica DB pagine 8–33:
-
-- `p0011_dropcap_0001.png`
-- `p0033_dropcap_0001.png`
-- un solo placeholder per capolettera reale;
-- nessun duplicato image/drawing sulla pagina 11;
-- IR valida;
-- testo pagina 11 resta `’avventuriero...`;
-- crop ancora migliorabile e può includere una piccola porzione di testo.
-
-Follow-up separato:
-
-- restringere la bbox del crop senza rischiare di tagliare il glifo;
-- risolvere lettera e alt-text definitivo tramite AI/OCR/manual override;
-- non bloccare la pipeline attuale per la qualità del crop.
-
-## 5. Problemi noti
-
-### 5.1 Extractor e segmentazione testo
-
-- Restano frammenti testuali separati o ricostruiti in modo imperfetto.
-- Esempi storici:
-  - `resistent e`
-  - `gl i`
-  - `deci mata`
-  - `p urtroppo`
-  - `suoam ico`
-- Prima di ogni fix: confrontare raw PyMuPDF `dict`, `blocks`, extractor, IR e Markdown.
-- Il rebuild da `get_text("blocks")` può collassare più span e perdere enfasi inline.
-- Follow-up: preservare enfasi inline durante la ricostruzione dei `TextBlock`.
-- Evitare merge generici senza evidenza geometrica.
-
-### 5.2 Heading e struttura
-
-- Titoli con lettere spaziate o decorative, esempio `L’A RRIVO DELL ’O RDA`.
-- Heading incollati, esempio `MECCANICHE ECOMPLICAZIONI`.
-- Gerarchia heading TOC/font ancora da verificare:
-  - capitoli principali talvolta `##` invece di `#`;
-  - sottosezioni talvolta heading errato o testo normale.
-- Possibili residui di indice/manual TOC e footer su run molto brevi.
-
-### 5.3 Tabelle
-
-- Qualità CSV ancora imperfetta in alcuni casi.
-- Caso noto: DB pagina 26, `p26_tbl1.csv`, riga `1–3` con contenuto da verificare.
-- Possibili tabelle frammentate o parzialmente riconosciute.
-- Caso storico: DB pagina 8, possibili frammenti `p8_tbl2.csv`, `p8_tbl3.csv`, `p8_tbl4.csv`.
-- Distinguere meglio body text, label, celle e testo table-like quando il riconoscimento è parziale.
-
-### 5.4 Asset, output e deduplicazione
-
-Il reading flow Markdown è molto più pulito, ma l’output fisico resta grezzo.
-
-Problemi aperti:
-
-- molti asset decorativi o strutturali restano in `extracted/images` e `extracted/vectors`;
-- alcuni asset sono utili solo come regioni o metadata;
-- manca una distinzione chiara tra:
-  - asset esportato;
-  - asset usato nel Markdown;
-  - asset usato solo dalla IR;
-  - asset decorativo;
-  - asset strutturale;
-  - asset semantico irrisolto;
-- canonicalizzazione asset/occurrences/pages ancora da progettare;
-- differenza tra conteggio asset logici e file fisici da diagnosticare;
-- possibili asset non referenziati dal Markdown o dalla IR;
-- `p29_vec2.svg` è un residuo da diagnosticare separatamente;
-- il crop dropcap può includere una piccola porzione di testo.
-
-Non eliminare asset structural necessari a callout, regioni o future analisi.
-
-### 5.5 AI enrichment
-
-- L’AI deve restare separata dalla fase estrattiva.
-- Non deve riscrivere il contenuto deterministico.
-- Deve produrre enrichment, proposta o review.
-- Casi futuri:
-  - risoluzione dropcap;
-  - alt-text immagini;
-  - descrizione diagrammi/mappe;
-  - classificazione visuale callout;
-  - supporto a human override.
-
-### 5.6 EPUB
-
-- Il builder EPUB non è ancora completamente IR-first.
-- Non introdurre fix EPUB dentro commit Markdown/extractor.
-- Allineamento EPUB da trattare come milestone separata.
-
-## 6. Prossime milestone
-
-### 6.1 Priorità immediata — diagnostica output asset
-
-Prima di refactor o cancellazioni:
-
-1. contare asset fisici per tipo;
-2. contare asset logici in IR;
-3. contare asset usati nel Markdown;
-4. distinguere `decorative`, `structural`, `table`, `dropcap`, readable e unknown;
-5. individuare duplicati per hash;
-6. individuare asset non referenziati;
-7. verificare differenza tra conteggi log e file fisici;
-8. proporre un modello minimo per asset index e output.
-
-Obiettivo:
-
-```text
-preservare ciò che serve alla ricostruzione
-mostrare all’utente solo ciò che è utile
-evitare duplicazioni fisiche non necessarie
-```
-
-### 6.2 Priorità successiva — modello asset/output
-
-Valutare campi come:
-
-- `role`
-- `classification`
-- `status`
-- `used_in_markdown`
-- `used_in_ir`
-- `canonical_sha`
-- `occurrence_count`
-- `source_page`
-- `source_bbox`
-- `alt_text`
-- `description`
-
-Non spostare o cancellare file prima di aver definito il modello.
-
-### 6.3 Priorità media
-
-- migliorare qualità CSV/table reconstruction;
-- rivedere heading hierarchy;
-- correggere frammentazione testo con casi reali e test mirati;
-- diagnosticare `p29_vec2.svg`;
-- rifinire crop dropcap;
-- progettare metadata visuali dei callout.
-
-### 6.4 Priorità futura — refactor/comment pass
-
-- eliminare ridondanze senza cambiare comportamento;
-- commentare in inglese le euristiche non ovvie;
-- mantenere test invariati prima/dopo;
-- procedere per area:
-  - extractor;
-  - IR;
-  - Markdown;
-  - tests;
-- documentare soprattutto:
-  - PyMuPDF `dict` vs `blocks`;
-  - colonne e zone;
-  - callout region-first;
-  - classificazione asset;
-  - dedup overlap;
-  - dropcap raw graphics;
-  - paragraphing across columns.
-
-## 7. Asset Index
-
-Registro centrale:
-
-```text
-output/<book>/extracted/asset_index.csv
-```
-
-Campi correnti:
-
-```text
-sha, nome_file, tipo, pagina, titolo, descrizione, modificato
-```
-
-Comportamento:
-
-- SHA MD5 come chiave stabile;
-- `modificato=si` protegge entry editate manualmente;
-- merge su rebuild:
-  - entry protette intoccabili;
-  - nuove entry aggiunte;
-  - entry non protette aggiornate;
-- il builder EPUB usa `titolo` per il testo inline.
-
-Follow-up:
-
-- aggiungere metadata coerenti con classificazione, ruolo, stato e uso effettivo;
-- progettare canonical asset e occurrences senza rompere rename/edit manuali.
-
-## 8. asset_manager.py
-
-Uso:
+- ordine corretto di `MONETE` e `CIMELIO` dopo il fix cross-gutter;
+- tabelle preservate nel reading flow e testo tabellare duplicato rimosso;
+- classificazione extractor-side `decorative` e `structural`;
+- forte riduzione del clutter Markdown;
+- immagini readable preservate;
+- vector di layout e tabelle filtrati quando riconosciuti;
+- dropcap grafici preservati come crop PNG, `role="dropcap"`, `status="unresolved"` e placeholder Markdown;
+- nessuna lettera inventata;
+- suite completa e smoke DB verdi nell'ultima verifica nota.
+
+Prima di iniziare una nuova fase operativa verificare comunque:
 
 ```bash
-python asset_manager.py output/NomePDF/
+git status --short
+python -m unittest
 ```
 
-Flusso:
+## 5. Esito del generalization audit
 
-1. legge `asset_index.csv`;
-2. trova entry con `modificato=si`;
-3. rinomina i file fisici;
-4. aggiorna path e titolo negli XHTML EPUB;
-5. resetta `modificato=no`;
-6. salva il CSV aggiornato.
+Il confronto con Fabula, Lancer, Kult e Vileborn mostra che la pipeline corrente generalizza male fuori dai layout simili a DB.
 
-## 9. AI locale
+Problemi osservati:
 
-### 9.1 Architettura
+- marginalia e bande laterali entrano nel reading flow;
+- liste puntate vengono appiattite;
+- procedure numerate grafiche perdono struttura e ordine;
+- tabelle reali non vengono riconosciute;
+- parti di callout vengono classificate come tabelle;
+- box grandi, compositi o drawing-based non vengono ricostruiti;
+- una regione semantica non coincide necessariamente con un singolo raster/vector;
+- pagine molto grafiche richiedono talvolta una politica editoriale, non una sola classificazione automatica;
+- lo stesso manuale contiene più archetipi di pagina;
+- alcune decisioni, come escludere un indice laterale o preservare una scheda come immagine, dipendono dall'utente.
 
-Pattern strategy:
+Conclusione:
+
+> Non è realistico affidare tutta la semantica a una singola raccolta di soglie universali.
+
+È invece realistico rendere universali:
+
+- osservazione delle primitive;
+- geometria;
+- relazioni;
+- statistiche del documento;
+- clustering delle pagine;
+- rilevamento di candidati e ambiguità.
+
+La semantica finale deve poter combinare:
 
 ```text
-BaseDescriber (ABC)
-→ OllamaDescriber
+evidenze deterministiche
++ profilo del documento
++ archetipi di pagina
++ politica editoriale
++ revisione utente/AI opzionale
 ```
 
-Factory:
+## 6. Direzione architetturale condivisa
+
+Pipeline da progettare:
 
 ```text
-create_describer(backend, ...)
+PDF
+→ primitive raw
+→ workspace persistente
+→ firme e archetipi di pagina
+→ profilo del documento
+→ regioni e relazioni di layout
+→ classificazione semantica
+→ IR
+→ renderer Markdown/EPUB
 ```
 
-Backend Gemini rimosso.
+Principi:
 
-### 9.2 Backend vision
+1. Le primitive raw devono essere disponibili prima delle decisioni legacy.
+2. Asset fisico, regione di layout e blocco semantico sono entità diverse.
+3. Tabelle detector-side sono candidati, non verità semantiche immediate.
+4. Reading order deve operare su regioni o gruppi logici, non solo su blocchi testuali grezzi.
+5. Il core deve essere headless.
+6. CLI e GUI devono essere client dello stesso core.
+7. La GUI serve per revisione visuale, non per contenere logica di estrazione.
+8. Il sistema deve poter funzionare senza AI.
+9. L'AI locale deve proporre decisioni strutturate, non generare codice specifico per manuale.
+10. Ogni decisione deve essere tracciabile e riproducibile.
 
-- Ollama REST `/api/generate`;
-- immagini inviate come base64;
-- modello consigliato corrente: `gemma4:12b`;
-- AI solo opzionale e locale.
+## 7. Workspace persistente
 
-## 10. CLI e ambiente
+Serve un'area di lavoro separata dall'output finale.
 
-### 10.1 Parametri CLI principali
+Principio:
 
-- `--format epub|markdown|both`
-- `--ollama-model NOME`
-- `--ollama-host URL`
-- `--columns auto|1|2`
-- `--column-gap`
-- `--column-split`
-- `--no-dedup`
-- `--auto-background`
-- `--header-zone`
-- `--repeat-threshold`
-- `--pages 1-20`
-- `--no-ai`
+```text
+workspace = raw, candidati, preview, diagnostica, decisioni, profilo in bozza
+output    = solo elementi finalizzati
+```
 
-### 10.2 Ambiente sviluppo
+Struttura indicativa da progettare:
 
-- CachyOS Linux;
-- Fish shell;
-- Python virtualenv;
-- PyMuPDF;
-- pdfplumber;
-- ebooklib;
-- Pillow;
-- requests;
-- Ruff;
-- BasedPyright;
-- unittest.
+```text
+workspace/<job-id>/
+  manifest.json
+  raw/
+  candidates/
+  previews/
+  overlays/
+  diagnostics/
+  decisions/
+  profile_draft/
+  logs/
+```
 
-## 11. Verifiche recenti
+Requisiti:
 
-- Suite completa dopo dropcap: 241 test, tutti verdi.
-- DB smoke pagine 8–30: verde.
-- DB pagine 8–33:
-  - IR valida;
-  - Markdown generato;
-  - due dropcap reali preservati;
-  - nessun duplicato pagina 11;
-  - callout noti ancora leggibili;
-  - tabelle preservate;
-  - clutter asset fortemente ridotto.
-- `test.pdf` completo:
-  - una tabella vera;
-  - zero vettoriali.
-- EPUB:
-  - rimossa pagina TOC manuale duplicata;
-  - navigazione EPUB standard preservata.
+- recuperabile dopo crash o riavvio;
+- eliminabile esplicitamente;
+- nessun candidato deve finire automaticamente nell'output definitivo;
+- manifest con stato del job, versione motore, fingerprint sorgente, profilo, candidati, decisioni e warning;
+- nomi e JSON semplici, leggibili anche da strumenti esterni e AI locali.
 
-## 12. Regole operative
+Il nome definitivo della directory e lo schema non sono ancora approvati.
 
-- Leggere sempre `State.md` e `AGENTS.MD` prima di proporre modifiche.
-- Non fare commit automatici.
-- Non usare `git add .`.
-- Un commit deve affrontare un solo problema reale.
-- Test sintetici obbligatori per ogni nuova euristica.
-- Verifica manuale DB obbligatoria quando il fix nasce da DB.
-- Non committare `output/`, file diagnostici o `tools_tmp/`.
-- Non modificare `State.md` insieme a codice funzionale, salvo decisione esplicita.
-- Prima del commit:
-  - `ruff`;
-  - `basedpyright`;
-  - test mirati;
-  - suite completa;
-  - diff;
-  - `git status --short`.
+## 8. Profili dei manuali
+
+La calibrazione non deve essere ripetuta a ogni run.
+
+Un profilo dovrà poter essere:
+
+- salvato;
+- importato ed esportato;
+- versionato;
+- validato;
+- riutilizzato;
+- duplicato per edizioni differenti;
+- esteso con override;
+- associato tramite fingerprint senza dipendere dal path locale.
+
+Il profilo deve distinguere:
+
+1. convenzioni grafiche del documento;
+2. archetipi di pagina;
+3. mapping di glifi e marker;
+4. politiche editoriali;
+5. override dell'edizione;
+6. override temporanei del job.
+
+Non deve contenere codice Python generato o hardcode testuali come regola primaria.
+
+## 9. Interazione utente e GUI
+
+La calibrazione visuale difficilmente rimane gestibile solo da CLI.
+
+Requisiti minimi della futura GUI:
+
+- importazione PDF e profilo;
+- scansione e stato del job;
+- raggruppamento delle pagine per archetipo;
+- scelta di pagine rappresentative;
+- render della pagina con overlay;
+- elenco regioni e candidati;
+- azioni: conserva come testo, struttura, conserva come immagine, escludi, unisci, separa, incerto;
+- revisione e salvataggio del profilo;
+- coda degli outlier;
+- avvio dell'elaborazione finale.
+
+Non è ancora scelto il framework GUI.
+
+La CLI deve restare pienamente utilizzabile per:
+
+- test;
+- diagnostica;
+- batch;
+- esecuzione con profilo già pronto;
+- import/export profili;
+- automazione.
+
+## 10. AI locale
+
+L'AI locale è opzionale.
+
+Può:
+
+- proporre ruolo di regioni;
+- suggerire archetipi;
+- segnalare anomalie;
+- proporre mapping di glifi;
+- assistere la calibrazione;
+- lavorare sui soli outlier.
+
+Non può:
+
+- riscrivere direttamente il contenuto estratto;
+- generare codice specifico per un manuale;
+- cancellare file;
+- applicare modifiche irreversibili senza validazione;
+- sostituire il profilo persistente.
+
+Input e output devono usare contratti JSON validabili e riferimenti stabili a job, pagina, regione e candidato.
+
+## 11. Benchmark manuali
+
+Campione corrente:
+
+- DB — baseline stabilizzata;
+- Fabula — box grandi/drawing-based, marginalia, liste, procedure, tabelle e falsi positivi;
+- Lancer — layout complessi, simboli speciali, tabelle, callout, pagine molto grafiche;
+- Kult — colonne, rimandi laterali, box e contenuto potenzialmente da escludere;
+- Vileborn — prosa, callout, procedure, tabelle e stat block.
+
+L'utente seleziona e annota semanticamente le pagine, senza misurare pixel o bbox.
+
+Annotazioni manuali sufficienti:
+
+- fenomeni presenti;
+- cosa conservare come testo;
+- cosa convertire in struttura;
+- cosa preservare come immagine;
+- cosa escludere;
+- cosa resta incerto;
+- note editoriali.
+
+Primitive, bbox, font, drawing e candidate table saranno estratti automaticamente in una fase successiva.
+
+## 12. Attività sospese
+
+Non riaprire durante la progettazione globale salvo regressione bloccante:
+
+- fix specifico di `p29_vec2.svg`;
+- nuove soglie globali per callout/vector;
+- canonicalizzazione asset;
+- pulizia fisica delle cartelle output;
+- qualità CSV;
+- heading;
+- crop dropcap;
+- EPUB;
+- nuove euristiche isolate per Fabula/Lancer/Kult/Vileborn;
+- scelta del framework GUI;
+- implementazione AI di calibrazione.
+
+## 13. Deliverable della fase progettuale
+
+Prima del primo refactor devono essere approvati:
+
+1. visione del sistema e non-obiettivi;
+2. pipeline completa e confini dei moduli;
+3. modello primitive/regioni/semantica/IR;
+4. ciclo di vita del job;
+5. schema del workspace e del manifest;
+6. schema e versionamento dei profili;
+7. archetipi di pagina e clustering;
+8. workflow utente;
+9. requisiti GUI e CLI;
+10. contratti AI locali;
+11. strategia di migrazione dalla pipeline legacy;
+12. piano di test e benchmark;
+13. criteri di compatibilità e rollback;
+14. ordine dei refactor;
+15. decision record delle scelte principali.
+
+## 14. Criteri per uscire dalla fase progettuale
+
+La progettazione è conclusa quando:
+
+- Chat A ha prodotto un documento architetturale unico;
+- Chat B ha eseguito una revisione critica;
+- le decisioni bloccanti sono risolte o esplicitamente rinviate;
+- esiste una pipeline target approvata;
+- esiste un piano di migrazione incrementale;
+- è chiaro cosa resta legacy durante la transizione;
+- il primo commit ha uno scope strutturale preciso;
+- sono definiti test di non regressione DB e fixture di generalizzazione;
+- `State.md`, `AGENTS.MD` e il workflow due-chat sono coerenti con la nuova fase.
+
+## 15. Workflow corrente
+
+Durante la progettazione:
+
+```text
+Chat A Architettura
+→ proposta globale
+→ Chat B Revisione
+→ integrazione in Chat A
+→ documento approvato
+→ aggiornamento State/AGENTS
+→ piano di migrazione
+→ primo commit
+```
+
+Zed agent non riceve task progettuali.
+
+Durante l'implementazione successiva:
+
+- commit piccoli e verificabili;
+- file ammessi/vietati;
+- diff e test obbligatori;
+- nessun commit automatico;
+- output generati non committati;
+- refactor ampi solo se previsti dal piano approvato e scomposti in fasi.
