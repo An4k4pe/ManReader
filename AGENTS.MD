@@ -2,21 +2,24 @@
 
 ## Stato corrente
 
-Il progetto è in fase di progettazione globale v0.6.
+Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.7.
 
-La pipeline attuale è una baseline legacy funzionante. Non deve essere rimossa o rifattorizzata finché non sono approvati:
+L'architettura target e il piano generale di migrazione sono approvati.
 
-- architettura target;
-- piano di migrazione;
-- compatibilità;
-- test di non regressione;
-- primo step operativo.
+La pipeline corrente resta la baseline legacy funzionante e non deve essere rimossa o riscritta finché il nuovo percorso non è stato verificato in shadow mode e i criteri di non-regressione sono soddisfatti.
 
-`State.md` è la fonte aggiornata sullo stato e sulle decisioni di fase.
+`State.md` è la fonte aggiornata sullo stato, sulle milestone e sulle decisioni di fase.
 
 ## Obiettivo
 
-Convertire manuali PDF TTRPG in Markdown ed EPUB semantici, preservando il contenuto e permettendo revisione, profili riutilizzabili e AI locale opzionale.
+Convertire manuali PDF TTRPG in Markdown ed EPUB semantici, preservando il contenuto e permettendo:
+
+- revisione visuale;
+- profili riutilizzabili;
+- decisioni tracciabili;
+- job riprendibili;
+- AI locale opzionale;
+- una IR comune ai renderer.
 
 ## Vincoli permanenti
 
@@ -28,7 +31,8 @@ Convertire manuali PDF TTRPG in Markdown ed EPUB semantici, preservando il conte
 - compatibilità con PDF digitali e, in futuro, scansioni;
 - nessuna invenzione del contenuto mancante;
 - output e decisioni verificabili;
-- nessun commit automatico.
+- nessun commit automatico;
+- output, workspace, dump e diagnostica non committati salvo documento sorgente esplicitamente previsto dal task.
 
 ## Toolchain corrente
 
@@ -47,136 +51,291 @@ Qualità:
 - BasedPyright;
 - unittest.
 
-Non introdurre nuove dipendenze o framework GUI senza decisione architetturale e motivazione.
+Non introdurre nuove dipendenze, framework GUI o storage aggiuntivi senza decisione esplicita di Chat A e motivazione verificabile.
 
-## Fase progettuale
+## Ruoli operativi
 
-Durante la fase progettuale:
+### Chat A
 
-- non modificare codice funzionale;
-- non preparare commit;
-- non avviare refactor di `extractor.py`;
-- non aggiungere euristiche specifiche per i manuali benchmark;
-- non scegliere il framework GUI;
-- non implementare workspace, profili o AI calibration;
-- produrre documenti, schemi, alternative, rischi e piani di migrazione.
+Chat A è la fonte decisionale.
 
-Chat A decide.
-Chat B revisiona.
-Zed agent non riceve task progettuali.
+In Modalità I:
 
-## Refactor
+- legge `State.md` e `AGENTS.MD`;
+- identifica il livello del problema;
+- restringe lo scope;
+- stabilisce file ammessi e vietati;
+- definisce test e criteri di accettazione;
+- prepara il task per Zed agent o per implementazione manuale;
+- revisiona diff, test e output;
+- decide se accettare, correggere o dividere il task.
 
-La regola non è “niente refactor ampi”, ma:
+### Chat B
 
-> niente refactor ampi non progettati.
+Chat B viene usata per:
 
-Un refactor approvato può spostare responsabilità fuori da `extractor.py`, `ir_builder.py` o altri moduli, purché:
+- diagnostica indipendente;
+- revisione critica di regressioni complesse;
+- verifica di ipotesi;
+- modifiche architetturali non previste dal piano.
 
-- sia previsto dal documento architetturale;
-- abbia una migrazione incrementale;
-- preservi la baseline finché il nuovo percorso non è verificato;
-- sia diviso in commit testabili;
-- abbia rollback chiaro;
-- non mescoli riorganizzazione e cambi funzionali non necessari.
+Chat B non decide il commit e non sostituisce Chat A.
 
-Le responsabilità correnti dei moduli sono descrittive, non vincoli permanenti della futura architettura.
+### Zed agent
 
-## Principi architetturali in valutazione
+Zed agent:
 
-La progettazione deve mantenere separati:
+- esegue soltanto task già definiti;
+- modifica solo i file autorizzati;
+- non allarga lo scope;
+- non sceglie l'architettura;
+- non aggiunge dipendenze senza autorizzazione;
+- non fa commit;
+- mostra diff, test e stato finale.
+
+## Architettura approvata
+
+Pipeline target:
 
 ```text
-primitive osservate
-→ regioni e relazioni
-→ semantica
-→ IR
-→ renderer
+PDF snapshot
+→ BackendPageCapture
+→ NormalizedPrimitivePage
+→ PageAnalysis
+→ DocumentAnalysis
+→ Resolution
+→ ResolvedSemanticDocument
+→ DocumentIR 2
+→ renderer Markdown / EPUB
 ```
 
-Inoltre:
+### Confini obbligatori
 
-- core headless;
-- CLI e GUI come client;
-- workspace persistente per raw, candidati e review;
-- output finale separato;
-- profili salvabili/importabili/versionati;
-- archetipi di pagina;
-- AI locale opzionale tramite JSON validabili;
-- nessun codice generato dall'AI per manuale;
-- tracciabilità delle decisioni.
+```text
+osservazione backend
+≠ primitive normalizzate
+≠ layout
+≠ candidati
+≠ semantica
+≠ politica editoriale
+≠ IR
+≠ rendering
+```
 
-Questi principi sono direzione approvata di massima, ma gli schemi e i moduli definitivi devono ancora essere progettati.
+- `PageData` è legacy e non è raw canonico.
+- PyMuPDF è il backend principale.
+- pdfplumber è un analizzatore specializzato per candidati tabella.
+- Asset fisico, occorrenza, regione layout e nodo semantico sono entità differenti.
+- Un candidato non entra direttamente nella IR.
+- Il layout è principalmente page-centric.
+- La semantica e la IR devono supportare provenienza multipagina.
+- I renderer non devono reinterpretare il PDF.
 
-## Regole AI
+## Invarianti da non violare
+
+### Sorgente e raw
+
+- La sorgente di un futuro job deve essere immutabile o verificata prima del resume.
+- La cattura backend non viene modificata dalle fasi successive.
+- I dump completi del backend sono diagnostici opzionali, non il contratto canonico.
+
+### Primitive
+
+- Le primitive normalizzate sono immutabili.
+- Non contengono ruoli semantici.
+- Non contengono classificazioni definitive come `decorative`, `structural`, `table`, `callout` o `marginalia`.
+- Conservano coordinate canoniche e riferimenti alla cattura.
+
+### Layout e candidati
+
+- `LayoutRegion` contiene soltanto dati strutturali.
+- Confidence geometrica e confidence semantica devono essere separate.
+- Tabelle, marginalia, callout e liste detector-side sono candidati.
+- Un candidato tabella non rimuove testo e non produce CSV definitivo prima della resolution.
+
+### Coverage e ownership
+
+- La coverage è obbligatoria per le primitive che possono trasportare contenuto.
+- Le support primitive possono essere registrate come `layout_evidence`.
+- Una primitiva testuale non può appartenere a più nodi finali salvo duplicazione esplicita.
+- Nessuna esclusione può essere silenziosa.
+
+### Semantica e IR
+
+- La continuità multipagina viene inizialmente proposta come relation candidate.
+- I nodi non vengono uniti automaticamente in modo aggressivo.
+- L'adapter IR 2 → IR 1 è ammesso solo nei casi senza perdita.
+- Markdown ed EPUB devono progressivamente diventare IR-first.
+
+### AI
 
 L'AI locale può proporre:
 
 - classificazioni;
-- archetipi;
-- mapping glifi;
+- associazioni;
+- marker;
 - anomalie;
-- decisioni di review.
+- decisioni di review;
+- enrichment.
 
 Non deve:
 
-- riscrivere direttamente il contenuto estratto;
+- riscrivere il contenuto estratto;
 - generare codice specifico per un manuale;
+- creare target inesistenti;
 - cancellare file;
-- applicare modifiche irreversibili senza validazione;
+- modificare raw o primitive;
+- applicare esclusioni irreversibili senza validazione;
 - sostituire il profilo persistente.
-
-Ogni proposta AI deve riferirsi a ID stabili e passare da schema validation e policy checks.
-
-## Dati e output
-
-Durante la futura pipeline:
-
-- workspace e output finale devono essere separati;
-- candidati non approvati non entrano nell'output;
-- raw e primitive non devono essere distrutti prematuramente;
-- asset fisico, regione layout e blocco semantico sono entità diverse;
-- profili e decisioni devono essere leggibili e modificabili;
-- i file generati non vanno committati.
 
 ## Regole operative di implementazione
 
-Quando si tornerà all'implementazione:
+Per ogni task:
 
-- leggere `State.md` e questo file;
-- un task per commit;
-- file ammessi e vietati;
-- niente hardcode su manuale, pagina, titolo, filename o parola;
-- non usare `git add .`;
-- non committare output, workspace, dump o diagnostica;
-- test sintetici per nuove regole;
-- benchmark reali per generalizzazione;
-- verificare:
-  - Ruff;
-  - BasedPyright;
-  - test mirati;
-  - suite completa;
-  - diff;
-  - `git status --short`.
+1. Leggere `State.md` e questo file.
+2. Confermare la milestone corrente.
+3. Definire un solo obiettivo.
+4. Elencare file ammessi e vietati.
+5. Non allargare lo scope durante l'esecuzione.
+6. Non mescolare riorganizzazione e cambio funzionale.
+7. Non introdurre hardcode su manuale, pagina, filename, titolo o parola come soluzione primaria.
+8. Non usare `git add .`.
+9. Non committare automaticamente.
+10. Non committare output, workspace, crop, dump o diagnostica.
+11. Aggiungere test sintetici per nuovi contratti o regole.
+12. Usare benchmark reali per verificare la generalizzazione quando il comportamento diventa attivo.
+13. Mostrare diff, test e `git status --short` finali.
 
-I builder e la GUI non devono reinterpretare direttamente il PDF: devono consumare dati del core.
+Verifiche minime per un commit di codice:
 
-## Baseline da preservare
+```bash
+ruff check <file coinvolti>
+basedpyright <file coinvolti>
+python -m unittest <test mirati>
+python -m unittest
+git diff --check
+git status --short
+```
+
+Eseguire lo smoke DB quando la modifica può influire su estrazione, IR o renderer.
+
+## Baseline legacy da preservare
 
 Finché la nuova pipeline non è attiva, restano non-regressione:
 
 - callout DB stabilizzati;
-- tabelle DB e filtro testo duplicato;
+- tabelle DB e filtro del testo duplicato;
 - classificazione clutter;
 - immagini readable;
-- reading order DB, incluso MONETE/CIMELIO;
+- reading order DB, incluso `MONETE`/`CIMELIO`;
 - dropcap irrisolti senza invenzione;
-- IR e Markdown correnti.
+- IR 1.0 e Markdown correnti;
+- comportamento EPUB legacy non modificato salvo milestone dedicata.
+
+## Milestone corrente
+
+La milestone corrente è:
+
+> **Milestone 1 — contratto minimo di cattura e primitive**
+
+### Obiettivo
+
+Definire il confine dati fra osservazione backend e primitive normalizzate senza collegarlo alla pipeline corrente.
+
+### Modelli previsti
+
+Capture:
+
+- `PageGeometry`;
+- `BackendPageCapture`;
+- `BackendTextObservation`;
+- `BackendImageObservation`;
+- `BackendDrawingObservation`;
+- eventuali tipi minimi per link e annotazioni, solo se inclusi nello scope approvato.
+
+Primitive:
+
+- `TextPrimitive`;
+- `ImageOccurrencePrimitive`;
+- `DrawingPrimitive`;
+- `NormalizedPrimitivePage`.
+
+### Vincoli della milestone
+
+- nessuna modifica a `extractor.py`;
+- nessuna modifica a `ir_builder.py`;
+- nessuna modifica a `ir_model.py`, `ir_store.py` o `ir_validate.py`;
+- nessuna modifica a `markdown_builder.py` o `epub_builder.py`;
+- nessuna modifica a `main.py`;
+- nessun collegamento alla pipeline;
+- nessun output diverso;
+- nessuna dipendenza nuova;
+- nessun import di PyMuPDF o pdfplumber nei modelli;
+- niente region graph, profili, workspace completo, decision log, AI o IR 2 in questo commit.
+
+### Criteri minimi
+
+- modelli costruibili e tipizzati;
+- primitive immutabili;
+- bbox e coordinate rappresentate in modo coerente;
+- riferimenti alla sorgente espliciti;
+- nessun ruolo semantico nei modelli;
+- test mirati;
+- suite legacy invariata.
+
+La scelta dei nomi file e dei campi definitivi deve essere approvata nel task preparato da Chat A prima dell'implementazione.
+
+## Migrazione e shadow mode
+
+Modalità transitorie:
+
+```text
+legacy
+shadow
+new
+```
+
+- `legacy`: produce il risultato corrente.
+- `shadow`: calcola il nuovo dato senza cambiare l'output.
+- `new`: usa il nuovo percorso per il comportamento approvato.
+
+Lo shadow mode deve avere criteri di equivalenza e una milestone di uscita.
+
+L'equivalenza non richiede JSON identici, ma almeno:
+
+- stesso contenuto conservato;
+- stessi asset readable;
+- nessuna nuova perdita;
+- nessuna nuova duplicazione;
+- ordine osservabile equivalente sui casi stabilizzati;
+- callout e tabelle DB preservati;
+- differenze spiegabili.
+
+## Attività non autorizzate nella milestone corrente
+
+Non avviare:
+
+- refactor generale di `extractor.py`;
+- region graph;
+- marginalia detector;
+- nuove euristiche per Fabula, Lancer, Kult o Vileborn;
+- profili;
+- workspace completo;
+- job manager completo;
+- decision event log;
+- IR 2;
+- modifica dei renderer;
+- GUI;
+- AI di calibrazione;
+- EPUB IR-first;
+- OCR;
+- SQLite;
+- nuova struttura completa del repository.
 
 ## Aggiornamento documenti
 
 Aggiornare:
 
 - `State.md` a fine milestone o cambio di fase;
-- `AGENTS.MD` quando cambiano regole permanenti o pipeline approvata;
-- workflow due-chat quando cambiano ruoli e modalità operative.
+- `AGENTS.MD` quando cambiano regole permanenti, milestone o pipeline approvata;
+- workflow due-chat solo quando cambiano ruoli e modalità operative.

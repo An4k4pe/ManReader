@@ -1,23 +1,26 @@
 # ManReader — Stato progetto
 
-## Versione corrente: v0.6 — fase progettuale globale
+## Versione corrente: v0.7 — migrazione architetturale incrementale
 
 ## 1. Decisione di fase
 
-ManReader entra temporaneamente in una fase di progettazione globale.
+La fase di progettazione globale è conclusa.
 
-La pipeline corrente rimane la baseline funzionante e non deve essere riscritta o smontata finché non esiste un'architettura approvata, un piano di migrazione e una strategia di non regressione.
+La proposta architetturale A-0.2 è stata revisionata criticamente da Chat B e consolidata da Chat A. La direzione target, gli invarianti e l'ordine generale della migrazione sono approvati.
 
-Durante questa fase:
+Il progetto entra ora in **Modalità I — implementazione incrementale**.
 
-- non aggiungere nuove euristiche locali salvo regressioni bloccanti;
-- non avviare refactor di `extractor.py` senza progetto approvato;
-- non preparare commit funzionali;
-- usare i manuali campione per definire requisiti, invarianti e casi limite;
-- separare chiaramente progettazione, revisione architetturale e implementazione;
-- aggiornare questo file quando cambia la fase del progetto.
+Questo cambio di fase non autorizza una riscrittura generale della pipeline. Ogni modifica deve:
 
-Il refactor di `extractor.py` è ammesso e probabilmente necessario, ma solo dopo aver deciso i confini della nuova pipeline.
+- avere un solo obiettivo verificabile;
+- essere prevista dal piano di migrazione;
+- mantenere disponibile la baseline legacy;
+- distinguere chiaramente percorso legacy, shadow e nuovo percorso;
+- avere file ammessi e vietati;
+- includere test, diff e stato Git;
+- essere committata soltanto dall'utente dopo revisione di Chat A.
+
+La prima fase implementativa non modifica ancora l'output Markdown o EPUB.
 
 ## 2. Obiettivo del prodotto
 
@@ -32,18 +35,20 @@ Obiettivi permanenti:
 - supporto sia a PDF digitali sia, in futuro, a scansioni;
 - AI/OCR opzionali e separati dal nucleo deterministico;
 - profili dei manuali salvabili, importabili e riutilizzabili;
-- revisione visuale gestibile anche da un utente non tecnico.
+- revisione visuale gestibile anche da un utente non tecnico;
+- job riprendibili e decisioni tracciabili;
+- stessa IR finale per Markdown ed EPUB.
 
-## 3. Baseline corrente
+## 3. Baseline legacy corrente
 
-### 3.1 Pipeline legacy
+### 3.1 Pipeline attiva
 
 ```text
 PDF
 → extractor.py
 → PageData / TextBlock / ImageBlock / VectorBlock / TableBlock
 → ir_builder.py
-→ DocumentIR
+→ DocumentIR 1.0
 → markdown_builder.py
 → Markdown
 ```
@@ -60,16 +65,16 @@ L'EPUB è ancora parzialmente legacy e non è completamente IR-first.
 - `ir_builder.py` — reading flow finale e parte della classificazione semantica.
 - `ir_store.py` — persistenza JSON.
 - `ir_validate.py` — validazione IR.
-- `markdown_builder.py` — rendering Markdown.
+- `markdown_builder.py` — rendering Markdown con alcune decisioni semantiche ancora legacy.
 - `epub_builder.py` — rendering EPUB legacy/parzialmente IR.
 - `describer.py` — AI locale opzionale tramite Ollama.
 - `asset_manager.py` — applicazione post-build delle modifiche da `asset_index.csv`.
 
-`extractor.py` svolge troppe responsabilità. Questo è un problema architetturale riconosciuto, non ancora un task di refactor operativo.
+`extractor.py` svolge troppe responsabilità, ma non deve essere rifattorizzato in modo ampio prima che i nuovi contratti siano esercitati in shadow mode.
 
-## 4. Baseline stabilizzata su DB
+## 4. Baseline da preservare
 
-Restano validi come non-regressione:
+Restano non-regressione:
 
 - callout region-first sui casi DB verificati;
 - supporto a callout affiancati;
@@ -83,12 +88,17 @@ Restano validi come non-regressione:
 - nessuna lettera inventata;
 - suite completa e smoke DB verdi nell'ultima verifica nota.
 
-Prima di iniziare una nuova fase operativa verificare comunque:
+Prima di ogni commit operativo verificare almeno:
 
 ```bash
 git status --short
+ruff check <file coinvolti>
+basedpyright <file coinvolti>
+python -m unittest <test mirati>
 python -m unittest
 ```
+
+Lo smoke DB viene eseguito quando il task può influire sulla pipeline o sui renderer.
 
 ## 5. Esito del generalization audit
 
@@ -103,202 +113,482 @@ Problemi osservati:
 - parti di callout vengono classificate come tabelle;
 - box grandi, compositi o drawing-based non vengono ricostruiti;
 - una regione semantica non coincide necessariamente con un singolo raster/vector;
-- pagine molto grafiche richiedono talvolta una politica editoriale, non una sola classificazione automatica;
-- lo stesso manuale contiene più archetipi di pagina;
-- alcune decisioni, come escludere un indice laterale o preservare una scheda come immagine, dipendono dall'utente.
+- pagine molto grafiche richiedono talvolta una politica editoriale;
+- la stessa pagina può combinare più convenzioni e pattern;
+- alcune decisioni dipendono dall'utente e non possono essere dedotte dalla sola geometria.
 
 Conclusione:
 
 > Non è realistico affidare tutta la semantica a una singola raccolta di soglie universali.
 
-È invece realistico rendere universali:
+È invece realistico rendere generali:
 
-- osservazione delle primitive;
+- osservazione backend;
+- primitive normalizzate;
 - geometria;
 - relazioni;
-- statistiche del documento;
-- clustering delle pagine;
-- rilevamento di candidati e ambiguità.
+- pattern documentali;
+- candidati e ambiguità;
+- tracciabilità delle decisioni.
 
-La semantica finale deve poter combinare:
+## 6. Architettura target approvata
 
-```text
-evidenze deterministiche
-+ profilo del documento
-+ archetipi di pagina
-+ politica editoriale
-+ revisione utente/AI opzionale
-```
-
-## 6. Direzione architetturale condivisa
-
-Pipeline da progettare:
+Pipeline target:
 
 ```text
-PDF
-→ primitive raw
-→ workspace persistente
-→ firme e archetipi di pagina
-→ profilo del documento
-→ regioni e relazioni di layout
-→ classificazione semantica
-→ IR
-→ renderer Markdown/EPUB
+PDF snapshot
+→ BackendPageCapture
+→ NormalizedPrimitivePage
+→ PageAnalysis
+→ DocumentAnalysis
+→ Resolution
+→ ResolvedSemanticDocument
+→ DocumentIR 2
+→ validazione
+→ renderer Markdown / EPUB
 ```
 
-Principi:
+### 6.1 Livelli distinti
 
-1. Le primitive raw devono essere disponibili prima delle decisioni legacy.
-2. Asset fisico, regione di layout e blocco semantico sono entità diverse.
-3. Tabelle detector-side sono candidati, non verità semantiche immediate.
-4. Reading order deve operare su regioni o gruppi logici, non solo su blocchi testuali grezzi.
-5. Il core deve essere headless.
-6. CLI e GUI devono essere client dello stesso core.
-7. La GUI serve per revisione visuale, non per contenere logica di estrazione.
-8. Il sistema deve poter funzionare senza AI.
-9. L'AI locale deve proporre decisioni strutturate, non generare codice specifico per manuale.
-10. Ogni decisione deve essere tracciabile e riproducibile.
+- `BackendPageCapture` — osservazione backend-specifica, serializzabile e versionata.
+- `NormalizedPrimitivePage` — primitive canoniche e immutabili.
+- `PageAnalysis` — regioni, relazioni, feature, ordine parziale e candidati.
+- `DocumentAnalysis` — pattern ricorrenti, continuità multipagina e famiglie suggerite.
+- `Resolution` — applicazione di profilo, policy e decisioni.
+- `ResolvedSemanticDocument` — documento semanticamente risolto e document-centric.
+- `DocumentIR 2` — contratto dei renderer.
 
-## 7. Workspace persistente
+### 6.2 Ruolo della pipeline legacy
 
-Serve un'area di lavoro separata dall'output finale.
+`PageData` non è raw canonico, perché contiene già ricostruzione, deduplicazione, classificazioni e reading order.
 
-Principio:
+Durante la migrazione può essere usato soltanto come:
+
+- riferimento di non-regressione;
+- adapter diagnostico;
+- fallback temporaneo;
+- sorgente di confronti in shadow mode.
+
+## 7. Invarianti architetturali
+
+### 7.1 Sorgente verificabile
+
+Ogni futuro job deve lavorare su una sorgente immutabile o verificata prima del resume.
+
+Default previsto:
 
 ```text
-workspace = raw, candidati, preview, diagnostica, decisioni, profilo in bozza
-output    = solo elementi finalizzati
+reflink, quando supportato
+altrimenti copia
 ```
 
-Struttura indicativa da progettare:
+La modalità reference-only sarà esplicita.
+
+### 7.2 Raw non modificabile
+
+La cattura backend non viene corretta, filtrata o riscritta dalle fasi successive.
+
+### 7.3 Derivati invalidabili
+
+Ogni artifact derivato deve poter dichiarare input, configurazione, versione e generation ID.
+
+### 7.4 Candidato non definitivo
+
+Un detector produce un candidato. Soltanto la resolution può accettarlo, rifiutarlo o lasciarlo irrisolto.
+
+Un candidato tabella non può rimuovere testo o produrre una tabella finale prima della resolution.
+
+### 7.5 Layout, semantica e politica editoriale separati
+
+Esempio:
 
 ```text
-workspace/<job-id>/
-  manifest.json
-  raw/
-  candidates/
-  previews/
-  overlays/
-  diagnostics/
-  decisions/
-  profile_draft/
-  logs/
+structural_kind = sidebar
+semantic_role = marginalia
+editorial_disposition = exclude | note | secondary_content | unresolved
 ```
 
-Requisiti:
+### 7.6 Coverage e ownership
 
-- recuperabile dopo crash o riavvio;
-- eliminabile esplicitamente;
-- nessun candidato deve finire automaticamente nell'output definitivo;
-- manifest con stato del job, versione motore, fingerprint sorgente, profilo, candidati, decisioni e warning;
-- nomi e JSON semplici, leggibili anche da strumenti esterni e AI locali.
+La coverage è obbligatoria per le primitive che possono trasportare contenuto.
 
-Il nome definitivo della directory e lo schema non sono ancora approvati.
+Ogni content primitive deve risultare:
 
-## 8. Profili dei manuali
+```text
+resolved + semantic_content
+resolved + excluded
+resolved + duplicated_explicitly
+unresolved
+```
 
-La calibrazione non deve essere ripetuta a ogni run.
+Le support primitive, come bordi, fill, separatori e linee di griglia, possono risultare `layout_evidence` senza diventare contenuto finale.
 
-Un profilo dovrà poter essere:
+Una primitiva testuale non può appartenere a più nodi finali salvo duplicazione esplicita e tracciata.
 
-- salvato;
-- importato ed esportato;
-- versionato;
-- validato;
-- riutilizzato;
-- duplicato per edizioni differenti;
-- esteso con override;
-- associato tramite fingerprint senza dipendere dal path locale.
+### 7.7 Semantica document-centric
 
-Il profilo deve distinguere:
+Il layout resta principalmente page-centric.
 
-1. convenzioni grafiche del documento;
-2. archetipi di pagina;
-3. mapping di glifi e marker;
-4. politiche editoriali;
-5. override dell'edizione;
-6. override temporanei del job.
+Il documento semantico e la IR devono supportare nodi con più `source_fragments`, anche su pagine differenti.
 
-Non deve contenere codice Python generato o hardcode testuali come regola primaria.
+La continuità multipagina è inizialmente conservativa:
 
-## 9. Interazione utente e GUI
+```text
+continuation candidate
+→ relation
+→ resolution
+→ eventuale merge
+```
 
-La calibrazione visuale difficilmente rimane gestibile solo da CLI.
+Nessun merge multipagina aggressivo durante le prime milestone.
 
-Requisiti minimi della futura GUI:
+### 7.8 Renderer IR-only
 
-- importazione PDF e profilo;
-- scansione e stato del job;
-- raggruppamento delle pagine per archetipo;
-- scelta di pagine rappresentative;
-- render della pagina con overlay;
-- elenco regioni e candidati;
-- azioni: conserva come testo, struttura, conserva come immagine, escludi, unisci, separa, incerto;
-- revisione e salvataggio del profilo;
-- coda degli outlier;
-- avvio dell'elaborazione finale.
+Markdown ed EPUB devono in futuro consumare soltanto la IR validata.
 
-Non è ancora scelto il framework GUI.
+I renderer non devono riconoscere heading, liste, callout o colonne tramite bbox e font.
 
-La CLI deve restare pienamente utilizzabile per:
+### 7.9 AI senza autorità diretta
+
+L'AI locale può proporre decisioni strutturate, ma non modifica raw, profilo o stato risolto senza validazione e accettazione.
+
+## 8. Modelli minimi approvati
+
+### 8.1 Backend capture
+
+Il contratto minimo deve includere:
+
+```text
+schema_version
+backend_name
+backend_version
+source_id
+page_id
+page_geometry
+rotation
+crop_box
+media_box
+text_observations
+image_observations
+drawing_observations
+link_observations
+annotation_observations
+backend_order
+errors
+```
+
+I dump completi del backend sono opzionali e diagnostici, non parte obbligatoria del contratto canonico.
+
+### 8.2 Primitive normalizzate
+
+Tipi iniziali:
+
+- `TextPrimitive`;
+- `ImageOccurrencePrimitive`;
+- `DrawingPrimitive`;
+- `NormalizedPrimitivePage`.
+
+Le primitive:
+
+- sono immutabili;
+- non contengono ruoli semantici;
+- non contengono classificazioni `decorative`, `structural`, `table`, `callout` o `marginalia`;
+- conservano coordinate canoniche e riferimenti alla cattura.
+
+La primitiva testuale iniziale è una text run o unità osservata stabile, non un paragrafo ricostruito.
+
+### 8.3 Layout region
+
+`LayoutRegion` contiene soltanto dati strutturali:
+
+```text
+region_id
+generation_id
+page_id
+bbox
+structural_kind
+primitive_ids
+child_region_ids
+features
+order_constraints
+provenance
+geometry_confidence
+```
+
+Candidati, alternative semantiche e confidence semantica restano fuori dalla regione.
+
+### 8.4 IR 2 minima
+
+Prima dei vertical slice che richiedono gerarchia deve essere definito almeno:
+
+```text
+SemanticNode
+  node_id
+  node_type
+  role
+  children
+  source_fragments
+  payload
+  disposition
+  provenance
+  metadata
+```
+
+Payload iniziali previsti:
+
+- `TextPayload`;
+- `ListPayload`;
+- `TablePayload`;
+- `AssetPayload`;
+- `ContainerPayload`.
+
+L'adapter IR 2 → IR 1 è ammesso solo nei casi senza perdita strutturale.
+
+## 9. Profili, archetipi e policy
+
+### 9.1 Separazione
+
+- `DocumentProfile` descrive convenzioni e struttura del documento.
+- `EditorialPolicy` descrive le preferenze dell'utente.
+- `JobOverrides` contiene eccezioni temporanee.
+
+### 9.2 Profilo v1
+
+La prima versione sarà legata a un fingerprint esatto e supporterà soltanto:
+
+- dimensioni pagina;
+- gruppi pagina espliciti;
+- layout family;
+- edge e colonne ricorrenti;
+- orientamenti;
+- pattern ripetuti;
+- marker conosciuti;
+- region pattern;
+- reading-order template.
+
+Non sono ancora approvati linguaggi di espressione, profili di famiglia automatici o ereditarietà complessa.
+
+### 9.3 Famiglie e pattern componibili
+
+Una pagina non è descritta da un solo archetipo monolitico.
+
+Può combinare:
+
+```text
+layout_family
++ conventions
++ region_patterns
+```
+
+Il clustering resta propositivo e non obbligatorio.
+
+## 10. Workspace e job
+
+Workspace persistente, resume, invalidazione e pubblicazione atomica restano parte dell'architettura target, ma non sono il primo step implementativo.
+
+L'ordine approvato è:
+
+```text
+contratto capture
+→ capture shadow reale
+→ primitive normalizzate
+→ job/workspace minimo
+```
+
+Il workspace è infrastruttura di persistenza e non deve entrare nel dominio semantico.
+
+La prima versione del job/workspace dovrà includere soltanto:
+
+- job ID;
+- source snapshot;
+- manifest minimo;
+- directory raw;
+- stato della cattura;
+- resume per pagina.
+
+Profili complessi, decision log completo, GUI, AI e build gate globale verranno dopo.
+
+## 11. GUI, CLI e AI
+
+### 11.1 Core headless
+
+CLI e GUI devono usare gli stessi use case applicativi.
+
+### 11.2 CLI
+
+Deve rimanere utilizzabile per:
 
 - test;
 - diagnostica;
 - batch;
-- esecuzione con profilo già pronto;
-- import/export profili;
-- automazione.
+- automazione;
+- esecuzione senza GUI e senza AI.
 
-## 10. AI locale
+### 11.3 GUI
 
-L'AI locale è opzionale.
+La futura GUI minima servirà per:
 
-Può:
+- elenco e ripresa job;
+- pagina con overlay;
+- review queue;
+- decisione puntuale;
+- preview dell'impatto di regole più ampie;
+- salvataggio profilo;
+- avvio build.
 
-- proporre ruolo di regioni;
-- suggerire archetipi;
-- segnalare anomalie;
-- proporre mapping di glifi;
-- assistere la calibrazione;
-- lavorare sui soli outlier.
+Il framework non è ancora scelto.
 
-Non può:
+### 11.4 AI locale
 
-- riscrivere direttamente il contenuto estratto;
-- generare codice specifico per un manuale;
-- cancellare file;
-- applicare modifiche irreversibili senza validazione;
-- sostituire il profilo persistente.
+Resta opzionale e proposal-only.
 
-Input e output devono usare contratti JSON validabili e riferimenti stabili a job, pagina, regione e candidato.
+Non entra nelle prime milestone implementative.
 
-## 11. Benchmark manuali
+## 12. Piano di migrazione approvato
 
-Campione corrente:
+### Milestone 0 — Baseline e benchmark
 
-- DB — baseline stabilizzata;
-- Fabula — box grandi/drawing-based, marginalia, liste, procedure, tabelle e falsi positivi;
-- Lancer — layout complessi, simboli speciali, tabelle, callout, pagine molto grafiche;
-- Kult — colonne, rimandi laterali, box e contenuto potenzialmente da escludere;
-- Vileborn — prosa, callout, procedure, tabelle e stat block.
+- suite corrente;
+- smoke DB quando pertinente;
+- snapshot IR e Markdown;
+- fixture benchmark annotate;
+- stato Git noto.
 
-L'utente seleziona e annota semanticamente le pagine, senza misurare pixel o bbox.
+### Milestone 1 — Contratto minimo di cattura e primitive
 
-Annotazioni manuali sufficienti:
+Introdurre soltanto modelli dati backend-neutral o backend-descrittivi, senza collegarli alla pipeline.
 
-- fenomeni presenti;
-- cosa conservare come testo;
-- cosa convertire in struttura;
-- cosa preservare come immagine;
-- cosa escludere;
-- cosa resta incerto;
-- note editoriali.
+Scope previsto:
 
-Primitive, bbox, font, drawing e candidate table saranno estratti automaticamente in una fase successiva.
+- `PageGeometry`;
+- `BackendPageCapture`;
+- osservazioni testo/immagine/drawing;
+- `TextPrimitive`;
+- `ImageOccurrencePrimitive`;
+- `DrawingPrimitive`;
+- `NormalizedPrimitivePage`;
+- test dei modelli.
 
-## 12. Attività sospese
+Vincoli:
 
-Non riaprire durante la progettazione globale salvo regressione bloccante:
+- nessuna modifica a `extractor.py`;
+- nessuna modifica a `ir_builder.py`;
+- nessuna modifica ai renderer;
+- nessun nuovo output;
+- nessuna dipendenza nuova;
+- nessun import PyMuPDF/pdfplumber nei modelli.
+
+### Milestone 2 — Cattura PyMuPDF shadow
+
+Per pagine selezionate:
+
+```text
+PDF
+→ BackendPageCapture
+→ JSON diagnostico
+```
+
+La pipeline legacy continua a produrre l'output.
+
+### Milestone 3 — Normalizzazione
+
+```text
+BackendPageCapture
+→ NormalizedPrimitivePage
+```
+
+Verificare coordinate, source reference, identità deterministica e assenza di perdita delle osservazioni richieste.
+
+### Milestone 4 — Job/workspace minimo
+
+Solo dopo la cattura reale:
+
+- source snapshot;
+- manifest minimo;
+- stato delle fasi;
+- resume della cattura.
+
+### Milestone 5 — Region graph shadow
+
+Costruire regioni, relazioni, vincoli e diagnostica senza cambiare output.
+
+### Milestone 6 — Marginalia e bande laterali
+
+Primo vertical slice funzionale, inizialmente limitato a:
+
+- detection;
+- region candidate;
+- preview/diagnostica;
+- decisione esplicita;
+- output ancora legacy.
+
+### Milestone 7 — Coverage minimo e decisioni
+
+Prima di attivare un nuovo risultato nell'output:
+
+- coverage delle content primitive;
+- ownership testuale;
+- unresolved;
+- decisione puntuale;
+- rollback al legacy.
+
+### Milestone 8 — Liste e procedure numerate
+
+Introduce children, marker grafici e primo rendering IR 2.
+
+### Milestone 9 — Profili esatti e policy
+
+Solo quando esistono decisioni reali da riutilizzare.
+
+### Milestone 10 — Tabelle
+
+```text
+proposal
+→ candidate
+→ resolution
+→ semantic table
+```
+
+### Milestone 11 — Callout compositi e visual panel
+
+La logica DB rimane fallback finché non viene raggiunta equivalenza.
+
+### Milestone successive
+
+- Markdown IR 2;
+- GUI minimale;
+- AI locale;
+- EPUB IR-first;
+- ritiro progressivo del legacy.
+
+## 13. Equivalenza e shadow mode
+
+L'equivalenza con la pipeline legacy non richiede JSON identici.
+
+In shadow mode deve significare almeno:
+
+- stesso contenuto testuale conservato;
+- stessi asset readable;
+- nessuna nuova perdita;
+- nessuna nuova duplicazione;
+- stesso ordine osservabile nei casi DB stabilizzati;
+- callout e tabelle DB preservati;
+- differenze registrate e spiegabili;
+- suite legacy invariata.
+
+Modalità transitorie:
+
+```text
+legacy
+shadow
+new
+```
+
+Lo shadow mode deve avere criteri espliciti di uscita e non diventare una seconda pipeline permanente.
+
+## 14. Attività sospese
+
+Non riaprire salvo regressione bloccante o milestone dedicata:
 
 - fix specifico di `p29_vec2.svg`;
 - nuove soglie globali per callout/vector;
@@ -309,65 +599,39 @@ Non riaprire durante la progettazione globale salvo regressione bloccante:
 - crop dropcap;
 - EPUB;
 - nuove euristiche isolate per Fabula/Lancer/Kult/Vileborn;
-- scelta del framework GUI;
-- implementazione AI di calibrazione.
-
-## 13. Deliverable della fase progettuale
-
-Prima del primo refactor devono essere approvati:
-
-1. visione del sistema e non-obiettivi;
-2. pipeline completa e confini dei moduli;
-3. modello primitive/regioni/semantica/IR;
-4. ciclo di vita del job;
-5. schema del workspace e del manifest;
-6. schema e versionamento dei profili;
-7. archetipi di pagina e clustering;
-8. workflow utente;
-9. requisiti GUI e CLI;
-10. contratti AI locali;
-11. strategia di migrazione dalla pipeline legacy;
-12. piano di test e benchmark;
-13. criteri di compatibilità e rollback;
-14. ordine dei refactor;
-15. decision record delle scelte principali.
-
-## 14. Criteri per uscire dalla fase progettuale
-
-La progettazione è conclusa quando:
-
-- Chat A ha prodotto un documento architetturale unico;
-- Chat B ha eseguito una revisione critica;
-- le decisioni bloccanti sono risolte o esplicitamente rinviate;
-- esiste una pipeline target approvata;
-- esiste un piano di migrazione incrementale;
-- è chiaro cosa resta legacy durante la transizione;
-- il primo commit ha uno scope strutturale preciso;
-- sono definiti test di non regressione DB e fixture di generalizzazione;
-- `State.md`, `AGENTS.MD` e il workflow due-chat sono coerenti con la nuova fase.
+- framework GUI;
+- AI di calibrazione;
+- profili di famiglia;
+- structural fingerprint;
+- SQLite;
+- OCR.
 
 ## 15. Workflow corrente
 
-Durante la progettazione:
+Chat A è ora in Modalità I — implementazione incrementale.
+
+Per ogni task:
 
 ```text
-Chat A Architettura
-→ proposta globale
-→ Chat B Revisione
-→ integrazione in Chat A
-→ documento approvato
-→ aggiornamento State/AGENTS
-→ piano di migrazione
-→ primo commit
+Chat A
+→ definisce scope e criteri
+→ prepara istruzioni per Zed agent o implementazione manuale
+→ utente esegue
+→ Chat A revisiona diff, test e output
+→ utente committa
 ```
 
-Zed agent non riceve task progettuali.
+Chat B viene usata quando servono:
 
-Durante l'implementazione successiva:
+- diagnostica indipendente;
+- revisione di una decisione architetturale non prevista;
+- analisi di regressioni complesse;
+- confronto critico su un cambio di direzione.
 
-- commit piccoli e verificabili;
-- file ammessi/vietati;
-- diff e test obbligatori;
-- nessun commit automatico;
-- output generati non committati;
-- refactor ampi solo se previsti dal piano approvato e scomposti in fasi.
+Zed agent non decide l'architettura e non fa commit.
+
+## 16. Primo passo operativo
+
+Dopo il commit documentale di `State.md` e `AGENTS.MD`, il primo task implementativo sarà la **Milestone 1 — contratto minimo di cattura e primitive**.
+
+Il task dovrà essere preparato come micro-commit senza collegamento alla pipeline e senza modifica dell'output.
