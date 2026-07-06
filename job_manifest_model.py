@@ -8,6 +8,8 @@ from enum import StrEnum
 from pathlib import PurePosixPath
 from typing import Any
 
+from verified_file_model import VerifiedFileReference
+
 JOB_MANIFEST_SCHEMA_VERSION = "1.0"
 
 
@@ -47,25 +49,13 @@ def _validate_relative_posix_path(value: str, field_name: str) -> None:
 
 
 @dataclass(frozen=True, slots=True)
-class SourceReference:
+class SourceReference(VerifiedFileReference):
     """Verifiable identity of the immutable source content."""
 
-    sha256: str
-    size_bytes: int
     original_name: str | None = None
 
     def __post_init__(self) -> None:
-        if len(self.sha256) != 64:
-            raise ValueError("sha256 must contain exactly 64 hexadecimal characters")
-        if self.sha256 != self.sha256.lower():
-            raise ValueError("sha256 must use canonical lowercase hexadecimal")
-        try:
-            int(self.sha256, 16)
-        except ValueError as exc:
-            raise ValueError("sha256 must contain only hexadecimal characters") from exc
-
-        if self.size_bytes < 0:
-            raise ValueError("size_bytes must be greater than or equal to zero")
+        super().__post_init__()
 
         if self.original_name == "":
             raise ValueError("original_name must not be empty when provided")

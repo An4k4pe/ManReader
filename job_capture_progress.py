@@ -7,8 +7,7 @@ from enum import StrEnum
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from job_manifest_model import SourceReference
-from job_source_snapshot import verify_source_snapshot
+from verified_file_model import VerifiedFileReference, verify_file
 
 
 class CapturePageStatus(StrEnum):
@@ -55,19 +54,14 @@ class CapturePageState:
                 raise ValueError("completed pages require size_bytes")
 
             _validate_relative_posix_path(self.artifact_path, "artifact_path")
-            SourceReference(
+            VerifiedFileReference(
                 sha256=self.sha256,
                 size_bytes=self.size_bytes,
             )
             return
 
-        if any(
-            value is not None
-            for value in (self.artifact_path, self.sha256, self.size_bytes)
-        ):
-            raise ValueError(
-                "pending and failed pages must not declare a completed artifact"
-            )
+        if any(value is not None for value in (self.artifact_path, self.sha256, self.size_bytes)):
+            raise ValueError("pending and failed pages must not declare a completed artifact")
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,9 +78,7 @@ class CaptureProgress:
         page_numbers = tuple(page.page_num for page in self.pages)
         expected = tuple(range(1, self.page_count + 1))
         if page_numbers != expected:
-            raise ValueError(
-                "capture pages must cover exactly 1..page_count in order"
-            )
+            raise ValueError("capture pages must cover exactly 1..page_count in order")
 
 
 def initial_capture_progress(page_count: int) -> CaptureProgress:
@@ -152,11 +144,11 @@ def is_capture_page_resumable(page: CapturePageState, job_dir: Path) -> bool:
     assert page.size_bytes is not None
 
     artifact_path = job_dir.joinpath(*PurePosixPath(page.artifact_path).parts)
-    expected = SourceReference(
+    expected = VerifiedFileReference(
         sha256=page.sha256,
         size_bytes=page.size_bytes,
     )
-    return verify_source_snapshot(artifact_path, expected)
+    return verify_file(artifact_path, expected)
 
 
 def _require_str(data: dict[str, Any], key: str) -> str:

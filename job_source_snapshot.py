@@ -2,23 +2,20 @@
 
 from __future__ import annotations
 
-import hashlib
 import shutil
 from pathlib import Path
 
 from job_manifest_model import SourceReference
+from verified_file_model import inspect_verified_file, verify_file
 
 
 def inspect_source_file(source_path: Path) -> SourceReference:
     """Build a verified reference without copying the source."""
 
-    if not source_path.is_file():
-        raise FileNotFoundError(source_path)
-
-    sha256, size_bytes = _hash_file(source_path)
+    verified = inspect_verified_file(source_path)
     return SourceReference(
-        sha256=sha256,
-        size_bytes=size_bytes,
+        sha256=verified.sha256,
+        size_bytes=verified.size_bytes,
         original_name=source_path.name,
     )
 
@@ -37,11 +34,10 @@ def materialize_source_snapshot(source_path: Path, destination_path: Path) -> So
         raise FileExistsError(destination_path)
 
     shutil.copyfile(source_path, destination_path)
-    copied_reference = inspect_source_file(destination_path)
-
+    verified = inspect_verified_file(destination_path)
     return SourceReference(
-        sha256=copied_reference.sha256,
-        size_bytes=copied_reference.size_bytes,
+        sha256=verified.sha256,
+        size_bytes=verified.size_bytes,
         original_name=source_path.name,
     )
 
@@ -49,20 +45,4 @@ def materialize_source_snapshot(source_path: Path, destination_path: Path) -> So
 def verify_source_snapshot(path: Path, expected: SourceReference) -> bool:
     """Return whether a snapshot still matches its recorded reference."""
 
-    if not path.is_file():
-        return False
-
-    sha256, size_bytes = _hash_file(path)
-    return sha256 == expected.sha256 and size_bytes == expected.size_bytes
-
-
-def _hash_file(path: Path) -> tuple[str, int]:
-    digest = hashlib.sha256()
-    size_bytes = 0
-
-    with path.open("rb") as stream:
-        while chunk := stream.read(1024 * 1024):
-            digest.update(chunk)
-            size_bytes += len(chunk)
-
-    return digest.hexdigest(), size_bytes
+    return verify_file(path, expected)
