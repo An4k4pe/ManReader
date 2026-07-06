@@ -1,6 +1,6 @@
 # ManReader — Stato progetto
 
-## Versione corrente: v0.9 — normalizzazione shadow delle primitive
+## Versione corrente: v0.10 — job/workspace minimo
 
 ## 1. Decisione di fase
 
@@ -10,7 +10,8 @@ La proposta architetturale A-0.2 è stata revisionata criticamente da Chat B e c
 
 Il progetto è in **Modalità I — implementazione incrementale**.
 
-La **Milestone 1 — contratto minimo di cattura e primitive** e la **Milestone 2 — cattura PyMuPDF shadow** sono completate. La milestone corrente è la **Milestone 3 — normalizzazione**.
+La Milestone 1, la Milestone 2 e la Milestone 3 sono completate.
+La milestone corrente è la Milestone 4 — job/workspace minimo.
 
 Questo cambio di fase non autorizza una riscrittura generale della pipeline. Ogni modifica deve:
 
@@ -553,7 +554,7 @@ Ultime verifiche riportate durante la milestone:
 - suite completa verde;
 - pipeline legacy invariata.
 
-### Milestone 3 — Normalizzazione — corrente
+### Milestone 3 — Normalizzazione — completata
 
 Obiettivo:
 
@@ -562,20 +563,54 @@ BackendPageCapture
 → NormalizedPrimitivePage
 ```
 
-Primo micro-step previsto:
+Implementazione completata:
 
-- conversione deterministica di text, image occurrence e drawing observation
+- conversione deterministica delle observation testuali, raster e drawing
   nelle primitive già definite;
 - coordinate canoniche;
 - source reference verificabile;
-- identità deterministica;
+- identità deterministiche;
 - nessuna semantica, classificazione, regione o reading order;
-- test sintetici di assenza di perdita.
+- test sintetici e integrazione reale PyMuPDF;
+- dump diagnostico della pagina normalizzata.
 
-Le primitive derivate equivalenti ma provenienti da canali backend differenti,
-come linee vettoriali, rettangoli sottili e raster molto sottili, non devono
-essere fuse nello stesso commit iniziale. La loro normalizzazione strutturale
-resta un micro-step successivo della stessa milestone.
+Le primitive equivalenti provenienti da canali backend differenti non vengono
+fuse. L'eventuale riconoscimento strutturale di linee, separatori, bordi e
+support primitive appartiene alle successive milestone di analisi layout.
+
+File introdotti o estesi:
+
+- `primitive_normalizer.py`;
+- `tests/test_primitive_normalizer.py`;
+- `tests/test_pymupdf_primitive_normalization.py`;
+- `pymupdf_capture_dump.py`;
+- `tests/test_pymupdf_capture_dump.py`.
+
+Risultato:
+
+```text
+BackendPageCapture
+→ NormalizedPrimitivePage
+```
+
+Garanzie:
+
+- conversione uno-a-uno;
+- identità deterministiche;
+- source_observation_id conservato;
+- coordinate canoniche;
+- nessuna fusione;
+- nessun reading order;
+- nessuna classificazione semantica;
+- nessuna modifica alla pipeline legacy.
+
+Limitazioni esplicite:
+
+- solo geometria già in punti/top-left;
+- font_flags non convertiti in font_traits;
+- link e annotazioni non ancora normalizzati;
+- bbox raster degeneri rifiutati;
+- nessuna deduplicazione o normalizzazione strutturale.
 
 ### Milestone 4 — Job/workspace minimo
 
@@ -710,43 +745,58 @@ Zed agent non decide l'architettura e non fa commit.
 
 ## 16. Prossimo passo operativo
 
-Il prossimo task implementativo appartiene alla **Milestone 3 — normalizzazione**.
+Il prossimo task implementativo appartiene alla **Milestone 4 — job/workspace minimo**.
 
-Chat A deve preparare un micro-step limitato che converta una
-`BackendPageCapture` in `NormalizedPrimitivePage` usando i contratti già
-approvati, senza introdurre regioni, candidati, reading order o semantica.
+### Scope iniziale autorizzabile
 
-Il primo commit della milestone deve limitarsi alla conversione uno-a-uno delle
-osservazioni coperte:
+Il primo micro-step della Milestone 4 può includere soltanto:
 
-```text
-BackendTextObservation
-→ TextPrimitive
+- definizione del contratto minimo del manifest di job;
+- identità del job;
+- riferimento verificabile alla sorgente;
+- stato iniziale delle fasi;
+- percorsi relativi del workspace;
+- modelli immutabili e serializzabili;
+- test sintetici del contratto.
 
-BackendImageObservation
-→ ImageOccurrencePrimitive
+Non deve ancora includere:
 
-BackendDrawingObservation
-→ DrawingPrimitive
-```
-
-La fusione di elementi equivalenti, il riconoscimento di separatori e la
-generazione di regioni composite restano fuori da questo primo commit.
+- copia o reflink della sorgente;
+- resume operativo;
+- esecuzione della cattura;
+- job manager;
+- locking;
+- concorrenza;
+- invalidazione completa;
+- pubblicazione atomica;
+- GUI;
+- SQLite;
+- integrazione con la pipeline legacy.
 
 ## 17. Ultimo avanzamento verificato
 
-La Milestone 2 è stata chiusa con commit dedicati alla cattura PyMuPDF shadow
-testuale e visuale.
+La Milestone 3 è stata chiusa con commit:
+
+```text
+c765794 Add one-to-one primitive normalization
+af8f993 Add PyMuPDF primitive normalization integration test
+a97c702 Add normalized primitive diagnostic dump
+```
+
+Ultime verifiche riportate:
+
+Ruff verde;
+BasedPyright: 0 errori, 0 warning, 0 note;
+test mirati del dump: 8 verdi;
+suite completa: 299 test verdi, 7 skipped;
+dump reale di DB pagina 11 prodotto correttamente;
+pipeline legacy e output autorevoli invariati.
 
 Stato successivo approvato:
 
 ```text
-Milestone 3
-→ conversione capture-to-primitives
-→ NormalizedPrimitivePage reale
-→ confronto diagnostico
-→ pipeline legacy invariata
+Milestone 4
+→ contratto minimo del manifest di job
+→ modelli immutabili e serializzabili
+→ nessuna creazione operativa del workspace nel primo commit
 ```
-
-La modifica per rendere lo smoke DB opt-in è stata implementata in un
-micro-commit separato.

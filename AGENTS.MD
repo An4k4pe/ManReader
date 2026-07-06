@@ -2,7 +2,7 @@
 
 ## Stato corrente
 
-Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.9.
+Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.10.
 
 L'architettura target e il piano generale di migrazione sono approvati.
 
@@ -236,7 +236,7 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 La milestone corrente è:
 
-> **Milestone 3 — normalizzazione**
+> **Milestone 4 — job/workspace minimo**
 
 ### Stato delle milestone precedenti
 
@@ -256,63 +256,48 @@ La Milestone 2 è completata. Sono presenti e approvati:
 La capture PyMuPDF copre geometria, text run raw, immagini raster e drawing
 vettoriali senza usare i modelli elaborati della pipeline legacy.
 
-### Obiettivo della Milestone 3
+La Milestone 3 è completata. Sono presenti e approvati:
 
-Produrre una `NormalizedPrimitivePage` reale a partire da
+-- `primitive_normalizer.py`;
+
+- `tests/test_primitive_normalizer.py`;
+- `tests/test_pymupdf_primitive_normalization.py`;
+- `pymupdf_capture_dump.py`;
+- `tests/test_pymupdf_capture_dump.py`.
+
+La Milestone 3 ha prodotto una `NormalizedPrimitivePage` reale a partire da
 `BackendPageCapture`, senza cambiare l'output autorevole.
 
-Primo percorso previsto:
+### Milestone 4 - job/workspace minimo
 
-```text
-BackendPageCapture
-→ adapter di normalizzazione
-→ NormalizedPrimitivePage
-→ diagnostica o confronto controllato
-```
+- source snapshot;
+- manifest minimo;
+- stato delle fasi;
+- resume della cattura.
 
 ### Scope iniziale autorizzabile
 
-Il primo micro-step può includere soltanto:
+Il primo micro-step della Milestone 4 può includere soltanto:
 
-- conversione uno-a-uno delle osservazioni testuali;
-- conversione uno-a-uno delle occorrenze raster;
-- conversione uno-a-uno dei drawing;
-- coordinate canoniche;
-- identità deterministiche;
-- source observation reference;
-- test sintetici di assenza di perdita.
+- contratto minimo del manifest di job;
+- identità del job;
+- riferimento verificabile alla sorgente;
+- stato iniziale delle fasi;
+- percorsi relativi del workspace;
+- modelli immutabili e serializzabili;
+- test sintetici del contratto.
 
-### Vincoli della milestone
+Non deve ancora includere:
 
-- non derivare le primitive da `PageData`;
-- non usare `TextBlock`, `ImageBlock`, `VectorBlock` o `TableBlock`;
-- nessuna modifica al risultato Markdown o EPUB;
-- nessuna sostituzione del percorso legacy;
-- nessun refactor generale di `extractor.py`;
-- nessuna ricostruzione di paragrafi;
-- nessuna deduplicazione;
-- nessuna classificazione `decorative`, `structural`, `table`, `callout`,
-  `dropcap` o `marginalia`;
-- nessun reading order;
-- nessuna fusione di primitive equivalenti nel primo commit;
-- nessun region graph, profilo, workspace completo, AI o IR 2;
-- nessuna nuova dipendenza senza decisione esplicita;
-- dump e diagnostica restano locali e non committati;
-- lo smoke DB va eseguito solo se il micro-step può influire sulla pipeline legacy.
-
-### Criteri minimi
-
-- `NormalizedPrimitivePage` costruibile da una capture reale;
-- una primitiva per ogni osservazione coperta;
-- coordinate canoniche coerenti;
-- source reference conservata;
-- identità deterministiche;
-- nessuna perdita silenziosa;
-- nessuna semantica nelle primitive;
-- test mirati verdi;
-- Ruff e BasedPyright verdi;
-- suite legacy invariata quando pertinente;
-- diff limitato ai file autorizzati.
+- creazione operativa del workspace;
+- copia o reflink della sorgente;
+- resume operativo;
+- esecuzione della cattura;
+- job manager;
+- locking o concorrenza;
+- invalidazione completa;
+- pubblicazione atomica;
+- integrazione con la pipeline legacy.
 
 ## Migrazione e shadow mode
 
