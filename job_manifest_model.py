@@ -1,0 +1,211 @@
+"""Immutable, JSON-serializable contract for a minimal ManReader job manifest."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from dataclasses import asdict, dataclass
+from enum import StrEnum
+from pathlib import PurePosixPath
+from typing import Any
+
+JOB_MANIFEST_SCHEMA_VERSION = "1.0"
+
+
+class JobPhase(StrEnum):
+    """Phases represented by the first minimal workspace contract."""
+
+    SOURCE_SNAPSHOT = "source_snapshot"
+    CAPTURE = "capture"
+
+
+class PhaseStatus(StrEnum):
+    """Generic lifecycle states supported by the manifest contract."""
+
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+def _validate_non_empty(value: str, field_name: str) -> None:
+    if not value:
+        raise ValueError(f"{field_name} must not be empty")
+
+
+def _validate_relative_posix_path(value: str, field_name: str) -> None:
+    _validate_non_empty(value, field_name)
+
+    if "\\" in value:
+        raise ValueError(f"{field_name} must use POSIX '/' separators")
+
+    path = PurePosixPath(value)
+    if path.is_absolute():
+        raise ValueError(f"{field_name} must be relative to the job workspace")
+
+    if value in {".", ".."} or any(part == ".." for part in path.parts):
+        raise ValueError(f"{field_name} must not escape the job workspace")
+
+
+@dataclass(frozen=True, slots=True)
+class SourceReference:
+    """Verifiable identity of the immutable source content."""
+
+    sha256: str
+    size_bytes: int
+    original_name: str | None = None
+
+    def __post_init__(self) -> None:
+        if len(self.sha256) != 64:
+            raise ValueError("sha256 must contain exactly 64 hexadecimal characters")
+        if self.sha256 != self.sha256.lower():
+            raise ValueError("sha256 must use canonical lowercase hexadecimal")
+        try:
+            int(self.sha256, 16)
+        except ValueError as exc:
+            raise ValueError("sha256 must contain only hexadecimal characters") from exc
+
+        if self.size_bytes < 0:
+            raise ValueError("size_bytes must be greater than or equal to zero")
+
+        if self.original_name == "":
+            raise ValueError("original_name must not be empty when provided")
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspacePaths:
+    """Paths relative to the root directory of one job workspace."""
+
+    source_snapshot: str
+    raw_dir: str = "raw"
+    manifest_path: str = "manifest.json"
+
+    def __post_init__(self) -> None:
+        _validate_relative_posix_path(self.source_snapshot, "source_snapshot")
+        _validate_relative_posix_path(self.raw_dir, "raw_dir")
+        _validate_relative_posix_path(self.manifest_path, "manifest_path")
+
+
+@dataclass(frozen=True, slots=True)
+class JobPhaseState:
+    """Declarative state of one job phase."""
+
+    phase: JobPhase
+    status: PhaseStatus
+
+
+@dataclass(frozen=True, slots=True)
+class JobManifest:
+    """Minimal persistent contract for a ManReader job."""
+
+    schema_version: str
+    job_id: str
+    source: SourceReference
+    workspace: WorkspacePaths
+    phases: tuple[JobPhaseState, ...]
+
+    def __post_init__(self) -> None:
+        _validate_non_empty(self.schema_version, "schema_version")
+        _validate_non_empty(self.job_id, "job_id")
+
+        phase_names = tuple(state.phase for state in self.phases)
+        if len(set(phase_names)) != len(phase_names):
+            raise ValueError("each job phase must appear exactly once")
+
+
+def initial_job_manifest(
+    *,
+    job_id: str,
+    source: SourceReference,
+    workspace: WorkspacePaths,
+) -> JobManifest:
+    """Build the initial declarative state without filesystem operations."""
+
+    return JobManifest(
+        schema_version=JOB_MANIFEST_SCHEMA_VERSION,
+        job_id=job_id,
+        source=source,
+        workspace=workspace,
+        phases=(
+            JobPhaseState(JobPhase.SOURCE_SNAPSHOT, PhaseStatus.PENDING),
+            JobPhaseState(JobPhase.CAPTURE, PhaseStatus.PENDING),
+        ),
+    )
+
+
+def job_manifest_to_dict(manifest: JobManifest) -> dict[str, Any]:
+    """Convert a manifest to a JSON-compatible dictionary."""
+
+    return asdict(manifest)
+
+
+def job_manifest_from_dict(data: Mapping[str, Any]) -> JobManifest:
+    """Reconstruct and validate a manifest from a decoded JSON object."""
+
+    source_data = _require_mapping(data, "source")
+    workspace_data = _require_mapping(data, "workspace")
+    phases_data = data.get("phases")
+    if not isinstance(phases_data, list):
+        raise ValueError("phases must be a list")
+
+    phases: list[JobPhaseState] = []
+    for index, item in enumerate(phases_data):
+        if not isinstance(item, Mapping):
+            raise ValueError(f"phases[{index}] must be an object")
+        try:
+            phases.append(
+                JobPhaseState(
+                    phase=JobPhase(str(item["phase"])),
+                    status=PhaseStatus(str(item["status"])),
+                )
+            )
+        except KeyError as exc:
+            raise ValueError(f"phases[{index}] is missing {exc.args[0]}") from exc
+
+    try:
+        return JobManifest(
+            schema_version=_require_str(data, "schema_version"),
+            job_id=_require_str(data, "job_id"),
+            source=SourceReference(
+                sha256=_require_str(source_data, "sha256"),
+                size_bytes=_require_int(source_data, "size_bytes"),
+                original_name=_optional_str(source_data, "original_name"),
+            ),
+            workspace=WorkspacePaths(
+                source_snapshot=_require_str(workspace_data, "source_snapshot"),
+                raw_dir=_require_str(workspace_data, "raw_dir"),
+                manifest_path=_require_str(workspace_data, "manifest_path"),
+            ),
+            phases=tuple(phases),
+        )
+    except KeyError as exc:
+        raise ValueError(f"manifest is missing {exc.args[0]}") from exc
+
+
+def _require_mapping(data: Mapping[str, Any], key: str) -> Mapping[str, Any]:
+    value = data.get(key)
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{key} must be an object")
+    return value
+
+
+def _require_str(data: Mapping[str, Any], key: str) -> str:
+    value = data.get(key)
+    if not isinstance(value, str):
+        raise ValueError(f"{key} must be a string")
+    return value
+
+
+def _require_int(data: Mapping[str, Any], key: str) -> int:
+    value = data.get(key)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{key} must be an integer")
+    return value
+
+
+def _optional_str(data: Mapping[str, Any], key: str) -> str | None:
+    value = data.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"{key} must be a string or null")
+    return value
