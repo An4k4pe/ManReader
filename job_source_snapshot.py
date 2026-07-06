@@ -9,6 +9,20 @@ from pathlib import Path
 from job_manifest_model import SourceReference
 
 
+def inspect_source_file(source_path: Path) -> SourceReference:
+    """Build a verified reference without copying the source."""
+
+    if not source_path.is_file():
+        raise FileNotFoundError(source_path)
+
+    sha256, size_bytes = _hash_file(source_path)
+    return SourceReference(
+        sha256=sha256,
+        size_bytes=size_bytes,
+        original_name=source_path.name,
+    )
+
+
 def materialize_source_snapshot(source_path: Path, destination_path: Path) -> SourceReference:
     """Copy a source file and return its verified content reference.
 
@@ -23,11 +37,11 @@ def materialize_source_snapshot(source_path: Path, destination_path: Path) -> So
         raise FileExistsError(destination_path)
 
     shutil.copyfile(source_path, destination_path)
+    copied_reference = inspect_source_file(destination_path)
 
-    sha256, size_bytes = _hash_file(destination_path)
     return SourceReference(
-        sha256=sha256,
-        size_bytes=size_bytes,
+        sha256=copied_reference.sha256,
+        size_bytes=copied_reference.size_bytes,
         original_name=source_path.name,
     )
 

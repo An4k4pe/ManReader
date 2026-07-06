@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from job_source_snapshot import (
+    inspect_source_file,
     materialize_source_snapshot,
     verify_source_snapshot,
 )
@@ -30,6 +31,13 @@ class JobSourceSnapshotTests(unittest.TestCase):
             self.assertEqual(reference.sha256, hashlib.sha256(payload).hexdigest())
             self.assertEqual(reference.size_bytes, len(payload))
             self.assertEqual(reference.original_name, "manual.pdf")
+
+    def test_inspect_source_file_rejects_missing_file(self) -> None:
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.assertRaises(FileNotFoundError),
+        ):
+            inspect_source_file(Path(temp_dir) / "missing.pdf")
 
     def test_materialized_snapshot_verifies_against_reference(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -67,6 +75,20 @@ class JobSourceSnapshotTests(unittest.TestCase):
             )
 
             self.assertFalse(verify_source_snapshot(missing_path, reference))
+
+    def test_inspect_source_file_builds_reference_without_copying(self) -> None:
+        payload = b"source-content"
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_path = Path(temp_dir) / "manual.pdf"
+            source_path.write_bytes(payload)
+
+            reference = inspect_source_file(source_path)
+
+            self.assertEqual(reference.sha256, hashlib.sha256(payload).hexdigest())
+            self.assertEqual(reference.size_bytes, len(payload))
+            self.assertEqual(reference.original_name, "manual.pdf")
+            self.assertEqual(tuple(Path(temp_dir).iterdir()), (source_path,))
 
     def test_materialize_source_snapshot_rejects_missing_source(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
