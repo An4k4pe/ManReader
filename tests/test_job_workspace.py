@@ -19,6 +19,7 @@ class JobWorkspaceTests(unittest.TestCase):
     def setUp(self) -> None:
         self.manifest = initial_job_manifest(
             job_id="job-test-001",
+            page_count=3,
             source=SourceReference(
                 sha256="a" * 64,
                 size_bytes=1234,
@@ -81,6 +82,7 @@ class JobWorkspaceTests(unittest.TestCase):
         manifest = initial_job_manifest(
             job_id="job-test-002",
             source=self.manifest.source,
+            page_count=3,
             workspace=WorkspacePaths(
                 source_snapshot="inputs/source/manual.pdf",
                 raw_dir="artifacts/raw/capture",

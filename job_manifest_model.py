@@ -8,6 +8,11 @@ from enum import StrEnum
 from pathlib import PurePosixPath
 from typing import Any
 
+from job_capture_progress import (
+    CaptureProgress,
+    capture_progress_from_dict,
+    initial_capture_progress,
+)
 from verified_file_model import VerifiedFileReference
 
 JOB_MANIFEST_SCHEMA_VERSION = "1.0"
@@ -92,6 +97,7 @@ class JobManifest:
     source: SourceReference
     workspace: WorkspacePaths
     phases: tuple[JobPhaseState, ...]
+    capture_progress: CaptureProgress
 
     def __post_init__(self) -> None:
         _validate_non_empty(self.schema_version, "schema_version")
@@ -107,6 +113,7 @@ def initial_job_manifest(
     job_id: str,
     source: SourceReference,
     workspace: WorkspacePaths,
+    page_count: int,
 ) -> JobManifest:
     """Build the initial declarative state without filesystem operations."""
 
@@ -115,6 +122,7 @@ def initial_job_manifest(
         job_id=job_id,
         source=source,
         workspace=workspace,
+        capture_progress=initial_capture_progress(page_count),
         phases=(
             JobPhaseState(JobPhase.SOURCE_SNAPSHOT, PhaseStatus.PENDING),
             JobPhaseState(JobPhase.CAPTURE, PhaseStatus.PENDING),
@@ -133,6 +141,7 @@ def job_manifest_from_dict(data: Mapping[str, Any]) -> JobManifest:
 
     source_data = _require_mapping(data, "source")
     workspace_data = _require_mapping(data, "workspace")
+    capture_progress_data = _require_mapping(data, "capture_progress")
     phases_data = data.get("phases")
     if not isinstance(phases_data, list):
         raise ValueError("phases must be a list")
@@ -153,6 +162,7 @@ def job_manifest_from_dict(data: Mapping[str, Any]) -> JobManifest:
 
     try:
         return JobManifest(
+            capture_progress=capture_progress_from_dict(dict(capture_progress_data)),
             schema_version=_require_str(data, "schema_version"),
             job_id=_require_str(data, "job_id"),
             source=SourceReference(

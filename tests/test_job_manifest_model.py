@@ -6,6 +6,7 @@ import json
 import unittest
 from dataclasses import FrozenInstanceError
 
+from job_capture_progress import CapturePageStatus
 from job_manifest_model import (
     JOB_MANIFEST_SCHEMA_VERSION,
     JobManifest,
@@ -32,6 +33,7 @@ class JobManifestModelTests(unittest.TestCase):
     def test_initial_manifest_has_only_authorized_pending_phases(self) -> None:
         manifest = initial_job_manifest(
             job_id="job-test-001",
+            page_count=3,
             source=self.source,
             workspace=self.workspace,
         )
@@ -50,6 +52,7 @@ class JobManifestModelTests(unittest.TestCase):
             job_id="job-test-001",
             source=self.source,
             workspace=self.workspace,
+            page_count=3,
         )
 
         with self.assertRaises(FrozenInstanceError):
@@ -64,6 +67,7 @@ class JobManifestModelTests(unittest.TestCase):
             job_id="job-test-001",
             source=self.source,
             workspace=self.workspace,
+            page_count=3,
         )
 
         encoded = json.dumps(job_manifest_to_dict(original))
@@ -77,6 +81,7 @@ class JobManifestModelTests(unittest.TestCase):
             job_id="job-test-001",
             source=self.source,
             workspace=self.workspace,
+            page_count=3,
         )
         data = job_manifest_to_dict(manifest)
         data["job_id"] = 123
@@ -89,11 +94,12 @@ class JobManifestModelTests(unittest.TestCase):
             job_id="job-test-001",
             source=self.source,
             workspace=self.workspace,
+            page_count=3,
         )
 
         self.assertEqual(
             set(job_manifest_to_dict(manifest)),
-            {"schema_version", "job_id", "source", "workspace", "phases"},
+            {"schema_version", "job_id", "source", "workspace", "phases", "capture_progress"},
         )
 
     def test_source_reference_rejects_invalid_sha256(self) -> None:
@@ -135,7 +141,30 @@ class JobManifestModelTests(unittest.TestCase):
         self.assertEqual(paths.raw_dir, "raw/capture")
         self.assertEqual(paths.manifest_path, "metadata/manifest.json")
 
+    def test_initial_manifest_contains_pending_capture_progress(self) -> None:
+        manifest = initial_job_manifest(
+            job_id="job-test-001",
+            source=self.source,
+            workspace=self.workspace,
+            page_count=3,
+        )
+
+        self.assertEqual(manifest.capture_progress.page_count, 3)
+        self.assertEqual(len(manifest.capture_progress.pages), 3)
+        self.assertTrue(
+            all(
+                page.status is CapturePageStatus.PENDING for page in manifest.capture_progress.pages
+            )
+        )
+
     def test_manifest_rejects_duplicate_phases(self) -> None:
+        manifest = initial_job_manifest(
+            job_id="job-test-001",
+            source=self.source,
+            workspace=self.workspace,
+            page_count=1,
+        )
+
         duplicate = JobPhaseState(JobPhase.CAPTURE, PhaseStatus.PENDING)
 
         with self.assertRaises(ValueError):
@@ -145,6 +174,7 @@ class JobManifestModelTests(unittest.TestCase):
                 source=self.source,
                 workspace=self.workspace,
                 phases=(duplicate, duplicate),
+                capture_progress=manifest.capture_progress,
             )
 
     def test_manifest_keeps_identity_source_paths_and_state_separate(self) -> None:
@@ -152,6 +182,7 @@ class JobManifestModelTests(unittest.TestCase):
             job_id="job-test-001",
             source=self.source,
             workspace=self.workspace,
+            page_count=3,
         )
 
         self.assertEqual(manifest.job_id, "job-test-001")

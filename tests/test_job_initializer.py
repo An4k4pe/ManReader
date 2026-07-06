@@ -27,6 +27,7 @@ class JobInitializerTests(unittest.TestCase):
                 source_path=source_path,
                 job_dir=job_dir,
                 job_id="job-test-001",
+                page_count=3,
             )
 
             snapshot_path = job_dir / "source" / "manual.pdf"
@@ -54,6 +55,7 @@ class JobInitializerTests(unittest.TestCase):
                 job_dir=job_dir,
                 job_id="job-test-002",
                 workspace=workspace,
+                page_count=3,
             )
 
             self.assertEqual((job_dir / "inputs" / "book.pdf").read_bytes(), b"content")
@@ -73,6 +75,7 @@ class JobInitializerTests(unittest.TestCase):
                     source_path=root / "missing.pdf",
                     job_dir=job_dir,
                     job_id="job-test-001",
+                    page_count=3,
                 )
 
             self.assertFalse(job_dir.exists())
@@ -92,6 +95,7 @@ class JobInitializerTests(unittest.TestCase):
                     source_path=source_path,
                     job_dir=job_dir,
                     job_id="job-test-001",
+                    page_count=3,
                 )
 
             self.assertEqual(marker.read_text(encoding="utf-8"), "unchanged")
@@ -127,6 +131,7 @@ class JobInitializerTests(unittest.TestCase):
                     source_path=source_path,
                     job_dir=job_dir,
                     job_id="job-test-001",
+                    page_count=3,
                 )
 
 

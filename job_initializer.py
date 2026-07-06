@@ -12,6 +12,7 @@ from job_workspace import create_job_workspace
 def initialize_job(
     *,
     source_path: Path,
+    page_count: int,
     job_dir: Path,
     job_id: str,
     workspace: WorkspacePaths | None = None,
@@ -25,21 +26,18 @@ def initialize_job(
     This function does not implement rollback if a later step fails.
     """
 
-    resolved_workspace = workspace or WorkspacePaths(
-        source_snapshot=f"source/{source_path.name}"
-    )
+    resolved_workspace = workspace or WorkspacePaths(source_snapshot=f"source/{source_path.name}")
     source_reference = inspect_source_file(source_path)
     manifest = initial_job_manifest(
         job_id=job_id,
         source=source_reference,
         workspace=resolved_workspace,
+        page_count=page_count,
     )
 
     create_job_workspace(manifest, job_dir)
 
-    destination_path = job_dir.joinpath(
-        *PurePosixPath(resolved_workspace.source_snapshot).parts
-    )
+    destination_path = job_dir.joinpath(*PurePosixPath(resolved_workspace.source_snapshot).parts)
     copied_reference = materialize_source_snapshot(source_path, destination_path)
 
     if (

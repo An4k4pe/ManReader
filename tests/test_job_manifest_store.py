@@ -19,6 +19,7 @@ class JobManifestStoreTests(unittest.TestCase):
     def setUp(self) -> None:
         self.manifest = initial_job_manifest(
             job_id="job-test-001",
+            page_count=3,
             source=SourceReference(
                 sha256="a" * 64,
                 size_bytes=1234,
