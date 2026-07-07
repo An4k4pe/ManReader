@@ -5,7 +5,12 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path, PurePosixPath
 
-from job_capture_progress import CapturePageState, CapturePageStatus, CaptureProgress
+from job_capture_progress import (
+    CapturePageState,
+    CapturePageStatus,
+    CaptureProgress,
+    require_capture_artifact_under_raw_dir,
+)
 from job_manifest_model import JobManifest
 from verified_file_model import inspect_verified_file
 
@@ -29,7 +34,7 @@ def complete_capture_page(
     if current.status is CapturePageStatus.COMPLETED:
         raise ValueError(f"capture page {page_num} is already completed")
 
-    _require_path_under_raw_dir(
+    require_capture_artifact_under_raw_dir(
         artifact_path=artifact_path,
         raw_dir=manifest.workspace.raw_dir,
     )
@@ -59,11 +64,3 @@ def _page_index(progress: CaptureProgress, page_num: int) -> int:
     if page_num < 1 or page_num > progress.page_count:
         raise ValueError(f"page_num must be between 1 and {progress.page_count}")
     return page_num - 1
-
-
-def _require_path_under_raw_dir(*, artifact_path: str, raw_dir: str) -> None:
-    artifact = PurePosixPath(artifact_path)
-    raw = PurePosixPath(raw_dir)
-
-    if artifact == raw or not artifact.is_relative_to(raw):
-        raise ValueError("capture artifact must be stored below workspace raw_dir")

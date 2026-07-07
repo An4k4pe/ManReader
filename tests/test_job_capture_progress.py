@@ -46,6 +46,44 @@ class JobCaptureProgressTests(unittest.TestCase):
         with self.assertRaises(FrozenInstanceError):
             progress.pages[0].status = CapturePageStatus.COMPLETED  # type: ignore[misc]
 
+    def test_page_num_rejects_bool(self) -> None:
+        with self.assertRaisesRegex(ValueError, "page_num must be an integer"):
+            CapturePageState(
+                page_num=True,  # type: ignore[arg-type]
+                status=CapturePageStatus.PENDING,
+            )
+
+    def test_page_status_rejects_string(self) -> None:
+        with self.assertRaisesRegex(ValueError, "status must be a CapturePageStatus"):
+            CapturePageState(
+                page_num=1,
+                status="pending",  # type: ignore[arg-type]
+            )
+
+    def test_page_count_rejects_bool(self) -> None:
+        with self.assertRaisesRegex(ValueError, "page_count must be an integer"):
+            CaptureProgress(
+                page_count=True,  # type: ignore[arg-type]
+                pages=(CapturePageState(1, CapturePageStatus.PENDING),),
+            )
+
+    def test_progress_requires_pages_tuple(self) -> None:
+        with self.assertRaisesRegex(ValueError, "pages must be a tuple"):
+            CaptureProgress(
+                page_count=1,
+                pages=[CapturePageState(1, CapturePageStatus.PENDING)],  # type: ignore[arg-type]
+            )
+
+    def test_progress_rejects_wrong_page_item_type(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError,
+            "pages must contain only CapturePageState items",
+        ):
+            CaptureProgress(
+                page_count=1,
+                pages=(object(),),  # type: ignore[arg-type]
+            )
+
     def test_progress_requires_exact_ordered_page_coverage(self) -> None:
         invalid_pages = (
             (),

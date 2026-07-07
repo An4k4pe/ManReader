@@ -170,7 +170,6 @@ class JobCapturePageRunnerTests(unittest.TestCase):
                     original_name=manifest.source.original_name,
                 ),
                 workspace=manifest.workspace,
-                phases=manifest.phases,
                 capture_progress=manifest.capture_progress,
             )
             save_job_manifest(changed_manifest, manifest_path)

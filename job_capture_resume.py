@@ -35,7 +35,6 @@ def build_capture_resume_plan(
                 resumable_pages.append(page.page_num)
             else:
                 invalid_completed_pages.append(page.page_num)
-                pages_to_capture.append(page.page_num)
             continue
 
         pages_to_capture.append(page.page_num)

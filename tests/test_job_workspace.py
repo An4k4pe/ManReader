@@ -11,7 +11,6 @@ from job_manifest_model import (
     WorkspacePaths,
     initial_job_manifest,
 )
-from job_manifest_store import load_job_manifest
 from job_workspace import create_job_workspace
 
 
@@ -38,7 +37,7 @@ class JobWorkspaceTests(unittest.TestCase):
             self.assertTrue(job_dir.is_dir())
             self.assertTrue((job_dir / "source").is_dir())
             self.assertTrue((job_dir / "raw").is_dir())
-            self.assertTrue(manifest_path.is_file())
+            self.assertFalse(manifest_path.exists())
 
     def test_create_job_workspace_does_not_materialize_source(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -48,13 +47,13 @@ class JobWorkspaceTests(unittest.TestCase):
 
             self.assertFalse((job_dir / "source" / "manual.pdf").exists())
 
-    def test_created_manifest_round_trips_through_store(self) -> None:
+    def test_create_job_workspace_does_not_write_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             job_dir = Path(temp_dir) / "job-test-001"
 
             manifest_path = create_job_workspace(self.manifest, job_dir)
 
-            self.assertEqual(load_job_manifest(manifest_path), self.manifest)
+            self.assertFalse(manifest_path.exists())
 
     def test_create_job_workspace_rejects_existing_job_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -101,7 +100,7 @@ class JobWorkspaceTests(unittest.TestCase):
                 manifest_path,
                 job_dir / "metadata" / "job" / "manifest.json",
             )
-            self.assertTrue(manifest_path.is_file())
+            self.assertFalse(manifest_path.exists())
 
 
 if __name__ == "__main__":

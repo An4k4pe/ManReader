@@ -5,17 +5,16 @@ from __future__ import annotations
 from pathlib import Path, PurePosixPath
 
 from job_manifest_model import JobManifest
-from job_manifest_store import save_job_manifest
 
 
 def create_job_workspace(manifest: JobManifest, job_dir: Path) -> Path:
     """Create the minimal directory structure declared by a job manifest.
 
     The parent of ``job_dir`` must already exist and ``job_dir`` itself must
-    not exist. This function creates directories and persists the manifest,
-    but it does not create or copy the source snapshot.
+    not exist. This function creates directories only; it does not create or
+    copy the source snapshot and does not persist the manifest.
 
-    Returns the path of the written manifest.
+    Returns the manifest path declared by the workspace.
     """
 
     job_dir.mkdir()
@@ -34,7 +33,6 @@ def create_job_workspace(manifest: JobManifest, job_dir: Path) -> Path:
     raw_dir.mkdir(parents=True, exist_ok=True)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
 
-    save_job_manifest(manifest, manifest_path)
     return manifest_path
 
 

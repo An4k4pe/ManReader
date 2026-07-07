@@ -134,6 +134,32 @@ class JobInitializerTests(unittest.TestCase):
                     page_count=3,
                 )
 
+            self.assertFalse((job_dir / "manifest.json").exists())
+
+    def test_initialize_job_does_not_publish_manifest_when_copy_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source_path = root / "manual.pdf"
+            job_dir = root / "job-test-001"
+            source_path.write_bytes(b"content")
+
+            with (
+                patch(
+                    "job_initializer.materialize_source_snapshot",
+                    side_effect=OSError("copy failed"),
+                ),
+                self.assertRaisesRegex(OSError, "copy failed"),
+            ):
+                initialize_job(
+                    source_path=source_path,
+                    job_dir=job_dir,
+                    job_id="job-test-001",
+                    page_count=3,
+                )
+
+            self.assertTrue(job_dir.is_dir())
+            self.assertFalse((job_dir / "manifest.json").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

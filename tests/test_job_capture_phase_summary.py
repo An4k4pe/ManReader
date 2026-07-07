@@ -138,7 +138,7 @@ class JobCapturePhaseSummaryTests(unittest.TestCase):
 
         self.assertEqual(summary.progress_status, CaptureProgressStatus.INVALID)
         self.assertEqual(summary.resumable_pages, (1,))
-        self.assertEqual(summary.pages_to_capture, (2, 3))
+        self.assertEqual(summary.pages_to_capture, (3,))
         self.assertEqual(summary.invalid_completed_pages, (2,))
 
 

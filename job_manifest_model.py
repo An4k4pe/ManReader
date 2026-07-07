@@ -4,34 +4,19 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
-from enum import StrEnum
 from pathlib import PurePosixPath
 from typing import Any
 
 from job_capture_progress import (
+    CapturePageStatus,
     CaptureProgress,
     capture_progress_from_dict,
     initial_capture_progress,
+    require_capture_artifact_under_raw_dir,
 )
 from verified_file_model import VerifiedFileReference
 
 JOB_MANIFEST_SCHEMA_VERSION = "1.0"
-
-
-class JobPhase(StrEnum):
-    """Phases represented by the first minimal workspace contract."""
-
-    SOURCE_SNAPSHOT = "source_snapshot"
-    CAPTURE = "capture"
-
-
-class PhaseStatus(StrEnum):
-    """Generic lifecycle states supported by the manifest contract."""
-
-    PENDING = "pending"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
 
 
 def _validate_non_empty(value: str, field_name: str) -> None:
@@ -81,14 +66,6 @@ class WorkspacePaths:
 
 
 @dataclass(frozen=True, slots=True)
-class JobPhaseState:
-    """Declarative state of one job phase."""
-
-    phase: JobPhase
-    status: PhaseStatus
-
-
-@dataclass(frozen=True, slots=True)
 class JobManifest:
     """Minimal persistent contract for a ManReader job."""
 
@@ -96,16 +73,21 @@ class JobManifest:
     job_id: str
     source: SourceReference
     workspace: WorkspacePaths
-    phases: tuple[JobPhaseState, ...]
     capture_progress: CaptureProgress
 
     def __post_init__(self) -> None:
         _validate_non_empty(self.schema_version, "schema_version")
+        if self.schema_version != JOB_MANIFEST_SCHEMA_VERSION:
+            raise ValueError(f"unsupported job manifest schema_version: {self.schema_version}")
         _validate_non_empty(self.job_id, "job_id")
 
-        phase_names = tuple(state.phase for state in self.phases)
-        if len(set(phase_names)) != len(phase_names):
-            raise ValueError("each job phase must appear exactly once")
+        for page in self.capture_progress.pages:
+            if page.status is CapturePageStatus.COMPLETED:
+                assert page.artifact_path is not None
+                require_capture_artifact_under_raw_dir(
+                    artifact_path=page.artifact_path,
+                    raw_dir=self.workspace.raw_dir,
+                )
 
 
 def initial_job_manifest(
@@ -123,10 +105,6 @@ def initial_job_manifest(
         source=source,
         workspace=workspace,
         capture_progress=initial_capture_progress(page_count),
-        phases=(
-            JobPhaseState(JobPhase.SOURCE_SNAPSHOT, PhaseStatus.PENDING),
-            JobPhaseState(JobPhase.CAPTURE, PhaseStatus.PENDING),
-        ),
     )
 
 
@@ -142,23 +120,6 @@ def job_manifest_from_dict(data: Mapping[str, Any]) -> JobManifest:
     source_data = _require_mapping(data, "source")
     workspace_data = _require_mapping(data, "workspace")
     capture_progress_data = _require_mapping(data, "capture_progress")
-    phases_data = data.get("phases")
-    if not isinstance(phases_data, list):
-        raise ValueError("phases must be a list")
-
-    phases: list[JobPhaseState] = []
-    for index, item in enumerate(phases_data):
-        if not isinstance(item, Mapping):
-            raise ValueError(f"phases[{index}] must be an object")
-        try:
-            phases.append(
-                JobPhaseState(
-                    phase=JobPhase(str(item["phase"])),
-                    status=PhaseStatus(str(item["status"])),
-                )
-            )
-        except KeyError as exc:
-            raise ValueError(f"phases[{index}] is missing {exc.args[0]}") from exc
 
     try:
         return JobManifest(
@@ -175,7 +136,6 @@ def job_manifest_from_dict(data: Mapping[str, Any]) -> JobManifest:
                 raw_dir=_require_str(workspace_data, "raw_dir"),
                 manifest_path=_require_str(workspace_data, "manifest_path"),
             ),
-            phases=tuple(phases),
         )
     except KeyError as exc:
         raise ValueError(f"manifest is missing {exc.args[0]}") from exc

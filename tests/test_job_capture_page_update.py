@@ -6,6 +6,7 @@ import hashlib
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from job_capture_page_update import complete_capture_page
 from job_capture_progress import CapturePageStatus, is_capture_page_resumable
@@ -123,6 +124,71 @@ class JobCapturePageUpdateTests(unittest.TestCase):
                     page_num=1,
                     artifact_path="other/page-0001.json",
                 )
+
+    def test_completion_rejects_escaping_artifact_before_external_read(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            job_dir = Path(temp_dir)
+            external = job_dir / "other" / "page.json"
+            external.parent.mkdir()
+            external.write_bytes(b"external")
+
+            with (
+                patch("job_capture_page_update.inspect_verified_file") as inspect_mock,
+                self.assertRaisesRegex(ValueError, "escape"),
+            ):
+                complete_capture_page(
+                    self.manifest,
+                    job_dir=job_dir,
+                    page_num=1,
+                    artifact_path="raw/../other/page.json",
+                )
+
+            inspect_mock.assert_not_called()
+
+    def test_completion_rejects_empty_artifact_path(self) -> None:
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            self.assertRaisesRegex(ValueError, "artifact_path must not be empty"),
+        ):
+            complete_capture_page(
+                self.manifest,
+                job_dir=Path(temp_dir),
+                page_num=1,
+                artifact_path="",
+            )
+
+    def test_completion_accepts_nested_raw_dir_artifact(self) -> None:
+        manifest = initial_job_manifest(
+            job_id="job-test-001",
+            source=SourceReference(
+                sha256="a" * 64,
+                size_bytes=1234,
+                original_name="manual.pdf",
+            ),
+            workspace=WorkspacePaths(
+                source_snapshot="source/manual.pdf",
+                raw_dir="artifacts/raw/capture",
+            ),
+            page_count=1,
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            job_dir = Path(temp_dir)
+            artifact = job_dir / "artifacts" / "raw" / "capture" / "page-0001.json"
+            artifact.parent.mkdir(parents=True)
+            artifact.write_bytes(b"content")
+
+            updated = complete_capture_page(
+                manifest,
+                job_dir=job_dir,
+                page_num=1,
+                artifact_path="artifacts/raw/capture/page-0001.json",
+            )
+
+        self.assertEqual(
+            updated.capture_progress.pages[0].artifact_path,
+            "artifacts/raw/capture/page-0001.json",
+        )
 
     def test_completion_rejects_raw_directory_itself_as_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

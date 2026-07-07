@@ -68,7 +68,7 @@ class JobCaptureResumeTests(unittest.TestCase):
         self.assertEqual(plan.pages_to_capture, (1, 3))
         self.assertEqual(plan.invalid_completed_pages, ())
 
-    def test_missing_completed_artifact_requires_recapture(self) -> None:
+    def test_missing_completed_artifact_is_invalid_only(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             job_dir = Path(temp_dir)
             artifact = job_dir / "raw" / "page-0001.json"
@@ -86,10 +86,10 @@ class JobCaptureResumeTests(unittest.TestCase):
             plan = build_capture_resume_plan(manifest, job_dir=job_dir)
 
         self.assertEqual(plan.resumable_pages, ())
-        self.assertEqual(plan.pages_to_capture, (1, 2, 3))
+        self.assertEqual(plan.pages_to_capture, (2, 3))
         self.assertEqual(plan.invalid_completed_pages, (1,))
 
-    def test_corrupted_completed_artifact_requires_recapture(self) -> None:
+    def test_corrupted_completed_artifact_is_invalid_only(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             job_dir = Path(temp_dir)
             artifact = job_dir / "raw" / "page-0003.json"
@@ -107,7 +107,37 @@ class JobCaptureResumeTests(unittest.TestCase):
             plan = build_capture_resume_plan(manifest, job_dir=job_dir)
 
         self.assertEqual(plan.resumable_pages, ())
-        self.assertEqual(plan.pages_to_capture, (1, 2, 3))
+        self.assertEqual(plan.pages_to_capture, (1, 2))
+        self.assertEqual(plan.invalid_completed_pages, (3,))
+
+    def test_mixed_completed_valid_pending_and_completed_invalid_are_disjoint(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            job_dir = Path(temp_dir)
+
+            valid = job_dir / "raw" / "page-0001.json"
+            valid.parent.mkdir()
+            valid.write_bytes(b"valid")
+            manifest = complete_capture_page(
+                self.manifest,
+                job_dir=job_dir,
+                page_num=1,
+                artifact_path="raw/page-0001.json",
+            )
+
+            invalid = job_dir / "raw" / "page-0003.json"
+            invalid.write_bytes(b"original")
+            manifest = complete_capture_page(
+                manifest,
+                job_dir=job_dir,
+                page_num=3,
+                artifact_path="raw/page-0003.json",
+            )
+            invalid.unlink()
+
+            plan = build_capture_resume_plan(manifest, job_dir=job_dir)
+
+        self.assertEqual(plan.resumable_pages, (1,))
+        self.assertEqual(plan.pages_to_capture, (2,))
         self.assertEqual(plan.invalid_completed_pages, (3,))
 
     def test_failed_page_requires_capture(self) -> None:
@@ -124,7 +154,6 @@ class JobCaptureResumeTests(unittest.TestCase):
             job_id=self.manifest.job_id,
             source=self.manifest.source,
             workspace=self.manifest.workspace,
-            phases=self.manifest.phases,
             capture_progress=progress,
         )
 

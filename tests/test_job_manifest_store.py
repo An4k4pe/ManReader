@@ -11,6 +11,7 @@ from job_manifest_model import (
     SourceReference,
     WorkspacePaths,
     initial_job_manifest,
+    job_manifest_to_dict,
 )
 from job_manifest_store import load_job_manifest, save_job_manifest
 
@@ -87,29 +88,25 @@ class JobManifestStoreTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "root must be a JSON object"):
                 load_job_manifest(path)
 
+    def test_load_rejects_unknown_schema_version(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "manifest.json"
+            data = job_manifest_to_dict(self.manifest)
+            data["schema_version"] = "2.0"
+            path.write_text(json.dumps(data), encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "unsupported job manifest schema_version",
+            ):
+                load_job_manifest(path)
+
     def test_load_rejects_invalid_manifest_structure(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "manifest.json"
-            path.write_text(
-                json.dumps(
-                    {
-                        "schema_version": "1.0",
-                        "job_id": 123,
-                        "source": {
-                            "sha256": "a" * 64,
-                            "size_bytes": 1234,
-                            "original_name": "manual.pdf",
-                        },
-                        "workspace": {
-                            "source_snapshot": "source/manual.pdf",
-                            "raw_dir": "raw",
-                            "manifest_path": "manifest.json",
-                        },
-                        "phases": [],
-                    }
-                ),
-                encoding="utf-8",
-            )
+            data = job_manifest_to_dict(self.manifest)
+            data["job_id"] = 123
+            path.write_text(json.dumps(data), encoding="utf-8")
 
             with self.assertRaises(ValueError):
                 load_job_manifest(path)

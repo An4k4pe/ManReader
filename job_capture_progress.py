@@ -18,7 +18,7 @@ class CapturePageStatus(StrEnum):
     FAILED = "failed"
 
 
-def _validate_relative_posix_path(value: str, field_name: str) -> None:
+def _validate_relative_posix_path(value: str, field_name: str) -> PurePosixPath:
     if not value:
         raise ValueError(f"{field_name} must not be empty")
     if "\\" in value:
@@ -29,6 +29,17 @@ def _validate_relative_posix_path(value: str, field_name: str) -> None:
         raise ValueError(f"{field_name} must be relative to the job workspace")
     if value in {".", ".."} or any(part == ".." for part in path.parts):
         raise ValueError(f"{field_name} must not escape the job workspace")
+    return path
+
+
+def require_capture_artifact_under_raw_dir(*, artifact_path: str, raw_dir: str) -> None:
+    """Require a completed page artifact path to be strictly below raw_dir."""
+
+    artifact = _validate_relative_posix_path(artifact_path, "artifact_path")
+    raw = _validate_relative_posix_path(raw_dir, "raw_dir")
+
+    if artifact == raw or not artifact.is_relative_to(raw):
+        raise ValueError("capture artifact must be stored below workspace raw_dir")
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +53,11 @@ class CapturePageState:
     size_bytes: int | None = None
 
     def __post_init__(self) -> None:
+        if isinstance(self.page_num, bool) or not isinstance(self.page_num, int):
+            raise ValueError("page_num must be an integer")
+        if not isinstance(self.status, CapturePageStatus):
+            raise ValueError("status must be a CapturePageStatus")
+
         if self.page_num < 1:
             raise ValueError("page_num must be 1-based")
 
@@ -72,6 +88,13 @@ class CaptureProgress:
     pages: tuple[CapturePageState, ...]
 
     def __post_init__(self) -> None:
+        if isinstance(self.page_count, bool) or not isinstance(self.page_count, int):
+            raise ValueError("page_count must be an integer")
+        if not isinstance(self.pages, tuple):
+            raise ValueError("pages must be a tuple")
+        if not all(isinstance(page, CapturePageState) for page in self.pages):
+            raise ValueError("pages must contain only CapturePageState items")
+
         if self.page_count < 0:
             raise ValueError("page_count must be greater than or equal to zero")
 
