@@ -1,6 +1,6 @@
 # ManReader — Stato progetto
 
-## Versione corrente: v0.10 — job/workspace minimo
+## Versione corrente: v0.11 — Milestone 4 completata
 
 ## 1. Decisione di fase
 
@@ -10,8 +10,8 @@ La proposta architetturale A-0.2 è stata revisionata criticamente da Chat B e c
 
 Il progetto è in **Modalità I — implementazione incrementale**.
 
-La Milestone 1, la Milestone 2 e la Milestone 3 sono completate.
-La milestone corrente è la Milestone 4 — job/workspace minimo.
+La Milestone 1, la Milestone 2, la Milestone 3 e la Milestone 4 sono completate.
+La milestone corrente è la Milestone 5 — region graph shadow.
 
 Questo cambio di fase non autorizza una riscrittura generale della pipeline. Ogni modifica deve:
 
@@ -387,9 +387,9 @@ Il clustering resta propositivo e non obbligatorio.
 
 ## 10. Workspace e job
 
-Workspace persistente, resume, invalidazione e pubblicazione atomica restano parte dell'architettura target, ma non sono il primo step implementativo.
+Il job/workspace minimo è stato implementato e verificato come infrastruttura separata dal dominio semantico.
 
-L'ordine approvato è:
+L'ordine completato è:
 
 ```text
 contratto capture
@@ -398,18 +398,35 @@ contratto capture
 → job/workspace minimo
 ```
 
-Il workspace è infrastruttura di persistenza e non deve entrare nel dominio semantico.
-
-La prima versione del job/workspace dovrà includere soltanto:
+La prima versione implementata include:
 
 - job ID;
-- source snapshot;
-- manifest minimo;
+- source snapshot copiato e verificato tramite SHA-256 e dimensione;
+- manifest JSON minimo, immutabile e versionato;
+- percorsi workspace relativi e validati;
 - directory raw;
-- stato della cattura;
-- resume per pagina.
+- stato persistente della cattura per pagina;
+- artifact raw verificati tramite SHA-256 e dimensione;
+- piano di resume che distingue pagine verificabili, pagine da catturare e completed invalide;
+- riepilogo derivato della fase capture;
+- runner PyMuPDF per una singola pagina.
 
-Profili complessi, decision log completo, GUI, AI e build gate globale verranno dopo.
+Il manifest non persiste uno stato globale delle fasi: `capture_progress` è l'unica fonte persistente dello stato della cattura e il riepilogo complessivo viene derivato.
+
+Restano deliberatamente fuori dalla prima versione:
+
+- reflink;
+- locking e concorrenza;
+- pubblicazione atomica;
+- rollback e cleanup automatico;
+- reset/riparazione delle completed invalide;
+- job manager completo;
+- invalidazione generale dei derivati;
+- profili complessi;
+- decision log completo;
+- GUI;
+- AI;
+- build gate globale.
 
 ## 11. GUI, CLI e AI
 
@@ -612,14 +629,70 @@ Limitazioni esplicite:
 - bbox raster degeneri rifiutati;
 - nessuna deduplicazione o normalizzazione strutturale.
 
-### Milestone 4 — Job/workspace minimo
+### Milestone 4 — Job/workspace minimo — completata
 
-Solo dopo la cattura reale:
+La milestone ha introdotto un workspace persistente minimo e verificabile senza collegarlo alla pipeline legacy.
 
-- source snapshot;
-- manifest minimo;
-- stato delle fasi;
-- resume della cattura.
+File introdotti o estesi:
+
+- `verified_file_model.py`;
+- `job_manifest_model.py`;
+- `job_manifest_store.py`;
+- `job_workspace.py`;
+- `job_source_snapshot.py`;
+- `job_initializer.py`;
+- `job_capture_progress.py`;
+- `job_capture_page_update.py`;
+- `job_capture_page_store.py`;
+- `job_capture_resume.py`;
+- `job_capture_phase_summary.py`;
+- `job_capture_page_runner.py`;
+- relativi test unitari e di integrazione.
+
+Contratti e comportamento implementati:
+
+- `VerifiedFileReference` immutabile con SHA-256 canonico e dimensione;
+- `JobManifest` minimo con schema `1.0`, identità, sorgente, workspace e `capture_progress`;
+- serializzazione JSON deterministica;
+- creazione delle directory del workspace separata dalla pubblicazione del manifest;
+- manifest iniziale pubblicato soltanto dopo la copia e verifica dello snapshot;
+- stato pagina `pending | completed | failed`;
+- completed page con artifact relativo, digest e dimensione obbligatori;
+- artifact completed vincolati strettamente sotto `workspace.raw_dir`;
+- completamento pagina immutabile e persistenza esplicita;
+- resume verificato per digest e dimensione;
+- completed invalide separate dalle pagine direttamente catturabili;
+- riepilogo derivato `pending | partial | completed | invalid`;
+- runner PyMuPDF single-page con artifact JSON deterministico e skip delle completed valide.
+
+Decisioni consolidate:
+
+- `capture_progress` è l'unica fonte persistente dello stato della cattura;
+- nessun campo globale `phases` viene persistito;
+- lo stato complessivo viene derivato;
+- una completed invalida richiede un futuro reset/riparazione esplicito;
+- gli artifact orfani non vengono sovrascritti automaticamente;
+- nessuna integrazione con la pipeline legacy;
+- nessuna autorità sull'output Markdown o EPUB.
+
+Limitazioni esplicite:
+
+- scrittura artifact e manifest non atomica;
+- nessun rollback;
+- nessun locking o supporto multi-processo;
+- nessun controllo di containment tramite symlink;
+- nessun reflink;
+- nessun reset delle completed invalide;
+- nessun batch runner o job manager;
+- `page_count` viene fornito al job e verificato dal runner contro il PDF.
+
+Verifiche finali riportate:
+
+- Ruff verde;
+- BasedPyright: 0 errori, 0 warning, 0 note;
+- suite completa: 403 test eseguiti, 7 skipped;
+- `git diff --check` verde;
+- pipeline legacy e output autorevoli invariati.
 
 ### Milestone 5 — Region graph shadow
 
@@ -745,58 +818,96 @@ Zed agent non decide l'architettura e non fa commit.
 
 ## 16. Prossimo passo operativo
 
-Il prossimo task implementativo appartiene alla **Milestone 4 — job/workspace minimo**.
+Il prossimo task implementativo appartiene alla **Milestone 5 — region graph shadow**.
 
-### Scope iniziale autorizzabile
+### Obiettivo iniziale
 
-Il primo micro-step della Milestone 4 può includere soltanto:
+Introdurre il primo contratto strutturale per regioni e relazioni a partire da `NormalizedPrimitivePage`, senza modificare output autorevoli.
 
-- definizione del contratto minimo del manifest di job;
-- identità del job;
-- riferimento verificabile alla sorgente;
-- stato iniziale delle fasi;
-- percorsi relativi del workspace;
-- modelli immutabili e serializzabili;
-- test sintetici del contratto.
+Il primo micro-step autorizzabile deve restare contrattuale e sintetico. Può includere soltanto:
+
+- identificatore di generazione;
+- `LayoutRegion` immutabile;
+- bbox e pagina;
+- `structural_kind` non semantico;
+- primitive IDs;
+- child region IDs;
+- feature strutturali minime;
+- vincoli di ordine parziale;
+- provenance;
+- confidence geometrica;
+- relazioni strutturali tipizzate minime, solo se necessarie al contratto;
+- validazioni di ownership e riferimenti interni;
+- test sintetici.
 
 Non deve ancora includere:
 
-- copia o reflink della sorgente;
-- resume operativo;
-- esecuzione della cattura;
-- job manager;
-- locking;
-- concorrenza;
-- invalidazione completa;
-- pubblicazione atomica;
+- detector reali;
+- marginalia;
+- callout;
+- tabelle;
+- liste;
+- semantica;
+- confidence semantica;
+- resolution;
+- policy editoriale;
+- reading order finale;
+- modifiche a IR 1 o renderer;
+- integrazione con la pipeline legacy;
 - GUI;
+- profili;
+- AI;
 - SQLite;
-- integrazione con la pipeline legacy.
+- job manager;
+- batch capture.
+
+La Milestone 5 deve restare in shadow mode e produrre dati diagnostici separati.
 
 ## 17. Ultimo avanzamento verificato
 
-La Milestone 3 è stata chiusa con commit:
+La Milestone 4 è stata chiusa dopo la sequenza di commit che ha introdotto manifest, workspace, snapshot verificato, progress per pagina, resume e runner single-page.
+
+Commit della milestone prima del consolidamento finale:
 
 ```text
-c765794 Add one-to-one primitive normalization
-af8f993 Add PyMuPDF primitive normalization integration test
-a97c702 Add normalized primitive diagnostic dump
+3b1b5f4 Add minimal job manifest contract
+38c95f8 Add job manifest JSON persistence
+a1e5d27 Add minimal job workspace creation
+e63a81b Add verified source snapshot copy
+c015854 Add source file reference inspection
+13cab7c Add minimal job initialization
+c8ea38b Add verified capture progress contract
+d9af18d Extract verified file reference model
+590bc8c Attach capture progress to job manifest
+62964ae Add immutable capture page completion
+4248e06 Persist capture page completion
+69a34a2 Add verified capture resume planning
+e15d5ed Add derived capture phase summary
+de9dc6e Add single-page job capture runner
 ```
+
+Correzioni finali consolidate:
+
+- piano di resume coerente con il runner;
+- rimozione dello stato globale `phases`;
+- manifest pubblicato dopo snapshot verificato;
+- validazione stretta di schema, tipi e percorsi artifact;
+- completed invalide separate dalle pagine direttamente catturabili.
 
 Ultime verifiche riportate:
 
-Ruff verde;
-BasedPyright: 0 errori, 0 warning, 0 note;
-test mirati del dump: 8 verdi;
-suite completa: 299 test verdi, 7 skipped;
-dump reale di DB pagina 11 prodotto correttamente;
-pipeline legacy e output autorevoli invariati.
+- Ruff verde;
+- BasedPyright: 0 errori, 0 warning, 0 note;
+- suite completa: 403 test eseguiti, 7 skipped;
+- `git diff --check` verde;
+- pipeline legacy, IR 1, Markdown ed EPUB invariati.
 
 Stato successivo approvato:
 
 ```text
-Milestone 4
-→ contratto minimo del manifest di job
-→ modelli immutabili e serializzabili
-→ nessuna creazione operativa del workspace nel primo commit
+Milestone 5
+→ contratto minimo del region graph
+→ regioni e relazioni strutturali soltanto
+→ nessuna semantica o modifica dell'output
+→ shadow mode
 ```

@@ -2,7 +2,7 @@
 
 ## Stato corrente
 
-Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.10.
+Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.11.
 
 L'architettura target e il piano generale di migrazione sono approvati.
 
@@ -236,7 +236,7 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 La milestone corrente è:
 
-> **Milestone 4 — job/workspace minimo**
+> **Milestone 5 — region graph shadow**
 
 ### Stato delle milestone precedenti
 
@@ -258,7 +258,7 @@ vettoriali senza usare i modelli elaborati della pipeline legacy.
 
 La Milestone 3 è completata. Sono presenti e approvati:
 
--- `primitive_normalizer.py`;
+- `primitive_normalizer.py`;
 
 - `tests/test_primitive_normalizer.py`;
 - `tests/test_pymupdf_primitive_normalization.py`;
@@ -268,35 +268,91 @@ La Milestone 3 è completata. Sono presenti e approvati:
 La Milestone 3 ha prodotto una `NormalizedPrimitivePage` reale a partire da
 `BackendPageCapture`, senza cambiare l'output autorevole.
 
-### Milestone 4 - job/workspace minimo
+### Milestone 4 — job/workspace minimo — completata
 
-- source snapshot;
-- manifest minimo;
-- stato delle fasi;
-- resume della cattura.
+Sono presenti e approvati:
+
+- `verified_file_model.py`;
+- `job_manifest_model.py`;
+- `job_manifest_store.py`;
+- `job_workspace.py`;
+- `job_source_snapshot.py`;
+- `job_initializer.py`;
+- `job_capture_progress.py`;
+- `job_capture_page_update.py`;
+- `job_capture_page_store.py`;
+- `job_capture_resume.py`;
+- `job_capture_phase_summary.py`;
+- `job_capture_page_runner.py`;
+- relativi test.
+
+Garanzie consolidate:
+
+- snapshot sorgente copiato e verificato;
+- manifest JSON minimo e versionato;
+- `capture_progress` come unica fonte persistente dello stato capture;
+- artifact completed verificati e confinati sotto `raw_dir`;
+- resume per pagina basato su digest e dimensione;
+- completed invalide non direttamente catturabili;
+- manifest pubblicato dopo snapshot verificato;
+- runner PyMuPDF single-page;
+- nessuna modifica alla pipeline legacy o agli output autorevoli.
+
+Limitazioni da non colmare incidentalmente:
+
+- nessuna atomicità;
+- nessun locking o concorrenza;
+- nessun reflink;
+- nessun reset/riparazione;
+- nessun job manager o batch runner;
+- nessun containment tramite symlink.
+
+### Milestone 5 — region graph shadow
+
+Obiettivo:
+
+```text
+NormalizedPrimitivePage
+→ regioni e relazioni strutturali
+→ diagnostica shadow
+```
 
 ### Scope iniziale autorizzabile
 
-Il primo micro-step della Milestone 4 può includere soltanto:
+Il primo micro-step può includere soltanto:
 
-- contratto minimo del manifest di job;
-- identità del job;
-- riferimento verificabile alla sorgente;
-- stato iniziale delle fasi;
-- percorsi relativi del workspace;
-- modelli immutabili e serializzabili;
-- test sintetici del contratto.
+- modello `LayoutRegion` immutabile;
+- generation ID;
+- page ID e bbox;
+- `structural_kind` non semantico;
+- primitive IDs;
+- child region IDs;
+- feature strutturali minime;
+- vincoli di ordine parziale;
+- provenance;
+- confidence geometrica;
+- relazioni strutturali tipizzate minime, se indispensabili;
+- validazione dei riferimenti;
+- test sintetici.
 
 Non deve ancora includere:
 
-- creazione operativa del workspace;
-- copia o reflink della sorgente;
-- resume operativo;
-- esecuzione della cattura;
-- job manager;
-- locking o concorrenza;
-- invalidazione completa;
-- pubblicazione atomica;
+- detector reali;
+- marginalia;
+- callout;
+- tabelle;
+- liste;
+- classificazioni semantiche;
+- confidence semantica;
+- resolution;
+- policy editoriale;
+- reading order finale;
+- output Markdown o EPUB;
+- IR 2;
+- profili;
+- GUI;
+- AI;
+- SQLite;
 - integrazione con la pipeline legacy.
 
 ## Migrazione e shadow mode
@@ -330,7 +386,7 @@ L'equivalenza non richiede JSON identici, ma almeno:
 Non avviare:
 
 - refactor generale di `extractor.py`;
-- region graph;
+- detector reali del region graph;
 - marginalia detector;
 - nuove euristiche per Fabula, Lancer, Kult o Vileborn;
 - profili;
