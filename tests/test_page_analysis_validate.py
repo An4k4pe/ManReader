@@ -6,7 +6,12 @@ import unittest
 
 from capture_model import DrawingCommand
 from geometry_model import PageGeometry
-from page_analysis_model import PAGE_ANALYSIS_SCHEMA_VERSION, LayoutRegion, PageAnalysis
+from page_analysis_model import (
+    PAGE_ANALYSIS_SCHEMA_VERSION,
+    LayoutRegion,
+    PageAnalysis,
+    PageAnalysisProvenance,
+)
 from page_analysis_validate import validate_page_analysis_against_primitive_page
 from primitive_model import (
     DrawingPrimitive,
@@ -91,16 +96,36 @@ class PageAnalysisValidateTests(unittest.TestCase):
             primitive_ids=primitive_ids,
         )
 
+    def _provenance(
+        self,
+        *,
+        source_id: str = "source-1",
+        source_capture_id: str = "capture-1",
+        source_page_id: str = "page-1",
+        source_primitive_schema_version: str = "1.0",
+    ) -> PageAnalysisProvenance:
+        return PageAnalysisProvenance(
+            source_id=source_id,
+            source_capture_id=source_capture_id,
+            source_page_id=source_page_id,
+            source_primitive_schema_version=source_primitive_schema_version,
+            producer_name="region-graph",
+            producer_version="0.1",
+            configuration_id="config-default-v1",
+        )
+
     def _analysis(
         self,
         *,
         page_id: str = "page-1",
+        provenance: PageAnalysisProvenance | None = None,
         regions: tuple[LayoutRegion, ...] = (),
     ) -> PageAnalysis:
         return PageAnalysis(
             schema_version=PAGE_ANALYSIS_SCHEMA_VERSION,
             generation_id="generation-1",
             page_id=page_id,
+            provenance=self._provenance() if provenance is None else provenance,
             regions=regions,
         )
 
@@ -131,6 +156,41 @@ class PageAnalysisValidateTests(unittest.TestCase):
             validate_page_analysis_against_primitive_page(
                 self._analysis(page_id="page-1"),
                 self._primitive_page(page_id="page-2"),
+            )
+
+    def test_coherent_provenance_is_valid(self) -> None:
+        validate_page_analysis_against_primitive_page(self._analysis(), self._primitive_page())
+
+    def test_different_provenance_source_id_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "source_id"):
+            validate_page_analysis_against_primitive_page(
+                self._analysis(provenance=self._provenance(source_id="other-source")),
+                self._primitive_page(),
+            )
+
+    def test_different_provenance_source_capture_id_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "source_capture_id"):
+            validate_page_analysis_against_primitive_page(
+                self._analysis(provenance=self._provenance(source_capture_id="other-capture")),
+                self._primitive_page(),
+            )
+
+    def test_different_provenance_source_page_id_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "source_page_id"):
+            validate_page_analysis_against_primitive_page(
+                self._analysis(provenance=self._provenance(source_page_id="other-page")),
+                self._primitive_page(),
+            )
+
+    def test_different_provenance_source_primitive_schema_version_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "source_primitive_schema_version"):
+            validate_page_analysis_against_primitive_page(
+                self._analysis(
+                    provenance=self._provenance(
+                        source_primitive_schema_version="primitive-schema-2"
+                    )
+                ),
+                self._primitive_page(),
             )
 
     def test_region_referencing_text_primitive_is_valid(self) -> None:
@@ -279,6 +339,7 @@ class PageAnalysisValidateTests(unittest.TestCase):
         validate_page_analysis_against_primitive_page(analysis, primitive_page)
 
         self.assertEqual(analysis, expected_analysis)
+        self.assertEqual(analysis.provenance, self._provenance())
         self.assertEqual(primitive_page, expected_primitive_page)
 
 

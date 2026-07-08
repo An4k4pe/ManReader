@@ -21,7 +21,7 @@ from geometry_model import (
     _validate_non_empty_string,
 )
 
-PAGE_ANALYSIS_SCHEMA_VERSION = "1.0"
+PAGE_ANALYSIS_SCHEMA_VERSION = "1.1"
 
 _VALID_RELATION_KINDS = frozenset(
     {
@@ -104,6 +104,39 @@ class LayoutRegion:
 
 
 @dataclass(frozen=True, slots=True)
+class PageAnalysisProvenance:
+    """Page-level provenance for the normalized input and analysis producer.
+
+    ``source_id`` identifies the verified source. ``source_capture_id`` identifies
+    the capture that produced the normalized page. ``source_page_id`` identifies
+    the source page analyzed. ``source_primitive_schema_version`` records the
+    schema version of the ``NormalizedPrimitivePage`` input. ``producer_name`` is
+    the technical producer name, ``producer_version`` is its version, and
+    ``configuration_id`` identifies the applied configuration.
+    """
+
+    source_id: str
+    source_capture_id: str
+    source_page_id: str
+    source_primitive_schema_version: str
+    producer_name: str
+    producer_version: str
+    configuration_id: str
+
+    def __post_init__(self) -> None:
+        _validate_non_empty_string(self.source_id, "source_id")
+        _validate_non_empty_string(self.source_capture_id, "source_capture_id")
+        _validate_non_empty_string(self.source_page_id, "source_page_id")
+        _validate_non_empty_string(
+            self.source_primitive_schema_version,
+            "source_primitive_schema_version",
+        )
+        _validate_non_empty_string(self.producer_name, "producer_name")
+        _validate_non_empty_string(self.producer_version, "producer_version")
+        _validate_non_empty_string(self.configuration_id, "configuration_id")
+
+
+@dataclass(frozen=True, slots=True)
 class RegionRelation:
     """Directed structural relation between two page-local layout regions."""
 
@@ -136,6 +169,7 @@ class PageAnalysis:
     schema_version: str
     generation_id: str
     page_id: str
+    provenance: PageAnalysisProvenance
     regions: tuple[LayoutRegion, ...] = ()
     relations: tuple[RegionRelation, ...] = ()
 
@@ -144,6 +178,10 @@ class PageAnalysis:
             raise ValueError("schema_version is not supported")
         _validate_non_empty_string(self.generation_id, "generation_id")
         _validate_non_empty_string(self.page_id, "page_id")
+        if not isinstance(self.provenance, PageAnalysisProvenance):
+            raise ValueError("provenance must be a PageAnalysisProvenance")
+        if self.provenance.source_page_id != self.page_id:
+            raise ValueError("provenance source_page_id must match page_id")
         if not isinstance(self.regions, tuple):
             raise ValueError("regions must be a tuple")
         if not isinstance(self.relations, tuple):

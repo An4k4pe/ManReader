@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from typing import cast
 
-from page_analysis_model import LayoutRegion, PageAnalysis, RegionRelation
+from page_analysis_model import LayoutRegion, PageAnalysis, PageAnalysisProvenance, RegionRelation
 from page_analysis_serialization import page_analysis_from_dict, page_analysis_to_dict
 
 
@@ -42,11 +42,34 @@ class PageAnalysisSerializationTests(unittest.TestCase):
             target_region_id=target_region_id,
         )
 
+    def _provenance(self) -> PageAnalysisProvenance:
+        return PageAnalysisProvenance(
+            source_id="source-1",
+            source_capture_id="capture-1",
+            source_page_id="page-1",
+            source_primitive_schema_version="1.0",
+            producer_name="region-graph",
+            producer_version="0.1",
+            configuration_id="config-default-v1",
+        )
+
+    def _provenance_data(self) -> dict[str, object]:
+        return {
+            "source_id": "source-1",
+            "source_capture_id": "capture-1",
+            "source_page_id": "page-1",
+            "source_primitive_schema_version": "1.0",
+            "producer_name": "region-graph",
+            "producer_version": "0.1",
+            "configuration_id": "config-default-v1",
+        }
+
     def _analysis(self) -> PageAnalysis:
         return PageAnalysis(
-            schema_version="1.0",
+            schema_version="1.1",
             generation_id="generation-1",
             page_id="page-1",
+            provenance=self._provenance(),
             regions=(
                 self._region(
                     "region-1",
@@ -73,18 +96,20 @@ class PageAnalysisSerializationTests(unittest.TestCase):
 
     def _empty_analysis(self) -> PageAnalysis:
         return PageAnalysis(
-            schema_version="1.0",
+            schema_version="1.1",
             generation_id="generation-1",
             page_id="page-1",
+            provenance=self._provenance(),
             regions=(),
             relations=(),
         )
 
     def _analysis_data(self) -> dict[str, object]:
         return {
-            "schema_version": "1.0",
+            "schema_version": "1.1",
             "generation_id": "generation-1",
             "page_id": "page-1",
+            "provenance": self._provenance_data(),
             "regions": [
                 {
                     "region_id": "region-1",
@@ -119,12 +144,23 @@ class PageAnalysisSerializationTests(unittest.TestCase):
 
     def _empty_data(self) -> dict[str, object]:
         return {
-            "schema_version": "1.0",
+            "schema_version": "1.1",
             "generation_id": "generation-1",
             "page_id": "page-1",
+            "provenance": self._provenance_data(),
             "regions": [],
             "relations": [],
         }
+
+    def test_deserialization_rejects_provenance_page_id_mismatch(self) -> None:
+        data = self._analysis_data()
+        self._provenance_dict(data)["source_page_id"] = "page-2"
+
+        with self.assertRaises(ValueError):
+            page_analysis_from_dict(data)
+
+    def _provenance_dict(self, data: dict[str, object]) -> dict[str, object]:
+        return cast(dict[str, object], data["provenance"])
 
     def _regions_data(self, data: dict[str, object]) -> list[object]:
         return cast(list[object], data["regions"])
@@ -143,6 +179,21 @@ class PageAnalysisSerializationTests(unittest.TestCase):
 
     def test_serializes_empty_page_with_empty_lists(self) -> None:
         self.assertEqual(page_analysis_to_dict(self._empty_analysis()), self._empty_data())
+
+    def test_serializes_provenance(self) -> None:
+        self.assertEqual(
+            page_analysis_to_dict(self._analysis())["provenance"], self._provenance_data()
+        )
+
+    def test_serialized_provenance_dict_is_independent_from_model(self) -> None:
+        analysis = self._analysis()
+        data = page_analysis_to_dict(analysis)
+        self._provenance_dict(data)["source_id"] = "changed"
+
+        self.assertEqual(analysis.provenance.source_id, "source-1")
+
+    def test_serialization_always_includes_provenance(self) -> None:
+        self.assertIn("provenance", page_analysis_to_dict(self._empty_analysis()))
 
     def test_serializes_bbox_as_list(self) -> None:
         data = page_analysis_to_dict(self._analysis())
@@ -206,6 +257,26 @@ class PageAnalysisSerializationTests(unittest.TestCase):
         analysis = self._analysis()
 
         self.assertEqual(page_analysis_from_dict(page_analysis_to_dict(analysis)), analysis)
+
+    def test_model_round_trip_preserves_provenance(self) -> None:
+        analysis = self._analysis()
+
+        self.assertEqual(
+            page_analysis_from_dict(page_analysis_to_dict(analysis)).provenance,
+            analysis.provenance,
+        )
+
+    def test_data_round_trip_preserves_provenance(self) -> None:
+        data = self._analysis_data()
+
+        self.assertEqual(
+            page_analysis_to_dict(page_analysis_from_dict(data))["provenance"], data["provenance"]
+        )
+
+    def test_deserializes_complete_provenance(self) -> None:
+        self.assertEqual(
+            page_analysis_from_dict(self._analysis_data()).provenance, self._provenance()
+        )
 
     def test_data_round_trip_normalizes_bbox_numbers_to_float(self) -> None:
         data = self._analysis_data()
@@ -284,9 +355,75 @@ class PageAnalysisSerializationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             page_analysis_from_dict(data)
 
+    def test_deserialization_accepts_schema_1_1(self) -> None:
+        data = self._analysis_data()
+        data["schema_version"] = "1.1"
+
+        self.assertEqual(page_analysis_from_dict(data).schema_version, "1.1")
+
+    def test_deserialization_rejects_schema_1_0_via_model(self) -> None:
+        data = self._analysis_data()
+        data["schema_version"] = "1.0"
+
+        with self.assertRaises(ValueError):
+            page_analysis_from_dict(data)
+
     def test_deserialization_rejects_unsupported_schema_via_model(self) -> None:
         data = self._analysis_data()
         data["schema_version"] = "2.0"
+
+        with self.assertRaises(ValueError):
+            page_analysis_from_dict(data)
+
+    def test_deserialization_rejects_missing_provenance(self) -> None:
+        data = self._analysis_data()
+        del data["provenance"]
+
+        with self.assertRaises(ValueError):
+            page_analysis_from_dict(data)
+
+    def test_deserialization_rejects_non_dict_provenance(self) -> None:
+        data = self._analysis_data()
+        data["provenance"] = []
+
+        with self.assertRaises(ValueError):
+            page_analysis_from_dict(data)
+
+    def test_deserialization_rejects_missing_provenance_key(self) -> None:
+        data = self._analysis_data()
+        del self._provenance_dict(data)["source_id"]
+
+        with self.assertRaises(ValueError):
+            page_analysis_from_dict(data)
+
+    def test_deserialization_rejects_extra_provenance_key(self) -> None:
+        data = self._analysis_data()
+        self._provenance_dict(data)["extra"] = None
+
+        with self.assertRaises(ValueError):
+            page_analysis_from_dict(data)
+
+    def test_deserialization_rejects_non_string_provenance_key(self) -> None:
+        data = self._analysis_data()
+        data["provenance"] = cast(dict[object, object], dict(self._provenance_data()))
+        cast(dict[object, object], data["provenance"])[1] = "extra"
+
+        with self.assertRaises(ValueError):
+            page_analysis_from_dict(data)
+
+    def test_deserialization_rejects_non_string_provenance_values(self) -> None:
+        field_names = tuple(self._provenance_data())
+        for field_name in field_names:
+            with self.subTest(field_name=field_name):
+                data = self._analysis_data()
+                self._provenance_dict(data)[field_name] = 123
+
+                with self.assertRaises(ValueError):
+                    page_analysis_from_dict(data)
+
+    def test_deserialization_rejects_empty_provenance_value_via_model(self) -> None:
+        data = self._analysis_data()
+        self._provenance_dict(data)["producer_name"] = ""
 
         with self.assertRaises(ValueError):
             page_analysis_from_dict(data)

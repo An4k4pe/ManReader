@@ -19,6 +19,16 @@ def validate_page_analysis_against_primitive_page(
 
     if analysis.page_id != primitive_page.page_id:
         raise ValueError("analysis page_id must match primitive_page page_id")
+    if analysis.provenance.source_id != primitive_page.source_id:
+        raise ValueError("provenance source_id must match primitive_page source_id")
+    if analysis.provenance.source_capture_id != primitive_page.source_capture_id:
+        raise ValueError("provenance source_capture_id must match primitive_page source_capture_id")
+    if analysis.provenance.source_page_id != primitive_page.page_id:
+        raise ValueError("provenance source_page_id must match primitive_page page_id")
+    if analysis.provenance.source_primitive_schema_version != primitive_page.schema_version:
+        raise ValueError(
+            "provenance source_primitive_schema_version must match primitive_page schema_version"
+        )
 
     primitive_ids = {
         primitive.primitive_id

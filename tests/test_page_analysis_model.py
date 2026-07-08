@@ -10,6 +10,7 @@ from page_analysis_model import (
     PAGE_ANALYSIS_SCHEMA_VERSION,
     LayoutRegion,
     PageAnalysis,
+    PageAnalysisProvenance,
     RegionRelation,
 )
 
@@ -137,6 +138,80 @@ class LayoutRegionTests(unittest.TestCase):
             self._region(structural_kind=123)  # type: ignore[arg-type]
 
 
+class PageAnalysisProvenanceTests(unittest.TestCase):
+    def _provenance(
+        self,
+        *,
+        source_id: object = "source-1",
+        source_capture_id: object = "capture-1",
+        source_page_id: object = "page-1",
+        source_primitive_schema_version: object = "1.0",
+        producer_name: object = "region-graph",
+        producer_version: object = "0.1",
+        configuration_id: object = "config-default-v1",
+    ) -> PageAnalysisProvenance:
+        return PageAnalysisProvenance(
+            source_id=source_id,  # type: ignore[arg-type]
+            source_capture_id=source_capture_id,  # type: ignore[arg-type]
+            source_page_id=source_page_id,  # type: ignore[arg-type]
+            source_primitive_schema_version=source_primitive_schema_version,  # type: ignore[arg-type]
+            producer_name=producer_name,  # type: ignore[arg-type]
+            producer_version=producer_version,  # type: ignore[arg-type]
+            configuration_id=configuration_id,  # type: ignore[arg-type]
+        )
+
+    def test_valid_construction(self) -> None:
+        provenance = self._provenance()
+
+        self.assertEqual(provenance.source_id, "source-1")
+        self.assertEqual(provenance.source_capture_id, "capture-1")
+        self.assertEqual(provenance.source_page_id, "page-1")
+        self.assertEqual(provenance.source_primitive_schema_version, "1.0")
+        self.assertEqual(provenance.producer_name, "region-graph")
+        self.assertEqual(provenance.producer_version, "0.1")
+        self.assertEqual(provenance.configuration_id, "config-default-v1")
+
+    def test_equivalent_instances_are_equal(self) -> None:
+        self.assertEqual(self._provenance(), self._provenance())
+
+    def test_dataclass_is_immutable(self) -> None:
+        provenance = self._provenance()
+
+        with self.assertRaises(FrozenInstanceError):
+            provenance.source_id = "changed"  # type: ignore[misc]
+
+    def test_dataclass_uses_slots(self) -> None:
+        self.assertFalse(hasattr(self._provenance(), "__dict__"))
+
+    def test_empty_fields_are_rejected(self) -> None:
+        field_names = (
+            "source_id",
+            "source_capture_id",
+            "source_page_id",
+            "source_primitive_schema_version",
+            "producer_name",
+            "producer_version",
+            "configuration_id",
+        )
+        for field_name in field_names:
+            with self.subTest(field_name=field_name), self.assertRaises(ValueError):
+                self._provenance(**{field_name: ""})
+
+    def test_non_string_fields_are_rejected(self) -> None:
+        field_names = (
+            "source_id",
+            "source_capture_id",
+            "source_page_id",
+            "source_primitive_schema_version",
+            "producer_name",
+            "producer_version",
+            "configuration_id",
+        )
+        for field_name in field_names:
+            with self.subTest(field_name=field_name), self.assertRaises(ValueError):
+                self._provenance(**{field_name: 123})
+
+
 class RegionRelationTests(unittest.TestCase):
     def _relation(
         self,
@@ -239,20 +314,34 @@ class PageAnalysisTests(unittest.TestCase):
             self._region(region_id="region-3", bbox=(40.0, 0.0, 50.0, 10.0)),
         )
 
+    def _provenance(self) -> PageAnalysisProvenance:
+        return PageAnalysisProvenance(
+            source_id="source-1",
+            source_capture_id="capture-1",
+            source_page_id="page-1",
+            source_primitive_schema_version="1.0",
+            producer_name="region-graph",
+            producer_version="0.1",
+            configuration_id="config-default-v1",
+        )
+
     def _analysis(
         self,
         *,
         schema_version: str = PAGE_ANALYSIS_SCHEMA_VERSION,
         generation_id: str = "generation-1",
         page_id: str = "page-1",
+        provenance: PageAnalysisProvenance | object | None = None,
         regions: tuple[LayoutRegion, ...] | object | None = None,
         relations: tuple[RegionRelation, ...] | object = (),
     ) -> PageAnalysis:
         actual_regions = (self._region(),) if regions is None else regions
+        actual_provenance = self._provenance() if provenance is None else provenance
         return PageAnalysis(
             schema_version=schema_version,
             generation_id=generation_id,
             page_id=page_id,
+            provenance=actual_provenance,  # type: ignore[arg-type]
             regions=actual_regions,  # type: ignore[arg-type]
             relations=relations,  # type: ignore[arg-type]
         )
@@ -293,8 +382,31 @@ class PageAnalysisTests(unittest.TestCase):
         self.assertEqual(analysis.schema_version, PAGE_ANALYSIS_SCHEMA_VERSION)
         self.assertEqual(analysis.generation_id, "generation-1")
         self.assertEqual(analysis.page_id, "page-1")
+        self.assertEqual(analysis.provenance, self._provenance())
         self.assertEqual(analysis.regions, (region,))
         self.assertEqual(analysis.relations, ())
+
+
+def test_matching_provenance_source_page_id_is_valid(self) -> None:
+    provenance = self._provenance()
+
+    analysis = self._analysis(page_id="page-1", provenance=provenance)
+
+    self.assertEqual(analysis.provenance.source_page_id, analysis.page_id)
+
+    def test_mismatching_provenance_source_page_id_is_rejected(self) -> None:
+        provenance = PageAnalysisProvenance(
+            source_id="source-1",
+            source_capture_id="capture-1",
+            source_page_id="page-2",
+            source_primitive_schema_version="1.0",
+            producer_name="region-graph",
+            producer_version="0.1",
+            configuration_id="config-default-v1",
+        )
+
+        with self.assertRaises(ValueError):
+            self._analysis(page_id="page-1", provenance=provenance)
 
     def test_page_without_regions_is_valid(self) -> None:
         analysis = self._analysis(regions=())
@@ -310,10 +422,24 @@ class PageAnalysisTests(unittest.TestCase):
     def test_dataclass_uses_slots(self) -> None:
         self.assertFalse(hasattr(self._analysis(), "__dict__"))
 
-    def test_schema_version_1_0_is_valid(self) -> None:
-        analysis = self._analysis(schema_version="1.0")
+    def test_valid_provenance_is_accepted(self) -> None:
+        provenance = self._provenance()
+        analysis = self._analysis(provenance=provenance)
 
-        self.assertEqual(analysis.schema_version, "1.0")
+        self.assertEqual(analysis.provenance, provenance)
+
+    def test_wrong_provenance_type_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self._analysis(provenance=object())
+
+    def test_schema_version_1_1_is_valid(self) -> None:
+        analysis = self._analysis(schema_version="1.1")
+
+        self.assertEqual(analysis.schema_version, "1.1")
+
+    def test_schema_version_1_0_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self._analysis(schema_version="1.0")
 
     def test_different_schema_version_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
@@ -582,9 +708,9 @@ class PageAnalysisTests(unittest.TestCase):
             )
         except RecursionError as exc:
             self.fail(f"PageAnalysis raised RecursionError: {exc}")
-
-        self.assertEqual(len(analysis.regions), region_count)
-        self.assertEqual(len(analysis.relations), region_count - 1)
+        else:
+            self.assertEqual(len(analysis.regions), region_count)
+            self.assertEqual(len(analysis.relations), region_count - 1)
 
     def test_long_precedes_cycle_is_rejected(self) -> None:
         region_count = 1300

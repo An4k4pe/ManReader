@@ -4,9 +4,22 @@ from __future__ import annotations
 
 from typing import cast
 
-from page_analysis_model import LayoutRegion, PageAnalysis, RegionRelation
+from page_analysis_model import LayoutRegion, PageAnalysis, PageAnalysisProvenance, RegionRelation
 
-_ROOT_KEYS = frozenset({"schema_version", "generation_id", "page_id", "regions", "relations"})
+_ROOT_KEYS = frozenset(
+    {"schema_version", "generation_id", "page_id", "provenance", "regions", "relations"}
+)
+_PROVENANCE_KEYS = frozenset(
+    {
+        "source_id",
+        "source_capture_id",
+        "source_page_id",
+        "source_primitive_schema_version",
+        "producer_name",
+        "producer_version",
+        "configuration_id",
+    }
+)
 _REGION_KEYS = frozenset({"region_id", "page_id", "bbox", "structural_kind", "primitive_ids"})
 _RELATION_KEYS = frozenset({"relation_id", "relation_kind", "source_region_id", "target_region_id"})
 
@@ -21,6 +34,15 @@ def page_analysis_to_dict(analysis: PageAnalysis) -> dict[str, object]:
         "schema_version": analysis.schema_version,
         "generation_id": analysis.generation_id,
         "page_id": analysis.page_id,
+        "provenance": {
+            "source_id": analysis.provenance.source_id,
+            "source_capture_id": analysis.provenance.source_capture_id,
+            "source_page_id": analysis.provenance.source_page_id,
+            "source_primitive_schema_version": analysis.provenance.source_primitive_schema_version,
+            "producer_name": analysis.provenance.producer_name,
+            "producer_version": analysis.provenance.producer_version,
+            "configuration_id": analysis.provenance.configuration_id,
+        },
         "regions": [
             {
                 "region_id": region.region_id,
@@ -49,6 +71,7 @@ def page_analysis_from_dict(data: object) -> PageAnalysis:
     root = _require_dict(data, "root")
     _validate_exact_keys(root, _ROOT_KEYS, "root")
 
+    provenance = _parse_provenance(root["provenance"])
     regions_data = _require_list(root, "regions", "regions")
     relations_data = _require_list(root, "relations", "relations")
 
@@ -59,6 +82,7 @@ def page_analysis_from_dict(data: object) -> PageAnalysis:
         schema_version=_require_str(root, "schema_version", "schema_version"),
         generation_id=_require_str(root, "generation_id", "generation_id"),
         page_id=_require_str(root, "page_id", "page_id"),
+        provenance=provenance,
         regions=regions,
         relations=relations,
     )
@@ -101,6 +125,30 @@ def _require_list(data: dict[object, object], key: str, path: str) -> list[objec
     if not isinstance(value, list):
         raise ValueError(f"{path} must be a list")
     return cast(list[object], value)
+
+
+def _parse_provenance(value: object) -> PageAnalysisProvenance:
+    path = "provenance"
+    data = _require_dict(value, path)
+    _validate_exact_keys(data, _PROVENANCE_KEYS, path)
+
+    return PageAnalysisProvenance(
+        source_id=_require_str(data, "source_id", f"{path}.source_id"),
+        source_capture_id=_require_str(
+            data,
+            "source_capture_id",
+            f"{path}.source_capture_id",
+        ),
+        source_page_id=_require_str(data, "source_page_id", f"{path}.source_page_id"),
+        source_primitive_schema_version=_require_str(
+            data,
+            "source_primitive_schema_version",
+            f"{path}.source_primitive_schema_version",
+        ),
+        producer_name=_require_str(data, "producer_name", f"{path}.producer_name"),
+        producer_version=_require_str(data, "producer_version", f"{path}.producer_version"),
+        configuration_id=_require_str(data, "configuration_id", f"{path}.configuration_id"),
+    )
 
 
 def _parse_region(value: object, index: int) -> LayoutRegion:
