@@ -2,7 +2,7 @@
 
 This tool is intentionally disconnected from ManReader's legacy pipeline.
 It opens one PDF page and can serialize the raw ``BackendPageCapture``,
-the derived ``NormalizedPrimitivePage``, or an empty validated ``PageAnalysis``
+the derived ``NormalizedPrimitivePage``, or a root-region ``PageAnalysis``
 to stdout or to an explicitly requested file.
 
 The generated identifiers are diagnostic placeholders. They do not establish
@@ -23,6 +23,7 @@ import fitz
 
 from page_analysis_model import (
     PAGE_ANALYSIS_SCHEMA_VERSION,
+    LayoutRegion,
     PageAnalysis,
     PageAnalysisProvenance,
 )
@@ -112,7 +113,7 @@ def dump_page_analysis(
     output_path: Path | None = None,
     compact: bool = False,
 ) -> str:
-    """Capture, normalize, build empty analysis, then return its JSON representation."""
+    """Capture, normalize, build root analysis, then return its JSON representation."""
 
     return _dump_page(
         pdf_path,
@@ -123,10 +124,16 @@ def dump_page_analysis(
     )
 
 
-def build_empty_page_analysis(
+def build_root_page_analysis(
     primitive_page: NormalizedPrimitivePage,
 ) -> PageAnalysis:
-    """Build and validate an empty diagnostic PageAnalysis for a primitive page."""
+    """Build and validate a root-region diagnostic PageAnalysis for a primitive page."""
+
+    primitive_ids = (
+        tuple(primitive.primitive_id for primitive in primitive_page.text_primitives)
+        + tuple(primitive.primitive_id for primitive in primitive_page.image_primitives)
+        + tuple(primitive.primitive_id for primitive in primitive_page.drawing_primitives)
+    )
 
     analysis = PageAnalysis(
         schema_version=PAGE_ANALYSIS_SCHEMA_VERSION,
@@ -139,9 +146,22 @@ def build_empty_page_analysis(
             source_primitive_schema_version=primitive_page.schema_version,
             producer_name="pymupdf-capture-dump",
             producer_version="0.1",
-            configuration_id="empty-page-analysis-v1",
+            configuration_id="page-root-analysis-v1",
         ),
-        regions=(),
+        regions=(
+            LayoutRegion(
+                region_id="region:page-root",
+                page_id=primitive_page.page_id,
+                bbox=(
+                    0.0,
+                    0.0,
+                    primitive_page.page_geometry.width,
+                    primitive_page.page_geometry.height,
+                ),
+                structural_kind="layout.page",
+                primitive_ids=primitive_ids,
+            ),
+        ),
         relations=(),
     )
     validate_page_analysis_against_primitive_page(analysis, primitive_page)
@@ -184,7 +204,7 @@ def _dump_page(
         artifact_data = asdict(primitive_page)
     else:
         primitive_page = normalize_backend_page_capture(capture)
-        analysis = build_empty_page_analysis(primitive_page)
+        analysis = build_root_page_analysis(primitive_page)
         artifact_data = page_analysis_to_dict(analysis)
 
     json_text = json.dumps(

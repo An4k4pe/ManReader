@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import base64
 import json
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
+from typing import cast
 
 import fitz
 
@@ -15,6 +17,10 @@ from pymupdf_capture_dump import (
     dump_normalized_primitives,
     dump_page_analysis,
     main,
+)
+
+_ONE_PIXEL_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR4nGP8z8Dwn4GBgYGJAQoAHxcCAk+Uzr4AAAAASUVORK5CYII="
 )
 
 
@@ -72,20 +78,32 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             self.assertNotIn("text_observations", payload)
             self.assertNotIn("backend_order", payload)
 
-    def test_dump_page_analysis_returns_empty_validated_analysis_json(self) -> None:
+    def test_dump_page_analysis_returns_validated_root_region_json(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             pdf_path = Path(temporary_directory) / "sample.pdf"
-            _create_pdf(pdf_path, ("Analysis page",))
+            _create_pdf_with_primitives(pdf_path)
 
             json_text = dump_page_analysis(pdf_path)
             payload = json.loads(json_text)
+            primitives = json.loads(dump_normalized_primitives(pdf_path))
+            expected_ids = _primitive_ids(primitives)
+            root = payload["regions"][0]
 
             self.assertTrue(json_text.endswith("\n"))
             self.assertEqual(payload["schema_version"], "1.1")
             self.assertEqual(payload["generation_id"], "diagnostic-page-analysis:0")
             self.assertEqual(payload["page_id"], "diagnostic-page:0")
-            self.assertEqual(payload["regions"], [])
+            self.assertEqual(len(payload["regions"]), 1)
             self.assertEqual(payload["relations"], [])
+            self.assertEqual(root["region_id"], "region:page-root")
+            self.assertEqual(root["page_id"], "diagnostic-page:0")
+            self.assertEqual(root["structural_kind"], "layout.page")
+            self.assertEqual(root["bbox"], [0.0, 0.0, 200.0, 300.0])
+            self.assertEqual(root["primitive_ids"], expected_ids)
+            self.assertEqual(len(root["primitive_ids"]), _primitive_count(primitives))
+            self.assertGreater(len(primitives["text_primitives"]), 0)
+            self.assertGreater(len(primitives["image_primitives"]), 0)
+            self.assertGreater(len(primitives["drawing_primitives"]), 0)
             self.assertEqual(
                 payload["provenance"],
                 {
@@ -95,9 +113,22 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
                     "source_primitive_schema_version": "1",
                     "producer_name": "pymupdf-capture-dump",
                     "producer_version": "0.1",
-                    "configuration_id": "empty-page-analysis-v1",
+                    "configuration_id": "page-root-analysis-v1",
                 },
             )
+
+    def test_dump_page_analysis_empty_page_has_root_without_primitives(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            pdf_path = Path(temporary_directory) / "empty.pdf"
+            _create_empty_pdf(pdf_path)
+
+            payload = json.loads(dump_page_analysis(pdf_path))
+            root = payload["regions"][0]
+
+            self.assertEqual(len(payload["regions"]), 1)
+            self.assertEqual(root["region_id"], "region:page-root")
+            self.assertEqual(root["primitive_ids"], [])
+            self.assertEqual(root["bbox"], [0.0, 0.0, 200.0, 300.0])
 
     def test_dump_page_analysis_compact_output_has_no_final_newline(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -107,7 +138,7 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             json_text = dump_page_analysis(pdf_path, compact=True)
 
             self.assertFalse(json_text.endswith("\n"))
-            self.assertEqual(json.loads(json_text)["regions"], [])
+            self.assertEqual(len(json.loads(json_text)["regions"]), 1)
 
     def test_dump_page_analysis_writes_requested_output_and_creates_parent(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -154,7 +185,7 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
 
             self.assertEqual(payload["schema_version"], "1.1")
             self.assertEqual(payload["provenance"]["producer_name"], "pymupdf-capture-dump")
-            self.assertEqual(payload["regions"], [])
+            self.assertEqual(len(payload["regions"]), 1)
             self.assertEqual(payload["relations"], [])
 
     def test_dump_capture_writes_only_when_output_is_requested(self) -> None:
@@ -232,7 +263,7 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             self.assertEqual(return_code, 0)
             payload = json.loads(stdout.getvalue())
             self.assertEqual(payload["schema_version"], "1.1")
-            self.assertEqual(payload["regions"], [])
+            self.assertEqual(len(payload["regions"]), 1)
             self.assertNotIn("text_observations", payload)
             self.assertNotIn("text_primitives", payload)
 
@@ -319,6 +350,54 @@ def _create_pdf(path: Path, page_texts: tuple[str, ...]) -> None:
         document.save(path)
     finally:
         document.close()
+
+
+def _create_empty_pdf(path: Path) -> None:
+    document = fitz.open()
+    try:
+        document.new_page(width=200.0, height=300.0)
+        document.save(path)
+    finally:
+        document.close()
+
+
+def _create_pdf_with_primitives(path: Path) -> None:
+    document = fitz.open()
+    try:
+        page = document.new_page(width=200.0, height=300.0)
+        page.insert_text((20.0, 40.0), "Root analysis")
+        page.insert_image(
+            fitz.Rect(40.0, 80.0, 90.0, 130.0),
+            stream=_ONE_PIXEL_PNG,
+        )
+        page.draw_rect(
+            fitz.Rect(120.0, 80.0, 180.0, 140.0),
+            color=(0.0, 0.0, 0.0),
+            fill=(0.5, 0.5, 0.5),
+            width=1.0,
+        )
+        document.save(path)
+    finally:
+        document.close()
+
+
+def _primitive_ids(primitives: dict[str, object]) -> list[str]:
+    text_primitives = cast(list[dict[str, object]], primitives["text_primitives"])
+    image_primitives = cast(list[dict[str, object]], primitives["image_primitives"])
+    drawing_primitives = cast(list[dict[str, object]], primitives["drawing_primitives"])
+    return (
+        [cast(str, item["primitive_id"]) for item in text_primitives]
+        + [cast(str, item["primitive_id"]) for item in image_primitives]
+        + [cast(str, item["primitive_id"]) for item in drawing_primitives]
+    )
+
+
+def _primitive_count(primitives: dict[str, object]) -> int:
+    return (
+        len(cast(list[object], primitives["text_primitives"]))
+        + len(cast(list[object], primitives["image_primitives"]))
+        + len(cast(list[object], primitives["drawing_primitives"]))
+    )
 
 
 if __name__ == "__main__":
