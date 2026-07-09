@@ -88,19 +88,35 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             primitives = json.loads(dump_normalized_primitives(pdf_path))
             expected_ids = _primitive_ids(primitives)
             root = payload["regions"][0]
+            extent = payload["regions"][1]
+            relation = payload["relations"][0]
 
             self.assertTrue(json_text.endswith("\n"))
             self.assertEqual(payload["schema_version"], "1.1")
             self.assertEqual(payload["generation_id"], "diagnostic-page-analysis:0")
             self.assertEqual(payload["page_id"], "diagnostic-page:0")
-            self.assertEqual(len(payload["regions"]), 1)
-            self.assertEqual(payload["relations"], [])
+            self.assertEqual(len(payload["regions"]), 2)
+            self.assertEqual(len(payload["relations"]), 1)
             self.assertEqual(root["region_id"], "region:page-root")
             self.assertEqual(root["page_id"], "diagnostic-page:0")
             self.assertEqual(root["structural_kind"], "layout.page")
             self.assertEqual(root["bbox"], [0.0, 0.0, 200.0, 300.0])
             self.assertEqual(root["primitive_ids"], expected_ids)
-            self.assertEqual(len(root["primitive_ids"]), _primitive_count(primitives))
+            self.assertEqual(extent["region_id"], "region:primitive-extent")
+            self.assertEqual(extent["page_id"], "diagnostic-page:0")
+            self.assertEqual(extent["structural_kind"], "layout.primitive_extent")
+            self.assertEqual(extent["bbox"], _primitive_extent_bbox(primitives))
+            self.assertEqual(extent["primitive_ids"], expected_ids)
+            self.assertEqual(len(extent["primitive_ids"]), _primitive_count(primitives))
+            self.assertEqual(
+                relation,
+                {
+                    "relation_id": "relation:page-root-contains-primitive-extent",
+                    "relation_kind": "layout.contains",
+                    "source_region_id": "region:page-root",
+                    "target_region_id": "region:primitive-extent",
+                },
+            )
             self.assertGreater(len(primitives["text_primitives"]), 0)
             self.assertGreater(len(primitives["image_primitives"]), 0)
             self.assertGreater(len(primitives["drawing_primitives"]), 0)
@@ -111,11 +127,33 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
                     "source_capture_id": "diagnostic-pymupdf-capture:0",
                     "source_page_id": "diagnostic-page:0",
                     "source_primitive_schema_version": "1",
-                    "producer_name": "page-analysis-root",
+                    "producer_name": "page-analysis-primitive-extent",
                     "producer_version": "0.1",
-                    "configuration_id": "page-root-analysis-v1",
+                    "configuration_id": "primitive-extent-analysis-v1",
                 },
             )
+
+    def test_dump_page_analysis_clips_partially_off_page_primitives(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            pdf_path = Path(temporary_directory) / "partial.pdf"
+            _create_pdf_with_partially_off_page_drawing(pdf_path)
+
+            payload = json.loads(dump_page_analysis(pdf_path))
+            primitives = json.loads(dump_normalized_primitives(pdf_path))
+            extent = payload["regions"][1]
+            extent_bbox = cast(list[float], extent["bbox"])
+            extent_ids = cast(list[str], extent["primitive_ids"])
+            drawing_ids = [
+                cast(str, primitive["primitive_id"])
+                for primitive in cast(list[dict[str, object]], primitives["drawing_primitives"])
+            ]
+
+            self.assertGreater(len(drawing_ids), 0)
+            self.assertTrue(all(primitive_id in extent_ids for primitive_id in drawing_ids))
+            self.assertGreaterEqual(extent_bbox[0], 0.0)
+            self.assertGreaterEqual(extent_bbox[1], 0.0)
+            self.assertLessEqual(extent_bbox[2], 200.0)
+            self.assertLessEqual(extent_bbox[3], 300.0)
 
     def test_dump_page_analysis_empty_page_has_root_without_primitives(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -129,6 +167,7 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             self.assertEqual(root["region_id"], "region:page-root")
             self.assertEqual(root["primitive_ids"], [])
             self.assertEqual(root["bbox"], [0.0, 0.0, 200.0, 300.0])
+            self.assertEqual(payload["relations"], [])
 
     def test_dump_page_analysis_compact_output_has_no_final_newline(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -138,7 +177,7 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             json_text = dump_page_analysis(pdf_path, compact=True)
 
             self.assertFalse(json_text.endswith("\n"))
-            self.assertEqual(len(json.loads(json_text)["regions"]), 1)
+            self.assertEqual(len(json.loads(json_text)["regions"]), 2)
 
     def test_dump_page_analysis_writes_requested_output_and_creates_parent(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -184,9 +223,12 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             payload = json.loads(dump_page_analysis(pdf_path))
 
             self.assertEqual(payload["schema_version"], "1.1")
-            self.assertEqual(payload["provenance"]["producer_name"], "page-analysis-root")
-            self.assertEqual(len(payload["regions"]), 1)
-            self.assertEqual(payload["relations"], [])
+            self.assertEqual(
+                payload["provenance"]["producer_name"],
+                "page-analysis-primitive-extent",
+            )
+            self.assertEqual(len(payload["regions"]), 2)
+            self.assertEqual(len(payload["relations"]), 1)
 
     def test_dump_capture_writes_only_when_output_is_requested(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -263,7 +305,7 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             self.assertEqual(return_code, 0)
             payload = json.loads(stdout.getvalue())
             self.assertEqual(payload["schema_version"], "1.1")
-            self.assertEqual(len(payload["regions"]), 1)
+            self.assertEqual(len(payload["regions"]), 2)
             self.assertNotIn("text_observations", payload)
             self.assertNotIn("text_primitives", payload)
 
@@ -381,6 +423,22 @@ def _create_pdf_with_primitives(path: Path) -> None:
         document.close()
 
 
+def _create_pdf_with_partially_off_page_drawing(path: Path) -> None:
+    document = fitz.open()
+    try:
+        page = document.new_page(width=200.0, height=300.0)
+        page.insert_text((20.0, 40.0), "Partial drawing")
+        page.draw_rect(
+            fitz.Rect(180.0, 260.0, 240.0, 340.0),
+            color=(0.0, 0.0, 0.0),
+            fill=(0.5, 0.5, 0.5),
+            width=1.0,
+        )
+        document.save(path)
+    finally:
+        document.close()
+
+
 def _primitive_ids(primitives: dict[str, object]) -> list[str]:
     text_primitives = cast(list[dict[str, object]], primitives["text_primitives"])
     image_primitives = cast(list[dict[str, object]], primitives["image_primitives"])
@@ -390,6 +448,50 @@ def _primitive_ids(primitives: dict[str, object]) -> list[str]:
         + [cast(str, item["primitive_id"]) for item in image_primitives]
         + [cast(str, item["primitive_id"]) for item in drawing_primitives]
     )
+
+
+def _primitive_extent_bbox(primitives: dict[str, object]) -> list[float]:
+    primitive_items = (
+        cast(list[dict[str, object]], primitives["text_primitives"])
+        + cast(list[dict[str, object]], primitives["image_primitives"])
+        + cast(list[dict[str, object]], primitives["drawing_primitives"])
+    )
+    page_geometry = cast(dict[str, object], primitives["page_geometry"])
+    page_width = cast(float, page_geometry["width"])
+    page_height = cast(float, page_geometry["height"])
+    bboxes = [
+        visible_bbox
+        for item in primitive_items
+        if (
+            visible_bbox := _visible_bbox(
+                cast(list[float], item["bbox"]),
+                page_width=page_width,
+                page_height=page_height,
+            )
+        )
+        is not None
+    ]
+    return [
+        min(bbox[0] for bbox in bboxes),
+        min(bbox[1] for bbox in bboxes),
+        max(bbox[2] for bbox in bboxes),
+        max(bbox[3] for bbox in bboxes),
+    ]
+
+
+def _visible_bbox(
+    bbox: list[float],
+    *,
+    page_width: float,
+    page_height: float,
+) -> list[float] | None:
+    x0 = max(0.0, bbox[0])
+    y0 = max(0.0, bbox[1])
+    x1 = min(page_width, bbox[2])
+    y1 = min(page_height, bbox[3])
+    if x0 >= x1 or y0 >= y1:
+        return None
+    return [x0, y0, x1, y1]
 
 
 def _primitive_count(primitives: dict[str, object]) -> int:

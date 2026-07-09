@@ -21,7 +21,7 @@ from typing import Literal
 
 import fitz
 
-from page_analysis_root import build_root_page_analysis
+from page_analysis_primitive_extent import build_primitive_extent_page_analysis
 from page_analysis_serialization import page_analysis_to_dict
 from primitive_normalizer import normalize_backend_page_capture
 from pymupdf_capture import capture_pymupdf_page
@@ -106,7 +106,7 @@ def dump_page_analysis(
     output_path: Path | None = None,
     compact: bool = False,
 ) -> str:
-    """Capture, normalize, build root analysis, then return its JSON representation."""
+    """Capture, normalize, build primitive-extent analysis, then return its JSON representation."""
 
     return _dump_page(
         pdf_path,
@@ -153,7 +153,7 @@ def _dump_page(
         artifact_data = asdict(primitive_page)
     else:
         primitive_page = normalize_backend_page_capture(capture)
-        analysis = build_root_page_analysis(
+        analysis = build_primitive_extent_page_analysis(
             primitive_page,
             generation_id=f"diagnostic-page-analysis:{page_index}",
         )
