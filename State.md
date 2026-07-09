@@ -1,6 +1,6 @@
 # ManReader — Stato progetto
 
-## Versione corrente: v0.11 — Milestone 4 completata
+## Versione corrente: v0.12 — Milestone 5 completata
 
 ## 1. Decisione di fase
 
@@ -10,8 +10,17 @@ La proposta architetturale A-0.2 è stata revisionata criticamente da Chat B e c
 
 Il progetto è in **Modalità I — implementazione incrementale**.
 
-La Milestone 1, la Milestone 2, la Milestone 3 e la Milestone 4 sono completate.
-La milestone corrente è la Milestone 5 — region graph shadow.
+La Milestone 1, la Milestone 2, la Milestone 3, la Milestone 4 e la Milestone 5 sono completate.
+La milestone corrente è la Milestone 6 — marginalia e bande laterali.
+
+Stato sintetico delle milestone:
+
+- Milestone 1 — completata;
+- Milestone 2 — completata;
+- Milestone 3 — completata;
+- Milestone 4 — completata;
+- Milestone 5 — completata;
+- Milestone 6 — corrente.
 
 Questo cambio di fase non autorizza una riscrittura generale della pipeline. Ogni modifica deve:
 
@@ -694,19 +703,188 @@ Verifiche finali riportate:
 - `git diff --check` verde;
 - pipeline legacy e output autorevoli invariati.
 
-### Milestone 5 — Region graph shadow
+### Milestone 5 — Region graph shadow — completata
 
-Costruire regioni, relazioni, vincoli e diagnostica senza cambiare output.
+La milestone ha introdotto un percorso shadow page-level separato dalla pipeline legacy:
 
-### Milestone 6 — Marginalia e bande laterali
+```text
+NormalizedPrimitivePage
+→ PageAnalysis
+→ validazione
+→ JSON diagnostico
+```
 
-Primo vertical slice funzionale, inizialmente limitato a:
+Contratti presenti:
 
-- detection;
-- region candidate;
-- preview/diagnostica;
-- decisione esplicita;
-- output ancora legacy.
+- `PageAnalysis` con schema versionato, generation ID e page ID;
+- `PageAnalysisProvenance` obbligatoria per input normalizzato, producer, versione producer e configurazione;
+- `LayoutRegion` immutabile con bbox canoniche, `structural_kind` non semantico e riferimenti a primitive;
+- `RegionRelation` immutabile per relazioni strutturali direzionali;
+- modelli dataclass immutabili e con slot.
+
+Validazioni implementate:
+
+- identificatori obbligatori e non vuoti;
+- bbox finite, non invertite e non degeneri per le regioni;
+- regioni contenute nella geometria canonica della pagina nella validazione cross-model;
+- riferimenti delle relazioni a regioni esistenti;
+- riferimenti delle regioni a primitive esistenti;
+- coerenza della provenance con `NormalizedPrimitivePage`;
+- divieto di cicli per i grafi strutturali soggetti al vincolo, validati separatamente per relation kind;
+- validazione cross-model pura tra `PageAnalysis` e `NormalizedPrimitivePage`.
+
+Serializzazione e persistenza:
+
+- conversione deterministica `PageAnalysis → dict` JSON-safe;
+- deserializzazione stretta `dict → PageAnalysis` con rifiuto di chiavi mancanti o sconosciute;
+- round-trip del modello, regioni, relazioni e provenance;
+- store JSON minimale per `PageAnalysis` con UTF-8, formato deterministico e caricamento validato;
+- separazione dagli artifact autorevoli, dal workspace job e dalla pipeline legacy.
+
+Producer strutturali presenti:
+
+- page root:
+  - `region:page-root`;
+  - `structural_kind = layout.page`;
+  - bbox pari alla geometria canonica completa della pagina;
+  - riferimenti a tutte le primitive normalizzate nell'ordine `text → image → drawing`.
+- visible primitive extent:
+  - `region:primitive-extent`;
+  - `structural_kind = layout.primitive_extent`;
+  - unione delle porzioni delle primitive visibili nella pagina;
+  - uso dinamico della geometria della singola pagina, senza assunzioni su A4, Letter, B5 o altri formati nominali;
+  - ordine primitive `text → image → drawing` conservato;
+  - esclusione soltanto delle primitive senza intersezione positiva con la pagina;
+  - nessuna creazione della extent quando nessuna primitiva ha area visibile.
+
+Relazione strutturale prodotta quando la extent esiste:
+
+```text
+region:page-root
+-- layout.contains -->
+region:primitive-extent
+```
+
+Il doppio riferimento della stessa primitiva nella root e nella extent non rappresenta ownership semantica, non rappresenta coverage finale ed è soltanto informazione strutturale shadow.
+
+Diagnostica reale:
+
+- `pymupdf_capture_dump.py` supporta gli stage `capture`, `primitives` e `analysis`;
+- lo stage `analysis` usa cattura PyMuPDF reale, normalizzazione, costruzione di `PageAnalysis`, validazione e serializzazione;
+- Markdown, EPUB, IR e pipeline legacy non vengono modificati.
+
+Verifica reale registrata su Lancer pagina 11, come controllo diagnostico della geometria e non come comportamento hardcoded del prodotto:
+
+```text
+page geometry: 612 × 792
+root IDs: 109
+extent IDs: 109
+visible extent:
+[54.43199920654297, 3.6800003051757812, 612.0, 792.0]
+```
+
+In quel campione alcune primitive oltrepassavano i bordi pagina; la extent usa l'intersezione con la geometria canonica senza perdere gli ID delle primitive che mantengono area visibile positiva.
+
+La Milestone 5 non ha introdotto:
+
+- detector reali;
+- marginalia;
+- sidebar semantiche;
+- callout;
+- tabelle;
+- liste;
+- reading order finale;
+- confidence semantica;
+- ownership finale;
+- coverage finale;
+- resolution;
+- profili;
+- IR 2;
+- modifiche a Markdown;
+- modifiche a EPUB;
+- modifiche alla pipeline legacy;
+- GUI;
+- AI;
+- SQLite.
+
+Criteri di chiusura soddisfatti:
+
+- modelli strutturali presenti;
+- validazioni locali, di grafo e cross-model presenti;
+- serializzazione e store JSON presenti;
+- producer deterministici root ed extent presenti;
+- dump shadow su PDF reale presente;
+- formati pagina non hardcoded;
+- primitive fuori bordo gestite geometricamente tramite intersezione visibile;
+- test sintetici e suite completa verdi nell'ultima verifica;
+- pipeline legacy invariata.
+
+Ultima verifica riportata:
+
+```text
+619 test eseguiti
+7 skipped
+Ruff verde
+BasedPyright: 0 errori, 0 warning, 0 note
+git diff --check verde
+```
+
+### Milestone 6 — Marginalia e bande laterali — corrente
+
+Obiettivo: definire il primo vertical slice funzionale per identificare candidati strutturali di marginalia o banda laterale mantenendo l'output legacy autorevole.
+
+Pipeline prevista per la milestone:
+
+```text
+NormalizedPrimitivePage
+→ PageAnalysis strutturale
+→ marginalia/side-band candidate
+→ diagnostica shadow
+```
+
+Il candidato non entra direttamente in IR, Markdown o EPUB.
+
+Il primo micro-step potrà includere soltanto uno dei seguenti livelli, da decidere in un task successivo:
+
+- contratto minimo per un candidato strutturale;
+- feature geometriche necessarie al candidato;
+- producer shadow di candidati;
+- diagnostica separata;
+- test sintetici;
+- verifica su manuali reali.
+
+Non sono ancora decisi detector, soglie numeriche o euristiche specifiche. Non è autorizzato hardcodare Lancer, Fabula, Kult, Vileborn, DB, pagine, titoli, parole o dimensioni carta.
+
+Vincoli iniziali:
+
+- un detector produce un candidato, non una decisione finale;
+- nessuna primitiva viene rimossa dal contenuto;
+- nessuna marginalia viene esclusa automaticamente;
+- nessun candidato modifica IR, Markdown o EPUB;
+- la pipeline legacy resta autorevole;
+- il risultato è diagnostico e reversibile;
+- geometria, semantica e disposizione editoriale restano distinte;
+- eventuale confidence geometrica non è confidence semantica;
+- i formati pagina devono essere trattati tramite coordinate relative o geometria effettiva, non tramite formati nominali.
+
+Fuori scope iniziale:
+
+- resolution;
+- esclusione automatica;
+- policy editoriale;
+- ownership finale;
+- coverage finale;
+- rendering;
+- IR 2;
+- profili;
+- GUI;
+- AI;
+- tabelle;
+- callout;
+- liste;
+- OCR;
+- SQLite;
+- refactor generale di `extractor.py`.
 
 ### Milestone 7 — Coverage minimo e decisioni
 
@@ -818,96 +996,83 @@ Zed agent non decide l'architettura e non fa commit.
 
 ## 16. Prossimo passo operativo
 
-Il prossimo task implementativo appartiene alla **Milestone 5 — region graph shadow**.
+Il prossimo task implementativo appartiene alla **Milestone 6 — marginalia e bande laterali**.
 
 ### Obiettivo iniziale
 
-Introdurre il primo contratto strutturale per regioni e relazioni a partire da `NormalizedPrimitivePage`, senza modificare output autorevoli.
+Preparare il primo vertical slice shadow per candidati strutturali di marginalia o banda laterale a partire da `NormalizedPrimitivePage` e `PageAnalysis`, senza modificare output autorevoli.
 
-Il primo micro-step autorizzabile deve restare contrattuale e sintetico. Può includere soltanto:
+Il primo micro-step non è ancora scelto. Potrà riguardare soltanto uno dei livelli iniziali autorizzabili:
 
-- identificatore di generazione;
-- `LayoutRegion` immutabile;
-- bbox e pagina;
-- `structural_kind` non semantico;
-- primitive IDs;
-- child region IDs;
-- feature strutturali minime;
-- vincoli di ordine parziale;
-- provenance;
-- confidence geometrica;
-- relazioni strutturali tipizzate minime, solo se necessarie al contratto;
-- validazioni di ownership e riferimenti interni;
-- test sintetici.
+- contratto minimo per un candidato strutturale;
+- feature geometriche necessarie al candidato;
+- producer shadow di candidati;
+- diagnostica separata;
+- test sintetici;
+- verifica su manuali reali.
 
 Non deve ancora includere:
 
-- detector reali;
-- marginalia;
-- callout;
-- tabelle;
-- liste;
-- semantica;
-- confidence semantica;
+- detector definitivo o comportamento hardcoded;
+- soglie numeriche non motivate e non diagnostiche;
+- esclusione automatica di marginalia;
+- modifica o rimozione di primitive dal contenuto;
+- modifica a IR, Markdown o EPUB;
 - resolution;
 - policy editoriale;
-- reading order finale;
-- modifiche a IR 1 o renderer;
-- integrazione con la pipeline legacy;
-- GUI;
+- ownership finale;
+- coverage finale;
 - profili;
+- GUI;
 - AI;
 - SQLite;
-- job manager;
-- batch capture.
+- refactor generale di `extractor.py`.
 
-La Milestone 5 deve restare in shadow mode e produrre dati diagnostici separati.
+La Milestone 6 deve restare in shadow mode e produrre dati diagnostici separati.
 
 ## 17. Ultimo avanzamento verificato
 
-La Milestone 4 è stata chiusa dopo la sequenza di commit che ha introdotto manifest, workspace, snapshot verificato, progress per pagina, resume e runner single-page.
+La Milestone 5 è stata chiusa dopo la sequenza di commit che ha introdotto il contratto `PageAnalysis`, la validazione cross-model, serializzazione e store JSON, producer strutturali deterministici e dump diagnostico `analysis`.
 
-Commit della milestone prima del consolidamento finale:
+Commit principali della milestone:
 
 ```text
-3b1b5f4 Add minimal job manifest contract
-38c95f8 Add job manifest JSON persistence
-a1e5d27 Add minimal job workspace creation
-e63a81b Add verified source snapshot copy
-c015854 Add source file reference inspection
-13cab7c Add minimal job initialization
-c8ea38b Add verified capture progress contract
-d9af18d Extract verified file reference model
-590bc8c Attach capture progress to job manifest
-62964ae Add immutable capture page completion
-4248e06 Persist capture page completion
-69a34a2 Add verified capture resume planning
-e15d5ed Add derived capture phase summary
-de9dc6e Add single-page job capture runner
+7a3a1d0 Add minimal page analysis contract
+9f4e2ff Add structural region relations
+4681368 Validate page analysis against primitives
+8694779 Add page analysis serialization
+15dd2f8 Add page analysis provenance
+5a1c2f5 Add page analysis JSON store
+5244893 Add page analysis diagnostic dump
+6b117b2 Add diagnostic page root region
+4d29f3c Extract page root analysis producer
+ec3be98 Add visible primitive extent analysis
 ```
 
 Correzioni finali consolidate:
 
-- piano di resume coerente con il runner;
-- rimozione dello stato globale `phases`;
-- manifest pubblicato dopo snapshot verificato;
-- validazione stretta di schema, tipi e percorsi artifact;
-- completed invalide separate dalle pagine direttamente catturabili.
+- schema `PageAnalysis` corrente a `1.1` con provenance obbligatoria;
+- relazioni strutturali `layout.contains` e `layout.precedes` validate senza dipendere dalla ricorsione Python;
+- validazione pura contro `NormalizedPrimitivePage`;
+- serializzazione/deserializzazione stretta e store JSON minimale;
+- root page region deterministica;
+- visible primitive extent calcolata tramite intersezione con la geometria effettiva della pagina;
+- stage diagnostico `analysis` in `pymupdf_capture_dump.py`.
 
 Ultime verifiche riportate:
 
 - Ruff verde;
 - BasedPyright: 0 errori, 0 warning, 0 note;
-- suite completa: 403 test eseguiti, 7 skipped;
+- suite completa: 619 test eseguiti, 7 skipped;
 - `git diff --check` verde;
 - pipeline legacy, IR 1, Markdown ed EPUB invariati.
 
 Stato successivo approvato:
 
 ```text
-Milestone 5
-→ contratto minimo del region graph
-→ regioni e relazioni strutturali soltanto
-→ nessuna semantica o modifica dell'output
-→ shadow mode
+Milestone 6
+→ candidati strutturali marginalia/side-band
+→ diagnostica shadow
+→ nessuna decisione finale o modifica dell'output
+→ pipeline legacy autorevole
 ```

@@ -2,7 +2,7 @@
 
 ## Stato corrente
 
-Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.11.
+Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.12.
 
 L'architettura target e il piano generale di migrazione sono approvati.
 
@@ -236,7 +236,7 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 La milestone corrente è:
 
-> **Milestone 5 — region graph shadow**
+> **Milestone 6 — marginalia e bande laterali**
 
 ### Stato delle milestone precedenti
 
@@ -307,53 +307,88 @@ Limitazioni da non colmare incidentalmente:
 - nessun job manager o batch runner;
 - nessun containment tramite symlink.
 
-### Milestone 5 — region graph shadow
+### Milestone 5 — region graph shadow — completata
 
-Obiettivo:
+Sono presenti e approvati:
+
+- contratto `PageAnalysis` schema `1.1`;
+- `PageAnalysisProvenance` obbligatoria a livello pagina;
+- `LayoutRegion` e `RegionRelation` immutabili;
+- validazione cross-model contro `NormalizedPrimitivePage`;
+- serializzazione stretta e round-trip JSON-safe;
+- store JSON minimale e deterministico per `PageAnalysis`;
+- producer strutturali deterministici per root pagina e visible primitive extent;
+- stage diagnostico `analysis` in `pymupdf_capture_dump.py`.
+
+Garanzie consolidate:
+
+- identificatori, bbox, endpoint di relazione e riferimenti a primitive validati;
+- provenance coerente con la pagina normalizzata;
+- regioni contenute nella geometria pagina;
+- relazioni strutturali soggette al vincolo acicliche;
+- `region:page-root` copre la geometria canonica completa della pagina;
+- `region:primitive-extent` usa `structural_kind = layout.primitive_extent` e rappresenta l'unione delle porzioni visibili delle primitive;
+- la root riferisce tutte le primitive normalizzate in ordine `text → image → drawing`;
+- la extent conserva lo stesso ordine ed esclude solo primitive senza intersezione positiva con la pagina;
+- la relazione `layout.contains` collega root ed extent;
+- nessun formato pagina nominale è hardcoded;
+- primitive parzialmente fuori bordo sono intersecate con la geometria effettiva della pagina;
+- il riferimento della stessa primitiva in root ed extent non rappresenta ownership o coverage finale;
+- nessuna modifica a pipeline legacy, IR, Markdown, EPUB o renderer.
+
+Ultima verifica consolidata della milestone:
+
+```text
+619 test eseguiti
+7 skipped
+Ruff verde
+BasedPyright: 0 errori, 0 warning, 0 note
+git diff --check verde
+```
+
+La Milestone 5 non ha introdotto detector reali, marginalia, sidebar semantiche, callout, tabelle, liste, reading order finale, confidence semantica, ownership finale, coverage finale, resolution, profili, IR 2, GUI, AI o SQLite.
+
+### Milestone 6 — marginalia e bande laterali
+
+Obiettivo iniziale:
 
 ```text
 NormalizedPrimitivePage
-→ regioni e relazioni strutturali
+→ PageAnalysis strutturale
+→ marginalia/side-band candidate
 → diagnostica shadow
 ```
 
-### Scope iniziale autorizzabile
+La Milestone 6 deve definire il primo vertical slice funzionale per identificare candidati strutturali di marginalia o banda laterale, mantenendo l'output legacy autorevole.
 
-Il primo micro-step può includere soltanto:
+Il primo micro-step potrà includere soltanto uno dei seguenti livelli, da decidere in un task successivo:
 
-- modello `LayoutRegion` immutabile;
-- generation ID;
-- page ID e bbox;
-- `structural_kind` non semantico;
-- primitive IDs;
-- child region IDs;
-- feature strutturali minime;
-- vincoli di ordine parziale;
-- provenance;
-- confidence geometrica;
-- relazioni strutturali tipizzate minime, se indispensabili;
-- validazione dei riferimenti;
-- test sintetici.
+- contratto minimo per un candidato strutturale;
+- feature geometriche necessarie al candidato;
+- producer shadow di candidati;
+- diagnostica separata;
+- test sintetici;
+- verifica su manuali reali.
 
-Non deve ancora includere:
+Non sono ancora autorizzati:
 
-- detector reali;
-- marginalia;
-- callout;
-- tabelle;
-- liste;
-- classificazioni semantiche;
-- confidence semantica;
-- resolution;
-- policy editoriale;
-- reading order finale;
-- output Markdown o EPUB;
-- IR 2;
-- profili;
-- GUI;
-- AI;
-- SQLite;
-- integrazione con la pipeline legacy.
+- scelta di un detector specifico;
+- soglie numeriche;
+- hardcode su Lancer, Fabula, Kult, Vileborn, DB o altri manuali;
+- hardcode su pagina, titolo, parola o dimensione carta;
+- ingresso diretto dei candidati in IR, Markdown o EPUB.
+
+Vincoli della milestone:
+
+- un detector produce un candidato, non una decisione finale;
+- nessuna primitiva viene rimossa dal contenuto;
+- nessuna marginalia viene esclusa automaticamente;
+- nessun candidato modifica IR, Markdown o EPUB;
+- la pipeline legacy resta autorevole;
+- il risultato è diagnostico e reversibile;
+- geometria, semantica e disposizione editoriale restano distinte;
+- eventuale confidence geometrica non è confidence semantica;
+- i formati pagina devono essere trattati tramite coordinate relative o geometria effettiva, non tramite formati nominali.
 
 ## Migrazione e shadow mode
 
@@ -386,9 +421,14 @@ L'equivalenza non richiede JSON identici, ma almeno:
 Non avviare:
 
 - refactor generale di `extractor.py`;
-- detector reali del region graph;
-- marginalia detector;
-- nuove euristiche per Fabula, Lancer, Kult o Vileborn;
+- detector finale o decisione automatica su marginalia e bande laterali;
+- esclusione automatica di marginalia;
+- hardcode su Fabula, Lancer, Kult, Vileborn, DB o altri manuali;
+- hardcode su pagina, titolo, parola o dimensione carta;
+- resolution;
+- policy editoriale;
+- ownership finale;
+- coverage finale;
 - profili;
 - workspace completo;
 - job manager completo;
@@ -398,6 +438,7 @@ Non avviare:
 - GUI;
 - AI di calibrazione;
 - EPUB IR-first;
+- tabelle, callout o liste come nuovo comportamento attivo;
 - OCR;
 - SQLite;
 - nuova struttura completa del repository.
