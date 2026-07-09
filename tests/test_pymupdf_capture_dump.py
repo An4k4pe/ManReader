@@ -111,7 +111,7 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
                     "source_capture_id": "diagnostic-pymupdf-capture:0",
                     "source_page_id": "diagnostic-page:0",
                     "source_primitive_schema_version": "1",
-                    "producer_name": "pymupdf-capture-dump",
+                    "producer_name": "page-analysis-root",
                     "producer_version": "0.1",
                     "configuration_id": "page-root-analysis-v1",
                 },
@@ -184,7 +184,7 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             payload = json.loads(dump_page_analysis(pdf_path))
 
             self.assertEqual(payload["schema_version"], "1.1")
-            self.assertEqual(payload["provenance"]["producer_name"], "pymupdf-capture-dump")
+            self.assertEqual(payload["provenance"]["producer_name"], "page-analysis-root")
             self.assertEqual(len(payload["regions"]), 1)
             self.assertEqual(payload["relations"], [])
 

@@ -21,15 +21,8 @@ from typing import Literal
 
 import fitz
 
-from page_analysis_model import (
-    PAGE_ANALYSIS_SCHEMA_VERSION,
-    LayoutRegion,
-    PageAnalysis,
-    PageAnalysisProvenance,
-)
+from page_analysis_root import build_root_page_analysis
 from page_analysis_serialization import page_analysis_to_dict
-from page_analysis_validate import validate_page_analysis_against_primitive_page
-from primitive_model import NormalizedPrimitivePage
 from primitive_normalizer import normalize_backend_page_capture
 from pymupdf_capture import capture_pymupdf_page
 
@@ -124,50 +117,6 @@ def dump_page_analysis(
     )
 
 
-def build_root_page_analysis(
-    primitive_page: NormalizedPrimitivePage,
-) -> PageAnalysis:
-    """Build and validate a root-region diagnostic PageAnalysis for a primitive page."""
-
-    primitive_ids = (
-        tuple(primitive.primitive_id for primitive in primitive_page.text_primitives)
-        + tuple(primitive.primitive_id for primitive in primitive_page.image_primitives)
-        + tuple(primitive.primitive_id for primitive in primitive_page.drawing_primitives)
-    )
-
-    analysis = PageAnalysis(
-        schema_version=PAGE_ANALYSIS_SCHEMA_VERSION,
-        generation_id=f"diagnostic-page-analysis:{primitive_page.page_index}",
-        page_id=primitive_page.page_id,
-        provenance=PageAnalysisProvenance(
-            source_id=primitive_page.source_id,
-            source_capture_id=primitive_page.source_capture_id,
-            source_page_id=primitive_page.page_id,
-            source_primitive_schema_version=primitive_page.schema_version,
-            producer_name="pymupdf-capture-dump",
-            producer_version="0.1",
-            configuration_id="page-root-analysis-v1",
-        ),
-        regions=(
-            LayoutRegion(
-                region_id="region:page-root",
-                page_id=primitive_page.page_id,
-                bbox=(
-                    0.0,
-                    0.0,
-                    primitive_page.page_geometry.width,
-                    primitive_page.page_geometry.height,
-                ),
-                structural_kind="layout.page",
-                primitive_ids=primitive_ids,
-            ),
-        ),
-        relations=(),
-    )
-    validate_page_analysis_against_primitive_page(analysis, primitive_page)
-    return analysis
-
-
 def _dump_page(
     pdf_path: Path,
     *,
@@ -204,7 +153,10 @@ def _dump_page(
         artifact_data = asdict(primitive_page)
     else:
         primitive_page = normalize_backend_page_capture(capture)
-        analysis = build_root_page_analysis(primitive_page)
+        analysis = build_root_page_analysis(
+            primitive_page,
+            generation_id=f"diagnostic-page-analysis:{page_index}",
+        )
         artifact_data = page_analysis_to_dict(analysis)
 
     json_text = json.dumps(
