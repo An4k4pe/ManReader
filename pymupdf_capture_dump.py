@@ -1,9 +1,9 @@
 """Diagnostic JSON dump for PyMuPDF shadow capture and normalization.
 
 This tool is intentionally disconnected from ManReader's legacy pipeline.
-It opens one PDF page and can serialize either the raw ``BackendPageCapture``
-or the derived ``NormalizedPrimitivePage`` to stdout or to an explicitly
-requested file.
+It opens one PDF page and can serialize the raw ``BackendPageCapture``,
+the derived ``NormalizedPrimitivePage``, or an empty validated ``PageAnalysis``
+to stdout or to an explicitly requested file.
 
 The generated identifiers are diagnostic placeholders. They do not establish
 the canonical identity policy for future workspace artifacts.
@@ -21,10 +21,18 @@ from typing import Literal
 
 import fitz
 
+from page_analysis_model import (
+    PAGE_ANALYSIS_SCHEMA_VERSION,
+    PageAnalysis,
+    PageAnalysisProvenance,
+)
+from page_analysis_serialization import page_analysis_to_dict
+from page_analysis_validate import validate_page_analysis_against_primitive_page
+from primitive_model import NormalizedPrimitivePage
 from primitive_normalizer import normalize_backend_page_capture
 from pymupdf_capture import capture_pymupdf_page
 
-type DiagnosticStage = Literal["capture", "primitives"]
+type DiagnosticStage = Literal["capture", "primitives", "analysis"]
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
@@ -44,7 +52,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--stage",
-        choices=("capture", "primitives"),
+        choices=("capture", "primitives", "analysis"),
         default="capture",
         help="Diagnostic stage to serialize. Default: capture.",
     )
@@ -97,6 +105,49 @@ def dump_normalized_primitives(
     )
 
 
+def dump_page_analysis(
+    pdf_path: Path,
+    *,
+    page_number: int = 1,
+    output_path: Path | None = None,
+    compact: bool = False,
+) -> str:
+    """Capture, normalize, build empty analysis, then return its JSON representation."""
+
+    return _dump_page(
+        pdf_path,
+        page_number=page_number,
+        stage="analysis",
+        output_path=output_path,
+        compact=compact,
+    )
+
+
+def build_empty_page_analysis(
+    primitive_page: NormalizedPrimitivePage,
+) -> PageAnalysis:
+    """Build and validate an empty diagnostic PageAnalysis for a primitive page."""
+
+    analysis = PageAnalysis(
+        schema_version=PAGE_ANALYSIS_SCHEMA_VERSION,
+        generation_id=f"diagnostic-page-analysis:{primitive_page.page_index}",
+        page_id=primitive_page.page_id,
+        provenance=PageAnalysisProvenance(
+            source_id=primitive_page.source_id,
+            source_capture_id=primitive_page.source_capture_id,
+            source_page_id=primitive_page.page_id,
+            source_primitive_schema_version=primitive_page.schema_version,
+            producer_name="pymupdf-capture-dump",
+            producer_version="0.1",
+            configuration_id="empty-page-analysis-v1",
+        ),
+        regions=(),
+        relations=(),
+    )
+    validate_page_analysis_against_primitive_page(analysis, primitive_page)
+    return analysis
+
+
 def _dump_page(
     pdf_path: Path,
     *,
@@ -116,8 +167,7 @@ def _dump_page(
     with fitz.open(pdf_path) as document:
         if page_index >= document.page_count:
             raise ValueError(
-                f"page {page_number} is outside the document "
-                f"(page count: {document.page_count})"
+                f"page {page_number} is outside the document (page count: {document.page_count})"
             )
         page = document.load_page(page_index)
         capture = capture_pymupdf_page(
@@ -127,13 +177,18 @@ def _dump_page(
             capture_id=f"diagnostic-pymupdf-capture:{page_index}",
         )
 
-    artifact = (
-        capture
-        if stage == "capture"
-        else normalize_backend_page_capture(capture)
-    )
+    if stage == "capture":
+        artifact_data = asdict(capture)
+    elif stage == "primitives":
+        primitive_page = normalize_backend_page_capture(capture)
+        artifact_data = asdict(primitive_page)
+    else:
+        primitive_page = normalize_backend_page_capture(capture)
+        analysis = build_empty_page_analysis(primitive_page)
+        artifact_data = page_analysis_to_dict(analysis)
+
     json_text = json.dumps(
-        asdict(artifact),
+        artifact_data,
         ensure_ascii=False,
         indent=None if compact else 2,
         separators=(",", ":") if compact else None,
@@ -167,8 +222,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         sys.stdout.write(json_text)
     else:
         print(
-            f"Wrote PyMuPDF shadow {args.stage} for page "
-            f"{args.page} to {args.output}",
+            f"Wrote PyMuPDF shadow {args.stage} for page {args.page} to {args.output}",
             file=sys.stderr,
         )
     return 0
