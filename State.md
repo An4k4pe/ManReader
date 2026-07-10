@@ -1,6 +1,6 @@
 # ManReader — Stato progetto
 
-## Versione corrente: v0.12 — Milestone 5 completata
+## Versione corrente: v0.13 — Milestone 6 in corso
 
 ## 1. Decisione di fase
 
@@ -21,6 +21,12 @@ Stato sintetico delle milestone:
 - Milestone 4 — completata;
 - Milestone 5 — completata;
 - Milestone 6 — corrente.
+
+Il primo micro-step contrattuale della Milestone 6 è stato completato con il commit:
+
+```text
+a7afdc7 Add page-level region candidate contract
+```
 
 Questo cambio di fase non autorizza una riscrittura generale della pipeline. Ogni modifica deve:
 
@@ -206,6 +212,22 @@ Ogni artifact derivato deve poter dichiarare input, configurazione, versione e g
 
 ### 7.4 Candidato non definitivo
 
+I confini restano:
+
+```text
+primitive normalizzate
+≠ layout
+≠ candidati
+≠ semantica
+≠ decisione
+```
+
+`LayoutRegion` è un fatto strutturale presente nell’analisi.
+
+`RegionCandidate` è una proposta strutturale non approvata. Un `RegionCandidate` è page-local, usa coordinate canoniche, contiene una bbox e un `proposed_structural_kind`, può riferire primitive della pagina e può avere `primitive_ids=()`. Candidati concorrenti o sovrapposti sono ammessi e possono condividere primitive.
+
+Un `RegionCandidate` non rappresenta ownership, coverage, ranking, confidence, decisione o semantica editoriale.
+
 Un detector produce un candidato. Soltanto la resolution può accettarlo, rifiutarlo o lasciarlo irrisolto.
 
 Un candidato tabella non può rimuovere testo o produrre una tabella finale prima della resolution.
@@ -215,10 +237,12 @@ Un candidato tabella non può rimuovere testo o produrre una tabella finale prim
 Esempio:
 
 ```text
-structural_kind = sidebar
+structural_kind = layout.side_band
 semantic_role = marginalia
 editorial_disposition = exclude | note | secondary_content | unresolved
 ```
+
+`layout.side_band` è strutturale. `marginalia` è un possibile ruolo semantico successivo e non deve essere usato come `structural_kind` o `proposed_structural_kind`.
 
 ### 7.6 Coverage e ownership
 
@@ -328,6 +352,8 @@ geometry_confidence
 ```
 
 Candidati, alternative semantiche e confidence semantica restano fuori dalla regione.
+
+`RegionCandidate` resta distinto da `LayoutRegion`: è una proposta strutturale page-local non approvata, non una regione accettata e non una decisione editoriale.
 
 ### 8.4 IR 2 minima
 
@@ -716,7 +742,7 @@ NormalizedPrimitivePage
 
 Contratti presenti:
 
-- `PageAnalysis` con schema versionato, generation ID e page ID;
+- `PageAnalysis` schema `1.2` con generation ID e page ID;
 - `PageAnalysisProvenance` obbligatoria per input normalizzato, producer, versione producer e configurazione;
 - `LayoutRegion` immutabile con bbox canoniche, `structural_kind` non semantico e riferimenti a primitive;
 - `RegionRelation` immutabile per relazioni strutturali direzionali;
@@ -819,10 +845,10 @@ Criteri di chiusura soddisfatti:
 - test sintetici e suite completa verdi nell'ultima verifica;
 - pipeline legacy invariata.
 
-Ultima verifica riportata:
+Baseline globale corrente dopo il primo commit della Milestone 6:
 
 ```text
-619 test eseguiti
+734 test eseguiti
 7 skipped
 Ruff verde
 BasedPyright: 0 errori, 0 warning, 0 note
@@ -844,16 +870,60 @@ NormalizedPrimitivePage
 
 Il candidato non entra direttamente in IR, Markdown o EPUB.
 
-Il primo micro-step potrà includere soltanto uno dei seguenti livelli, da decidere in un task successivo:
+Micro-step 1 — contratto `RegionCandidate` — completato con:
 
-- contratto minimo per un candidato strutturale;
-- feature geometriche necessarie al candidato;
-- producer shadow di candidati;
-- diagnostica separata;
-- test sintetici;
-- verifica su manuali reali.
+```text
+a7afdc7 Add page-level region candidate contract
+```
 
-Non sono ancora decisi detector, soglie numeriche o euristiche specifiche. Non è autorizzato hardcodare Lancer, Fabula, Kult, Vileborn, DB, pagine, titoli, parole o dimensioni carta.
+Sono ora presenti e approvati:
+
+- `RegionCandidate`;
+- `PageAnalysis.candidates`;
+- schema `PageAnalysis 1.2`;
+- validazione locale dei candidate ID, page ID, bbox, kind e primitive IDs;
+- validazione cross-model di bbox e riferimenti alle primitive;
+- serializzazione stretta e round-trip;
+- store compatibile tramite il serializer;
+- candidati concorrenti, sovrapposti e con primitive condivise ammessi;
+- root ed extent invariati e con `candidates=()`.
+
+Il commit ha inoltre corretto un bug preesistente di discovery in `tests/test_page_analysis_model.py`; il conteggio del modulo è passato da 42 test scoperti a 119 test scoperti. Questa correzione non è una feature della milestone.
+
+Decisione consolidata sulle evidence: nessuna evidence persistita nel primo producer side-band.
+
+Motivazione:
+
+- nessun consumatore concreto richiede ancora evidence persistite;
+- nessun bump a `PageAnalysis 1.3`;
+- nessun `dict[str, object]` o feature map generica;
+- nessuna provenance candidate-level;
+- la provenance resta page-level nel primo producer singolo;
+- le misure saranno interne, tipizzate, deterministiche e testabili.
+
+La persistenza delle evidence sarà rivalutata soltanto in presenza di un consumatore reale, per esempio composizione multi-producer, resolution basata sulle misure, audit persistente, confronto storico o riproduzione senza rieseguire il producer. Il modello futuro delle evidence non viene progettato ora.
+
+Prossimo micro-step autorizzabile: calcolo tipizzato delle misure geometriche per una singola ipotesi testuale orizzontale già fornita.
+
+Il prossimo commit deve separare:
+
+```text
+calcolo delle misure
+≠ clustering
+≠ soglie
+≠ decisione
+≠ produzione di RegionCandidate
+```
+
+Il micro-step successivo può introdurre soltanto:
+
+- un tipo producer-specifico per misure geometriche;
+- una funzione deterministica che misura una selezione esplicita di `TextPrimitive`;
+- bbox visibile aggregata;
+- rapporti relativi alla geometria pagina;
+- test sintetici.
+
+Non sono ancora autorizzati scansione automatica della pagina, clustering, raggruppamento automatico, soglie, classificazione side-band, produzione effettiva di candidati, diagnostica CLI, evidence persistite, schema `1.3`, semantica marginalia o modifica della pipeline legacy.
 
 Vincoli iniziali:
 
@@ -1000,21 +1070,31 @@ Il prossimo task implementativo appartiene alla **Milestone 6 — marginalia e b
 
 ### Obiettivo iniziale
 
-Preparare il primo vertical slice shadow per candidati strutturali di marginalia o banda laterale a partire da `NormalizedPrimitivePage` e `PageAnalysis`, senza modificare output autorevoli.
+Il contratto `RegionCandidate` è stato introdotto. Il prossimo micro-step autorizzabile è il calcolo tipizzato delle misure geometriche per una singola ipotesi testuale orizzontale già fornita.
 
-Il primo micro-step non è ancora scelto. Potrà riguardare soltanto uno dei livelli iniziali autorizzabili:
+Il prossimo commit deve separare il calcolo delle misure da clustering, soglie, decisione e produzione di `RegionCandidate`.
 
-- contratto minimo per un candidato strutturale;
-- feature geometriche necessarie al candidato;
-- producer shadow di candidati;
-- diagnostica separata;
-- test sintetici;
-- verifica su manuali reali.
+Può introdurre soltanto:
+
+- un tipo producer-specifico per misure geometriche;
+- una funzione deterministica che misura una selezione esplicita di `TextPrimitive`;
+- bbox visibile aggregata;
+- rapporti relativi alla geometria pagina;
+- test sintetici.
 
 Non deve ancora includere:
 
+- scansione automatica della pagina;
+- clustering;
+- raggruppamento automatico;
+- soglie;
+- classificazione side-band;
+- produzione effettiva di candidati;
+- diagnostica CLI;
+- evidence persistite;
+- schema `1.3`;
+- semantica marginalia;
 - detector definitivo o comportamento hardcoded;
-- soglie numeriche non motivate e non diagnostiche;
 - esclusione automatica di marginalia;
 - modifica o rimozione di primitive dal contenuto;
 - modifica a IR, Markdown o EPUB;
@@ -1032,7 +1112,7 @@ La Milestone 6 deve restare in shadow mode e produrre dati diagnostici separati.
 
 ## 17. Ultimo avanzamento verificato
 
-La Milestone 5 è stata chiusa dopo la sequenza di commit che ha introdotto il contratto `PageAnalysis`, la validazione cross-model, serializzazione e store JSON, producer strutturali deterministici e dump diagnostico `analysis`.
+La Milestone 5 è stata chiusa dopo la sequenza di commit che ha introdotto il contratto `PageAnalysis`, la validazione cross-model, serializzazione e store JSON, producer strutturali deterministici e dump diagnostico `analysis`. Il primo micro-step della Milestone 6 è stato completato con il commit `a7afdc7 Add page-level region candidate contract`.
 
 Commit principali della milestone:
 
@@ -1051,7 +1131,7 @@ ec3be98 Add visible primitive extent analysis
 
 Correzioni finali consolidate:
 
-- schema `PageAnalysis` corrente a `1.1` con provenance obbligatoria;
+- schema `PageAnalysis` corrente a `1.2` con provenance obbligatoria e candidati strutturali;
 - relazioni strutturali `layout.contains` e `layout.precedes` validate senza dipendere dalla ricorsione Python;
 - validazione pura contro `NormalizedPrimitivePage`;
 - serializzazione/deserializzazione stretta e store JSON minimale;
@@ -1059,11 +1139,11 @@ Correzioni finali consolidate:
 - visible primitive extent calcolata tramite intersezione con la geometria effettiva della pagina;
 - stage diagnostico `analysis` in `pymupdf_capture_dump.py`.
 
-Ultime verifiche riportate:
+Ultime verifiche riportate dopo il primo commit della Milestone 6:
 
 - Ruff verde;
 - BasedPyright: 0 errori, 0 warning, 0 note;
-- suite completa: 619 test eseguiti, 7 skipped;
+- suite completa: 734 test eseguiti, 7 skipped;
 - `git diff --check` verde;
 - pipeline legacy, IR 1, Markdown ed EPUB invariati.
 
@@ -1071,6 +1151,7 @@ Stato successivo approvato:
 
 ```text
 Milestone 6
+→ misure geometriche tipizzate
 → candidati strutturali marginalia/side-band
 → diagnostica shadow
 → nessuna decisione finale o modifica dell'output

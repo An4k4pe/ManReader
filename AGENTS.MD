@@ -2,7 +2,7 @@
 
 ## Stato corrente
 
-Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.12.
+Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.13.
 
 L'architettura target e il piano generale di migrazione sono approvati.
 
@@ -148,7 +148,12 @@ osservazione backend
 
 ### Layout e candidati
 
-- `LayoutRegion` contiene soltanto dati strutturali.
+- `LayoutRegion` è un fatto strutturale dell’analisi e contiene soltanto dati strutturali.
+- `RegionCandidate` è una proposta strutturale non approvata.
+- `RegionCandidate` non contiene confidence, ranking, ownership, coverage, semantica o decisione.
+- `proposed_structural_kind` deve restare strutturale: valori come `layout.side_band` sono ammessi, mentre `marginalia` non è uno structural kind.
+- Candidati sovrapposti e concorrenti sono ammessi.
+- Le primitive possono essere condivise fra candidati; la condivisione non implica ownership.
 - Confidence geometrica e confidence semantica devono essere separate.
 - Tabelle, marginalia, callout e liste detector-side sono candidati.
 - Un candidato tabella non rimuove testo e non produce CSV definitivo prima della resolution.
@@ -311,7 +316,7 @@ Limitazioni da non colmare incidentalmente:
 
 Sono presenti e approvati:
 
-- contratto `PageAnalysis` schema `1.1`;
+- contratto `PageAnalysis` schema `1.2`;
 - `PageAnalysisProvenance` obbligatoria a livello pagina;
 - `LayoutRegion` e `RegionRelation` immutabili;
 - validazione cross-model contro `NormalizedPrimitivePage`;
@@ -361,14 +366,23 @@ NormalizedPrimitivePage
 
 La Milestone 6 deve definire il primo vertical slice funzionale per identificare candidati strutturali di marginalia o banda laterale, mantenendo l'output legacy autorevole.
 
-Il primo micro-step potrà includere soltanto uno dei seguenti livelli, da decidere in un task successivo:
+Micro-step 1 — contratto `RegionCandidate` — completato.
 
-- contratto minimo per un candidato strutturale;
-- feature geometriche necessarie al candidato;
-- producer shadow di candidati;
-- diagnostica separata;
-- test sintetici;
-- verifica su manuali reali.
+Sono approvati:
+
+- `RegionCandidate`;
+- `PageAnalysis.candidates`;
+- schema `1.2`;
+- validazione e serializzazione;
+- nessuna evidence persistita;
+- nessuna provenance candidate-level;
+- nessun producer reale di candidati.
+
+Prossimo micro-step autorizzabile: misure geometriche tipizzate per una selezione esplicita di primitive testuali orizzontali.
+
+Nel prossimo commit non sono autorizzati clustering, soglie, decisione side-band o produzione di `RegionCandidate`.
+
+Il calcolo delle misure deve restare separato dalla costruzione delle ipotesi e dalla regola decisionale.
 
 Non sono ancora autorizzati:
 
