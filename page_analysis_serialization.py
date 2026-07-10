@@ -4,10 +4,24 @@ from __future__ import annotations
 
 from typing import cast
 
-from page_analysis_model import LayoutRegion, PageAnalysis, PageAnalysisProvenance, RegionRelation
+from page_analysis_model import (
+    LayoutRegion,
+    PageAnalysis,
+    PageAnalysisProvenance,
+    RegionCandidate,
+    RegionRelation,
+)
 
 _ROOT_KEYS = frozenset(
-    {"schema_version", "generation_id", "page_id", "provenance", "regions", "relations"}
+    {
+        "schema_version",
+        "generation_id",
+        "page_id",
+        "provenance",
+        "regions",
+        "relations",
+        "candidates",
+    }
 )
 _PROVENANCE_KEYS = frozenset(
     {
@@ -22,6 +36,9 @@ _PROVENANCE_KEYS = frozenset(
 )
 _REGION_KEYS = frozenset({"region_id", "page_id", "bbox", "structural_kind", "primitive_ids"})
 _RELATION_KEYS = frozenset({"relation_id", "relation_kind", "source_region_id", "target_region_id"})
+_CANDIDATE_KEYS = frozenset(
+    {"candidate_id", "page_id", "bbox", "proposed_structural_kind", "primitive_ids"}
+)
 
 
 def page_analysis_to_dict(analysis: PageAnalysis) -> dict[str, object]:
@@ -62,6 +79,16 @@ def page_analysis_to_dict(analysis: PageAnalysis) -> dict[str, object]:
             }
             for relation in analysis.relations
         ],
+        "candidates": [
+            {
+                "candidate_id": candidate.candidate_id,
+                "page_id": candidate.page_id,
+                "bbox": list(candidate.bbox),
+                "proposed_structural_kind": candidate.proposed_structural_kind,
+                "primitive_ids": list(candidate.primitive_ids),
+            }
+            for candidate in analysis.candidates
+        ],
     }
 
 
@@ -74,9 +101,11 @@ def page_analysis_from_dict(data: object) -> PageAnalysis:
     provenance = _parse_provenance(root["provenance"])
     regions_data = _require_list(root, "regions", "regions")
     relations_data = _require_list(root, "relations", "relations")
+    candidates_data = _require_list(root, "candidates", "candidates")
 
     regions = tuple(_parse_region(item, index) for index, item in enumerate(regions_data))
     relations = tuple(_parse_relation(item, index) for index, item in enumerate(relations_data))
+    candidates = tuple(_parse_candidate(item, index) for index, item in enumerate(candidates_data))
 
     return PageAnalysis(
         schema_version=_require_str(root, "schema_version", "schema_version"),
@@ -85,6 +114,7 @@ def page_analysis_from_dict(data: object) -> PageAnalysis:
         provenance=provenance,
         regions=regions,
         relations=relations,
+        candidates=candidates,
     )
 
 
@@ -168,6 +198,31 @@ def _parse_region(value: object, index: int) -> LayoutRegion:
         page_id=_require_str(data, "page_id", f"{path}.page_id"),
         bbox=_parse_bbox(data["bbox"], f"{path}.bbox"),
         structural_kind=_require_str(data, "structural_kind", f"{path}.structural_kind"),
+        primitive_ids=tuple(primitive_ids),
+    )
+
+
+def _parse_candidate(value: object, index: int) -> RegionCandidate:
+    path = f"candidates[{index}]"
+    data = _require_dict(value, path)
+    _validate_exact_keys(data, _CANDIDATE_KEYS, path)
+
+    primitive_ids_data = _require_list(data, "primitive_ids", f"{path}.primitive_ids")
+    primitive_ids: list[str] = []
+    for primitive_index, primitive_id in enumerate(primitive_ids_data):
+        if not isinstance(primitive_id, str):
+            raise ValueError(f"{path}.primitive_ids[{primitive_index}] must be a string")
+        primitive_ids.append(primitive_id)
+
+    return RegionCandidate(
+        candidate_id=_require_str(data, "candidate_id", f"{path}.candidate_id"),
+        page_id=_require_str(data, "page_id", f"{path}.page_id"),
+        bbox=_parse_bbox(data["bbox"], f"{path}.bbox"),
+        proposed_structural_kind=_require_str(
+            data,
+            "proposed_structural_kind",
+            f"{path}.proposed_structural_kind",
+        ),
         primitive_ids=tuple(primitive_ids),
     )
 

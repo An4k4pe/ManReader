@@ -21,7 +21,7 @@ from geometry_model import (
     _validate_non_empty_string,
 )
 
-PAGE_ANALYSIS_SCHEMA_VERSION = "1.1"
+PAGE_ANALYSIS_SCHEMA_VERSION = "1.2"
 
 _VALID_RELATION_KINDS = frozenset(
     {
@@ -104,6 +104,33 @@ class LayoutRegion:
 
 
 @dataclass(frozen=True, slots=True)
+class RegionCandidate:
+    """Unresolved structural proposal for one page.
+
+    A candidate is not an approved layout fact, confidence score, ranking,
+    ownership claim, coverage claim, semantic classification, or decision.
+    """
+
+    candidate_id: str
+    page_id: str
+    bbox: BBox
+    proposed_structural_kind: str
+    primitive_ids: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        _validate_non_empty_string(self.candidate_id, "candidate_id")
+        _validate_non_empty_string(self.page_id, "page_id")
+        _validate_bbox(self.bbox)
+        x0, y0, x1, y1 = self.bbox
+        if x0 >= x1:
+            raise ValueError("bbox must be non-degenerate on the X axis")
+        if y0 >= y1:
+            raise ValueError("bbox must be non-degenerate on the Y axis")
+        _validate_structural_kind(self.proposed_structural_kind)
+        _validate_primitive_ids(self.primitive_ids)
+
+
+@dataclass(frozen=True, slots=True)
 class PageAnalysisProvenance:
     """Page-level provenance for the normalized input and analysis producer.
 
@@ -164,6 +191,9 @@ class PageAnalysis:
 
     The order of ``relations`` is only representation order. It is not priority,
     reading order, or structural order.
+
+    The order of ``candidates`` is only representation order. It is not ranking,
+    confidence, reading order, priority, or an approval decision.
     """
 
     schema_version: str
@@ -172,6 +202,7 @@ class PageAnalysis:
     provenance: PageAnalysisProvenance
     regions: tuple[LayoutRegion, ...] = ()
     relations: tuple[RegionRelation, ...] = ()
+    candidates: tuple[RegionCandidate, ...] = ()
 
     def __post_init__(self) -> None:
         if self.schema_version != PAGE_ANALYSIS_SCHEMA_VERSION:
@@ -186,6 +217,8 @@ class PageAnalysis:
             raise ValueError("regions must be a tuple")
         if not isinstance(self.relations, tuple):
             raise ValueError("relations must be a tuple")
+        if not isinstance(self.candidates, tuple):
+            raise ValueError("candidates must be a tuple")
 
         region_ids: set[str] = set()
         for index, region in enumerate(self.regions):
@@ -218,6 +251,16 @@ class PageAnalysis:
             if logical_edge in logical_edges:
                 raise ValueError("logical relation edges must not be duplicated")
             logical_edges.add(logical_edge)
+
+        candidate_ids: set[str] = set()
+        for index, candidate in enumerate(self.candidates):
+            if not isinstance(candidate, RegionCandidate):
+                raise ValueError(f"candidates[{index}] must be a RegionCandidate")
+            if candidate.page_id != self.page_id:
+                raise ValueError("candidates must belong to the same page_id")
+            if candidate.candidate_id in candidate_ids:
+                raise ValueError("candidate_id values must be unique within the page")
+            candidate_ids.add(candidate.candidate_id)
 
         for relation_kind in _VALID_RELATION_KINDS:
             _validate_acyclic_relations(self.relations, relation_kind)

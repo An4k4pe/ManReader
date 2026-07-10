@@ -91,6 +91,7 @@ class PageAnalysisRootTest(unittest.TestCase):
         self.assertEqual(root.structural_kind, ROOT_STRUCTURAL_KIND)
         self.assertEqual(root.bbox, (0.0, 0.0, 123.0, 456.0))
         self.assertEqual(analysis.relations, ())
+        self.assertEqual(analysis.candidates, ())
 
     def test_primitive_ids_are_concatenated_in_channel_order(self) -> None:
         primitive_page = _primitive_page()
@@ -142,6 +143,7 @@ class PageAnalysisRootTest(unittest.TestCase):
         self.assertEqual(len(analysis.regions), 1)
         self.assertEqual(analysis.regions[0].primitive_ids, ())
         self.assertEqual(analysis.relations, ())
+        self.assertEqual(analysis.candidates, ())
 
     def test_input_primitive_page_is_not_modified(self) -> None:
         primitive_page = _primitive_page()

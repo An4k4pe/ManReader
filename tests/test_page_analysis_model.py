@@ -5,12 +5,14 @@ from __future__ import annotations
 import math
 import unittest
 from dataclasses import FrozenInstanceError
+from typing import cast
 
 from page_analysis_model import (
     PAGE_ANALYSIS_SCHEMA_VERSION,
     LayoutRegion,
     PageAnalysis,
     PageAnalysisProvenance,
+    RegionCandidate,
     RegionRelation,
 )
 
@@ -70,11 +72,11 @@ class LayoutRegionTests(unittest.TestCase):
 
     def test_primitive_ids_list_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
-            self._region(primitive_ids=["primitive-1"])  # type: ignore[arg-type]
+            self._region(primitive_ids=cast(tuple[str, ...], ["primitive-1"]))
 
     def test_primitive_ids_non_string_item_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
-            self._region(primitive_ids=(123,))  # type: ignore[arg-type]
+            self._region(primitive_ids=cast(tuple[str, ...], (123,)))
 
     def test_primitive_ids_empty_string_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
@@ -135,7 +137,130 @@ class LayoutRegionTests(unittest.TestCase):
 
     def test_non_string_structural_kind_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
-            self._region(structural_kind=123)  # type: ignore[arg-type]
+            self._region(structural_kind=cast(str, 123))
+
+
+class RegionCandidateTests(unittest.TestCase):
+    def _candidate(
+        self,
+        *,
+        candidate_id: str = "candidate-1",
+        page_id: str = "page-1",
+        bbox: tuple[float, float, float, float] = (0.0, 1.0, 20.0, 30.0),
+        proposed_structural_kind: str = "layout.side_band",
+        primitive_ids: tuple[str, ...] = ("primitive-1",),
+    ) -> RegionCandidate:
+        return RegionCandidate(
+            candidate_id=candidate_id,
+            page_id=page_id,
+            bbox=bbox,
+            proposed_structural_kind=proposed_structural_kind,
+            primitive_ids=primitive_ids,
+        )
+
+    def test_valid_construction(self) -> None:
+        candidate = self._candidate()
+
+        self.assertEqual(candidate.candidate_id, "candidate-1")
+        self.assertEqual(candidate.page_id, "page-1")
+        self.assertEqual(candidate.bbox, (0.0, 1.0, 20.0, 30.0))
+        self.assertEqual(candidate.proposed_structural_kind, "layout.side_band")
+        self.assertEqual(candidate.primitive_ids, ("primitive-1",))
+
+    def test_equivalent_instances_are_equal(self) -> None:
+        self.assertEqual(self._candidate(), self._candidate())
+
+    def test_dataclass_is_immutable(self) -> None:
+        candidate = self._candidate()
+
+        with self.assertRaises(FrozenInstanceError):
+            candidate.candidate_id = "changed"  # type: ignore[misc]
+
+    def test_dataclass_uses_slots(self) -> None:
+        self.assertFalse(hasattr(self._candidate(), "__dict__"))
+
+    def test_empty_primitive_ids_tuple_is_valid(self) -> None:
+        candidate = self._candidate(primitive_ids=())
+
+        self.assertEqual(candidate.primitive_ids, ())
+
+    def test_multiple_primitive_ids_are_valid(self) -> None:
+        candidate = self._candidate(primitive_ids=("primitive-1", "primitive-2"))
+
+        self.assertEqual(candidate.primitive_ids, ("primitive-1", "primitive-2"))
+
+    def test_duplicate_primitive_ids_are_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self._candidate(primitive_ids=("primitive-1", "primitive-1"))
+
+    def test_primitive_ids_list_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self._candidate(primitive_ids=cast(tuple[str, ...], ["primitive-1"]))
+
+    def test_primitive_ids_non_string_item_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self._candidate(primitive_ids=cast(tuple[str, ...], (123,)))
+
+    def test_primitive_ids_empty_string_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self._candidate(primitive_ids=("",))
+
+    def test_empty_candidate_id_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self._candidate(candidate_id="")
+
+    def test_empty_page_id_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self._candidate(page_id="")
+
+    def test_inverted_bbox_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self._candidate(bbox=(20.0, 1.0, 0.0, 30.0))
+
+    def test_degenerate_bbox_x_axis_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self._candidate(bbox=(0.0, 1.0, 0.0, 30.0))
+
+    def test_degenerate_bbox_y_axis_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self._candidate(bbox=(0.0, 1.0, 20.0, 1.0))
+
+    def test_bbox_with_nan_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self._candidate(bbox=(0.0, 1.0, math.nan, 30.0))
+
+    def test_bbox_with_infinity_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self._candidate(bbox=(0.0, 1.0, math.inf, 30.0))
+
+    def test_valid_namespaced_kind_is_accepted(self) -> None:
+        candidate = self._candidate(proposed_structural_kind="layout.side_band")
+
+        self.assertEqual(candidate.proposed_structural_kind, "layout.side_band")
+
+    def test_kind_without_namespace_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self._candidate(proposed_structural_kind="layout")
+
+    def test_kind_with_uppercase_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self._candidate(proposed_structural_kind="layout.SideBand")
+
+    def test_kind_with_empty_segment_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self._candidate(proposed_structural_kind="layout..side_band")
+
+    def test_kind_with_spaces_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self._candidate(proposed_structural_kind="layout side_band")
+
+    def test_kind_with_hyphens_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self._candidate(proposed_structural_kind="layout.side-band")
+
+    def test_non_string_kind_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self._candidate(proposed_structural_kind=cast(str, 123))
 
 
 class PageAnalysisProvenanceTests(unittest.TestCase):
@@ -260,7 +385,7 @@ class RegionRelationTests(unittest.TestCase):
 
     def test_non_string_relation_kind_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
-            self._relation(relation_kind=123)  # type: ignore[arg-type]
+            self._relation(relation_kind=cast(str, 123))
 
     def test_empty_source_region_id_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
@@ -283,12 +408,30 @@ class PageAnalysisTests(unittest.TestCase):
         page_id: str = "page-1",
         bbox: tuple[float, float, float, float] = (0.0, 1.0, 20.0, 30.0),
         primitive_ids: tuple[str, ...] = ("primitive-1",),
+        structural_kind: str = "layout.generic",
     ) -> LayoutRegion:
         return LayoutRegion(
             region_id=region_id,
             page_id=page_id,
             bbox=bbox,
-            structural_kind="layout.generic",
+            structural_kind=structural_kind,
+            primitive_ids=primitive_ids,
+        )
+
+    def _candidate(
+        self,
+        *,
+        candidate_id: str = "candidate-1",
+        page_id: str = "page-1",
+        bbox: tuple[float, float, float, float] = (0.0, 1.0, 20.0, 30.0),
+        primitive_ids: tuple[str, ...] = ("primitive-1",),
+        proposed_structural_kind: str = "layout.side_band",
+    ) -> RegionCandidate:
+        return RegionCandidate(
+            candidate_id=candidate_id,
+            page_id=page_id,
+            bbox=bbox,
+            proposed_structural_kind=proposed_structural_kind,
             primitive_ids=primitive_ids,
         )
 
@@ -334,6 +477,7 @@ class PageAnalysisTests(unittest.TestCase):
         provenance: PageAnalysisProvenance | object | None = None,
         regions: tuple[LayoutRegion, ...] | object | None = None,
         relations: tuple[RegionRelation, ...] | object = (),
+        candidates: tuple[RegionCandidate, ...] | object = (),
     ) -> PageAnalysis:
         actual_regions = (self._region(),) if regions is None else regions
         actual_provenance = self._provenance() if provenance is None else provenance
@@ -344,6 +488,7 @@ class PageAnalysisTests(unittest.TestCase):
             provenance=actual_provenance,  # type: ignore[arg-type]
             regions=actual_regions,  # type: ignore[arg-type]
             relations=relations,  # type: ignore[arg-type]
+            candidates=candidates,  # type: ignore[arg-type]
         )
 
     def _long_regions(self, count: int) -> tuple[LayoutRegion, ...]:
@@ -385,14 +530,14 @@ class PageAnalysisTests(unittest.TestCase):
         self.assertEqual(analysis.provenance, self._provenance())
         self.assertEqual(analysis.regions, (region,))
         self.assertEqual(analysis.relations, ())
+        self.assertEqual(analysis.candidates, ())
 
+    def test_matching_provenance_source_page_id_is_valid(self) -> None:
+        provenance = self._provenance()
 
-def test_matching_provenance_source_page_id_is_valid(self) -> None:
-    provenance = self._provenance()
+        analysis = self._analysis(page_id="page-1", provenance=provenance)
 
-    analysis = self._analysis(page_id="page-1", provenance=provenance)
-
-    self.assertEqual(analysis.provenance.source_page_id, analysis.page_id)
+        self.assertEqual(analysis.provenance.source_page_id, analysis.page_id)
 
     def test_mismatching_provenance_source_page_id_is_rejected(self) -> None:
         provenance = PageAnalysisProvenance(
@@ -432,10 +577,14 @@ def test_matching_provenance_source_page_id_is_valid(self) -> None:
         with self.assertRaises(ValueError):
             self._analysis(provenance=object())
 
-    def test_schema_version_1_1_is_valid(self) -> None:
-        analysis = self._analysis(schema_version="1.1")
+    def test_schema_version_1_2_is_valid(self) -> None:
+        analysis = self._analysis(schema_version="1.2")
 
-        self.assertEqual(analysis.schema_version, "1.1")
+        self.assertEqual(analysis.schema_version, "1.2")
+
+    def test_schema_version_1_1_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self._analysis(schema_version="1.1")
 
     def test_schema_version_1_0_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
@@ -486,6 +635,90 @@ def test_matching_provenance_source_page_id_is_valid(self) -> None:
         analysis = self._analysis(regions=(third, first, second))
 
         self.assertEqual(analysis.regions, (third, first, second))
+
+    def test_default_candidates_empty(self) -> None:
+        self.assertEqual(self._analysis().candidates, ())
+
+    def test_empty_candidates_tuple_is_valid(self) -> None:
+        analysis = self._analysis(candidates=())
+
+        self.assertEqual(analysis.candidates, ())
+
+    def test_candidates_list_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self._analysis(candidates=[self._candidate()])
+
+    def test_non_region_candidate_value_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self._analysis(candidates=(object(),))
+
+    def test_candidate_with_different_page_id_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self._analysis(candidates=(self._candidate(page_id="page-2"),))
+
+    def test_duplicate_candidate_ids_are_rejected(self) -> None:
+        first = self._candidate(candidate_id="candidate-1", bbox=(0.0, 0.0, 10.0, 10.0))
+        second = self._candidate(candidate_id="candidate-1", bbox=(20.0, 20.0, 30.0, 30.0))
+
+        with self.assertRaises(ValueError):
+            self._analysis(candidates=(first, second))
+
+    def test_candidate_order_is_preserved(self) -> None:
+        first = self._candidate(candidate_id="candidate-1")
+        second = self._candidate(candidate_id="candidate-2")
+        third = self._candidate(candidate_id="candidate-3")
+        analysis = self._analysis(candidates=(third, first, second))
+
+        self.assertEqual(analysis.candidates, (third, first, second))
+
+    def test_overlapping_candidates_are_valid(self) -> None:
+        first = self._candidate(candidate_id="candidate-1", bbox=(0.0, 0.0, 20.0, 20.0))
+        second = self._candidate(candidate_id="candidate-2", bbox=(10.0, 10.0, 30.0, 30.0))
+
+        analysis = self._analysis(candidates=(first, second))
+
+        self.assertEqual(analysis.candidates, (first, second))
+
+    def test_identical_candidate_bboxes_are_valid(self) -> None:
+        first = self._candidate(candidate_id="candidate-1", bbox=(0.0, 0.0, 20.0, 20.0))
+        second = self._candidate(candidate_id="candidate-2", bbox=(0.0, 0.0, 20.0, 20.0))
+
+        analysis = self._analysis(candidates=(first, second))
+
+        self.assertEqual(analysis.candidates, (first, second))
+
+    def test_same_primitives_in_multiple_candidates_are_valid(self) -> None:
+        first = self._candidate(candidate_id="candidate-1", primitive_ids=("primitive-1",))
+        second = self._candidate(candidate_id="candidate-2", primitive_ids=("primitive-1",))
+
+        analysis = self._analysis(candidates=(first, second))
+
+        self.assertEqual(analysis.candidates, (first, second))
+
+    def test_same_primitive_in_region_and_candidate_is_valid(self) -> None:
+        region = self._region(primitive_ids=("primitive-1",))
+        candidate = self._candidate(primitive_ids=("primitive-1",))
+
+        analysis = self._analysis(regions=(region,), candidates=(candidate,))
+
+        self.assertEqual(analysis.regions, (region,))
+        self.assertEqual(analysis.candidates, (candidate,))
+
+    def test_different_kinds_on_same_candidate_bbox_are_valid(self) -> None:
+        first = self._candidate(
+            candidate_id="candidate-1",
+            bbox=(0.0, 0.0, 20.0, 20.0),
+            proposed_structural_kind="layout.side_band",
+        )
+        second = self._candidate(
+            candidate_id="candidate-2",
+            bbox=(0.0, 0.0, 20.0, 20.0),
+            proposed_structural_kind="layout.edge_band",
+        )
+
+        analysis = self._analysis(candidates=(first, second))
+
+        self.assertEqual(analysis.candidates, (first, second))
 
     def test_page_with_valid_relations(self) -> None:
         relation = self._relation()

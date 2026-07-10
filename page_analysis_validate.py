@@ -42,12 +42,50 @@ def validate_page_analysis_against_primitive_page(
     page_height = primitive_page.page_geometry.height
 
     for region in analysis.regions:
-        x0, y0, x1, y1 = region.bbox
-        if not (0.0 <= x0 < x1 <= page_width and 0.0 <= y0 < y1 <= page_height):
-            raise ValueError(f"region {region.region_id} bbox must be contained in the page")
+        _validate_bbox_contained_in_page(
+            region.bbox,
+            owner_label=f"region {region.region_id}",
+            page_width=page_width,
+            page_height=page_height,
+        )
+        _validate_primitive_references(
+            region.primitive_ids,
+            owner_label=f"region {region.region_id}",
+            primitive_ids=primitive_ids,
+        )
 
-        for primitive_id in region.primitive_ids:
-            if primitive_id not in primitive_ids:
-                raise ValueError(
-                    f"region {region.region_id} references missing primitive_id {primitive_id}"
-                )
+    for candidate in analysis.candidates:
+        _validate_bbox_contained_in_page(
+            candidate.bbox,
+            owner_label=f"candidate {candidate.candidate_id}",
+            page_width=page_width,
+            page_height=page_height,
+        )
+        _validate_primitive_references(
+            candidate.primitive_ids,
+            owner_label=f"candidate {candidate.candidate_id}",
+            primitive_ids=primitive_ids,
+        )
+
+
+def _validate_bbox_contained_in_page(
+    bbox: tuple[float, float, float, float],
+    *,
+    owner_label: str,
+    page_width: float,
+    page_height: float,
+) -> None:
+    x0, y0, x1, y1 = bbox
+    if not (0.0 <= x0 < x1 <= page_width and 0.0 <= y0 < y1 <= page_height):
+        raise ValueError(f"{owner_label} bbox must be contained in the page")
+
+
+def _validate_primitive_references(
+    referenced_primitive_ids: tuple[str, ...],
+    *,
+    owner_label: str,
+    primitive_ids: set[str],
+) -> None:
+    for primitive_id in referenced_primitive_ids:
+        if primitive_id not in primitive_ids:
+            raise ValueError(f"{owner_label} references missing primitive_id {primitive_id}")

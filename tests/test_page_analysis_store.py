@@ -13,6 +13,7 @@ from page_analysis_model import (
     LayoutRegion,
     PageAnalysis,
     PageAnalysisProvenance,
+    RegionCandidate,
     RegionRelation,
 )
 from page_analysis_serialization import page_analysis_to_dict
@@ -49,6 +50,24 @@ class PageAnalysisStoreTests(unittest.TestCase):
             ),
         )
 
+    def _candidates(self) -> tuple[RegionCandidate, ...]:
+        return (
+            RegionCandidate(
+                candidate_id="candidate-1",
+                page_id="page-1",
+                bbox=(5.0, 5.0, 15.0, 15.0),
+                proposed_structural_kind="layout.side_band",
+                primitive_ids=("primitive-1", "primitive-3"),
+            ),
+            RegionCandidate(
+                candidate_id="candidate-2",
+                page_id="page-1",
+                bbox=(20.0, 5.0, 30.0, 15.0),
+                proposed_structural_kind="layout.edge_band",
+                primitive_ids=(),
+            ),
+        )
+
     def _relations(self) -> tuple[RegionRelation, ...]:
         return (
             RegionRelation(
@@ -61,12 +80,13 @@ class PageAnalysisStoreTests(unittest.TestCase):
 
     def _analysis(self) -> PageAnalysis:
         return PageAnalysis(
-            schema_version="1.1",
+            schema_version="1.2",
             generation_id="generation-1",
             page_id="page-1",
             provenance=self._provenance(),
             regions=self._regions(),
             relations=self._relations(),
+            candidates=self._candidates(),
         )
 
     def _path(self, directory: str) -> Path:
@@ -136,8 +156,9 @@ class PageAnalysisStoreTests(unittest.TestCase):
             path = self._save(directory)
             content = path.read_text(encoding="utf-8")
 
-            self.assertLess(content.index('"generation_id"'), content.index('"page_id"'))
-            self.assertLess(content.index('"page_id"'), content.index('"provenance"'))
+            self.assertLess(content.index('\n  "candidates"'), content.index('\n  "generation_id"'))
+            self.assertLess(content.index('\n  "generation_id"'), content.index('\n  "page_id"'))
+            self.assertLess(content.index('\n  "page_id"'), content.index('\n  "provenance"'))
             self.assertLess(content.index('"configuration_id"'), content.index('"producer_name"'))
 
     def test_saved_unicode_is_not_escaped(self) -> None:
@@ -225,6 +246,12 @@ class PageAnalysisStoreTests(unittest.TestCase):
 
             self.assertEqual(load_page_analysis(path).relations, self._relations())
 
+    def test_load_preserves_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = self._save(directory)
+
+            self.assertEqual(load_page_analysis(path).candidates, self._candidates())
+
     def test_load_preserves_provenance(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = self._save(directory)
@@ -249,6 +276,15 @@ class PageAnalysisStoreTests(unittest.TestCase):
                 ("relation-1",),
             )
 
+    def test_load_preserves_candidate_order(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = self._save(directory)
+
+            self.assertEqual(
+                tuple(candidate.candidate_id for candidate in load_page_analysis(path).candidates),
+                ("candidate-1", "candidate-2"),
+            )
+
     def test_load_preserves_primitive_ids(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = self._save(directory)
@@ -256,6 +292,16 @@ class PageAnalysisStoreTests(unittest.TestCase):
             self.assertEqual(
                 load_page_analysis(path).regions[0].primitive_ids, ("primitive-1", "primitive-2")
             )
+            self.assertEqual(
+                load_page_analysis(path).candidates[0].primitive_ids,
+                ("primitive-1", "primitive-3"),
+            )
+
+    def test_load_preserves_candidate_bbox(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = self._save(directory)
+
+            self.assertEqual(load_page_analysis(path).candidates[0].bbox, (5.0, 5.0, 15.0, 15.0))
 
     def test_load_missing_file_propagates_file_not_found_error(self) -> None:
         with tempfile.TemporaryDirectory() as directory, self.assertRaises(FileNotFoundError):
@@ -301,11 +347,31 @@ class PageAnalysisStoreTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 load_page_analysis(path)
 
+    def test_load_valid_json_with_schema_1_1_raises_value_error(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = self._save(directory)
+            data = cast(dict[str, object], json.loads(path.read_text(encoding="utf-8")))
+            data["schema_version"] = "1.1"
+            path.write_text(json.dumps(data), encoding="utf-8")
+
+            with self.assertRaises(ValueError):
+                load_page_analysis(path)
+
     def test_load_valid_json_with_missing_key_raises_value_error(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = self._save(directory)
             data = cast(dict[str, object], json.loads(path.read_text(encoding="utf-8")))
             del data["regions"]
+            path.write_text(json.dumps(data), encoding="utf-8")
+
+            with self.assertRaises(ValueError):
+                load_page_analysis(path)
+
+    def test_load_valid_json_without_candidates_raises_value_error(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = self._save(directory)
+            data = cast(dict[str, object], json.loads(path.read_text(encoding="utf-8")))
+            del data["candidates"]
             path.write_text(json.dumps(data), encoding="utf-8")
 
             with self.assertRaises(ValueError):

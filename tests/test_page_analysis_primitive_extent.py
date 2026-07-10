@@ -136,6 +136,7 @@ class PageAnalysisPrimitiveExtentTest(unittest.TestCase):
         )
 
         self.assertEqual(len(analysis.relations), 1)
+        self.assertEqual(analysis.candidates, ())
         relation = analysis.relations[0]
         self.assertEqual(relation.relation_id, ROOT_CONTAINS_EXTENT_RELATION_ID)
         self.assertEqual(relation.relation_kind, "layout.contains")
@@ -151,6 +152,7 @@ class PageAnalysisPrimitiveExtentTest(unittest.TestCase):
         self.assertEqual(len(analysis.regions), 1)
         self.assertEqual(analysis.regions[0].region_id, ROOT_REGION_ID)
         self.assertEqual(analysis.relations, ())
+        self.assertEqual(analysis.candidates, ())
         self.assertEqual(analysis.provenance.producer_name, PRIMITIVE_EXTENT_PRODUCER_NAME)
 
     def test_single_primitive_produces_identical_extent_bbox(self) -> None:
@@ -310,6 +312,7 @@ class PageAnalysisPrimitiveExtentTest(unittest.TestCase):
             tuple(primitive.primitive_id for primitive in primitives),
         )
         self.assertEqual(analysis.relations, ())
+        self.assertEqual(analysis.candidates, ())
 
     def test_bbox_touching_page_border_without_area_is_excluded(self) -> None:
         primitives = (

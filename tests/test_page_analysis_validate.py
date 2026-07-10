@@ -11,6 +11,7 @@ from page_analysis_model import (
     LayoutRegion,
     PageAnalysis,
     PageAnalysisProvenance,
+    RegionCandidate,
 )
 from page_analysis_validate import validate_page_analysis_against_primitive_page
 from primitive_model import (
@@ -96,6 +97,22 @@ class PageAnalysisValidateTests(unittest.TestCase):
             primitive_ids=primitive_ids,
         )
 
+    def _candidate(
+        self,
+        *,
+        candidate_id: str = "candidate-1",
+        page_id: str = "page-1",
+        bbox: tuple[float, float, float, float] = (0.0, 0.0, 50.0, 50.0),
+        primitive_ids: tuple[str, ...] = (),
+    ) -> RegionCandidate:
+        return RegionCandidate(
+            candidate_id=candidate_id,
+            page_id=page_id,
+            bbox=bbox,
+            proposed_structural_kind="layout.side_band",
+            primitive_ids=primitive_ids,
+        )
+
     def _provenance(
         self,
         *,
@@ -120,6 +137,7 @@ class PageAnalysisValidateTests(unittest.TestCase):
         page_id: str = "page-1",
         provenance: PageAnalysisProvenance | None = None,
         regions: tuple[LayoutRegion, ...] = (),
+        candidates: tuple[RegionCandidate, ...] = (),
     ) -> PageAnalysis:
         return PageAnalysis(
             schema_version=PAGE_ANALYSIS_SCHEMA_VERSION,
@@ -127,6 +145,7 @@ class PageAnalysisValidateTests(unittest.TestCase):
             page_id=page_id,
             provenance=self._provenance() if provenance is None else provenance,
             regions=regions,
+            candidates=candidates,
         )
 
     def test_wrong_analysis_type_is_rejected(self) -> None:
@@ -328,12 +347,129 @@ class PageAnalysisValidateTests(unittest.TestCase):
                 self._primitive_page(),
             )
 
+    def test_candidate_with_internal_bbox_is_valid(self) -> None:
+        validate_page_analysis_against_primitive_page(
+            self._analysis(candidates=(self._candidate(bbox=(1.0, 2.0, 99.0, 199.0)),)),
+            self._primitive_page(),
+        )
+
+    def test_candidate_bbox_matching_entire_page_is_valid(self) -> None:
+        validate_page_analysis_against_primitive_page(
+            self._analysis(candidates=(self._candidate(bbox=(0.0, 0.0, 100.0, 200.0)),)),
+            self._primitive_page(),
+        )
+
+    def test_candidate_bbox_outside_page_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "candidate-1"):
+            validate_page_analysis_against_primitive_page(
+                self._analysis(candidates=(self._candidate(bbox=(0.0, 0.0, 100.1, 50.0)),)),
+                self._primitive_page(),
+            )
+
+    def test_candidate_referencing_text_primitive_is_valid(self) -> None:
+        validate_page_analysis_against_primitive_page(
+            self._analysis(candidates=(self._candidate(primitive_ids=("text-1",)),)),
+            self._primitive_page(text_primitives=(self._text_primitive(),)),
+        )
+
+    def test_candidate_referencing_image_primitive_is_valid(self) -> None:
+        validate_page_analysis_against_primitive_page(
+            self._analysis(candidates=(self._candidate(primitive_ids=("image-1",)),)),
+            self._primitive_page(image_primitives=(self._image_primitive(),)),
+        )
+
+    def test_candidate_referencing_drawing_primitive_is_valid(self) -> None:
+        validate_page_analysis_against_primitive_page(
+            self._analysis(candidates=(self._candidate(primitive_ids=("drawing-1",)),)),
+            self._primitive_page(drawing_primitives=(self._drawing_primitive(),)),
+        )
+
+    def test_candidate_referencing_primitives_from_multiple_channels_is_valid(self) -> None:
+        validate_page_analysis_against_primitive_page(
+            self._analysis(
+                candidates=(self._candidate(primitive_ids=("text-1", "image-1", "drawing-1")),)
+            ),
+            self._primitive_page(
+                text_primitives=(self._text_primitive(),),
+                image_primitives=(self._image_primitive(),),
+                drawing_primitives=(self._drawing_primitive(),),
+            ),
+        )
+
+    def test_candidate_missing_primitive_id_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            validate_page_analysis_against_primitive_page(
+                self._analysis(candidates=(self._candidate(primitive_ids=("missing-1",)),)),
+                self._primitive_page(text_primitives=(self._text_primitive(),)),
+            )
+
+    def test_candidate_missing_primitive_error_identifies_candidate_and_primitive(self) -> None:
+        with self.assertRaisesRegex(ValueError, "candidate-1.*missing-1"):
+            validate_page_analysis_against_primitive_page(
+                self._analysis(candidates=(self._candidate(primitive_ids=("missing-1",)),)),
+                self._primitive_page(text_primitives=(self._text_primitive(),)),
+            )
+
+    def test_candidate_without_primitives_is_valid(self) -> None:
+        validate_page_analysis_against_primitive_page(
+            self._analysis(candidates=(self._candidate(primitive_ids=()),)),
+            self._primitive_page(text_primitives=(self._text_primitive(),)),
+        )
+
+    def test_same_primitive_in_two_candidates_is_valid(self) -> None:
+        first = self._candidate(candidate_id="candidate-1", primitive_ids=("text-1",))
+        second = self._candidate(candidate_id="candidate-2", primitive_ids=("text-1",))
+
+        validate_page_analysis_against_primitive_page(
+            self._analysis(candidates=(first, second)),
+            self._primitive_page(text_primitives=(self._text_primitive(),)),
+        )
+
+    def test_same_primitive_in_region_and_candidate_is_valid(self) -> None:
+        validate_page_analysis_against_primitive_page(
+            self._analysis(
+                regions=(self._region(primitive_ids=("text-1",)),),
+                candidates=(self._candidate(primitive_ids=("text-1",)),),
+            ),
+            self._primitive_page(text_primitives=(self._text_primitive(),)),
+        )
+
+    def test_overlapping_candidates_are_valid(self) -> None:
+        first = self._candidate(candidate_id="candidate-1", bbox=(0.0, 0.0, 50.0, 50.0))
+        second = self._candidate(candidate_id="candidate-2", bbox=(25.0, 25.0, 75.0, 75.0))
+
+        validate_page_analysis_against_primitive_page(
+            self._analysis(candidates=(first, second)),
+            self._primitive_page(),
+        )
+
+    def test_candidate_does_not_require_primitive_bbox_containment(self) -> None:
+        text = TextPrimitive(
+            primitive_id="text-wide",
+            bbox=(0.0, 0.0, 100.0, 100.0),
+            text="wide",
+            source_observation_id="obs-text-wide",
+        )
+
+        validate_page_analysis_against_primitive_page(
+            self._analysis(
+                candidates=(
+                    self._candidate(bbox=(10.0, 10.0, 20.0, 20.0), primitive_ids=("text-wide",)),
+                )
+            ),
+            self._primitive_page(text_primitives=(text,)),
+        )
+
     def test_validation_does_not_modify_inputs(self) -> None:
         text = self._text_primitive()
         region = self._region(primitive_ids=("text-1",))
-        analysis = self._analysis(regions=(region,))
+        candidate = self._candidate(primitive_ids=("text-1",))
+        analysis = self._analysis(regions=(region,), candidates=(candidate,))
         primitive_page = self._primitive_page(text_primitives=(text,))
-        expected_analysis = self._analysis(regions=(self._region(primitive_ids=("text-1",)),))
+        expected_analysis = self._analysis(
+            regions=(self._region(primitive_ids=("text-1",)),),
+            candidates=(self._candidate(primitive_ids=("text-1",)),),
+        )
         expected_primitive_page = self._primitive_page(text_primitives=(self._text_primitive(),))
 
         validate_page_analysis_against_primitive_page(analysis, primitive_page)

@@ -5,7 +5,13 @@ from __future__ import annotations
 import unittest
 from typing import cast
 
-from page_analysis_model import LayoutRegion, PageAnalysis, PageAnalysisProvenance, RegionRelation
+from page_analysis_model import (
+    LayoutRegion,
+    PageAnalysis,
+    PageAnalysisProvenance,
+    RegionCandidate,
+    RegionRelation,
+)
 from page_analysis_serialization import page_analysis_from_dict, page_analysis_to_dict
 
 
@@ -24,6 +30,23 @@ class PageAnalysisSerializationTests(unittest.TestCase):
             page_id=page_id,
             bbox=bbox,
             structural_kind=structural_kind,
+            primitive_ids=primitive_ids,
+        )
+
+    def _candidate(
+        self,
+        candidate_id: str,
+        *,
+        bbox: tuple[float, float, float, float] = (0.0, 0.0, 10.0, 10.0),
+        primitive_ids: tuple[str, ...] = (),
+        page_id: str = "page-1",
+        proposed_structural_kind: str = "layout.side_band",
+    ) -> RegionCandidate:
+        return RegionCandidate(
+            candidate_id=candidate_id,
+            page_id=page_id,
+            bbox=bbox,
+            proposed_structural_kind=proposed_structural_kind,
             primitive_ids=primitive_ids,
         )
 
@@ -66,7 +89,7 @@ class PageAnalysisSerializationTests(unittest.TestCase):
 
     def _analysis(self) -> PageAnalysis:
         return PageAnalysis(
-            schema_version="1.1",
+            schema_version="1.2",
             generation_id="generation-1",
             page_id="page-1",
             provenance=self._provenance(),
@@ -92,21 +115,35 @@ class PageAnalysisSerializationTests(unittest.TestCase):
                     target_region_id="region-2",
                 ),
             ),
+            candidates=(
+                self._candidate(
+                    "candidate-1",
+                    bbox=(5.0, 5.0, 15.0, 25.0),
+                    primitive_ids=("primitive-1", "primitive-3"),
+                ),
+                self._candidate(
+                    "candidate-2",
+                    bbox=(20.0, 5.0, 30.0, 25.0),
+                    primitive_ids=(),
+                    proposed_structural_kind="layout.edge_band",
+                ),
+            ),
         )
 
     def _empty_analysis(self) -> PageAnalysis:
         return PageAnalysis(
-            schema_version="1.1",
+            schema_version="1.2",
             generation_id="generation-1",
             page_id="page-1",
             provenance=self._provenance(),
             regions=(),
             relations=(),
+            candidates=(),
         )
 
     def _analysis_data(self) -> dict[str, object]:
         return {
-            "schema_version": "1.1",
+            "schema_version": "1.2",
             "generation_id": "generation-1",
             "page_id": "page-1",
             "provenance": self._provenance_data(),
@@ -140,16 +177,33 @@ class PageAnalysisSerializationTests(unittest.TestCase):
                     "target_region_id": "region-2",
                 },
             ],
+            "candidates": [
+                {
+                    "candidate_id": "candidate-1",
+                    "page_id": "page-1",
+                    "bbox": [5.0, 5.0, 15.0, 25.0],
+                    "proposed_structural_kind": "layout.side_band",
+                    "primitive_ids": ["primitive-1", "primitive-3"],
+                },
+                {
+                    "candidate_id": "candidate-2",
+                    "page_id": "page-1",
+                    "bbox": [20.0, 5.0, 30.0, 25.0],
+                    "proposed_structural_kind": "layout.edge_band",
+                    "primitive_ids": [],
+                },
+            ],
         }
 
     def _empty_data(self) -> dict[str, object]:
         return {
-            "schema_version": "1.1",
+            "schema_version": "1.2",
             "generation_id": "generation-1",
             "page_id": "page-1",
             "provenance": self._provenance_data(),
             "regions": [],
             "relations": [],
+            "candidates": [],
         }
 
     def test_deserialization_rejects_provenance_page_id_mismatch(self) -> None:
@@ -168,11 +222,17 @@ class PageAnalysisSerializationTests(unittest.TestCase):
     def _relations_data(self, data: dict[str, object]) -> list[object]:
         return cast(list[object], data["relations"])
 
+    def _candidates_data(self, data: dict[str, object]) -> list[object]:
+        return cast(list[object], data["candidates"])
+
     def _region_data(self, data: dict[str, object], index: int = 0) -> dict[str, object]:
         return cast(dict[str, object], self._regions_data(data)[index])
 
     def _relation_data(self, data: dict[str, object], index: int = 0) -> dict[str, object]:
         return cast(dict[str, object], self._relations_data(data)[index])
+
+    def _candidate_data(self, data: dict[str, object], index: int = 0) -> dict[str, object]:
+        return cast(dict[str, object], self._candidates_data(data)[index])
 
     def test_serializes_valid_page_analysis_with_regions_and_relations(self) -> None:
         self.assertEqual(page_analysis_to_dict(self._analysis()), self._analysis_data())
@@ -195,6 +255,18 @@ class PageAnalysisSerializationTests(unittest.TestCase):
     def test_serialization_always_includes_provenance(self) -> None:
         self.assertIn("provenance", page_analysis_to_dict(self._empty_analysis()))
 
+    def test_serialization_always_includes_candidates(self) -> None:
+        self.assertIn("candidates", page_analysis_to_dict(self._empty_analysis()))
+
+    def test_serializes_candidates(self) -> None:
+        self.assertEqual(
+            page_analysis_to_dict(self._analysis())["candidates"],
+            self._analysis_data()["candidates"],
+        )
+
+    def test_serializes_empty_candidate_list(self) -> None:
+        self.assertEqual(page_analysis_to_dict(self._empty_analysis())["candidates"], [])
+
     def test_serializes_bbox_as_list(self) -> None:
         data = page_analysis_to_dict(self._analysis())
 
@@ -204,6 +276,19 @@ class PageAnalysisSerializationTests(unittest.TestCase):
         data = page_analysis_to_dict(self._analysis())
 
         self.assertEqual(self._region_data(data)["primitive_ids"], ["primitive-1", "primitive-2"])
+
+    def test_serializes_candidate_bbox_as_list(self) -> None:
+        data = page_analysis_to_dict(self._analysis())
+
+        self.assertIsInstance(self._candidate_data(data)["bbox"], list)
+
+    def test_serializes_candidate_primitive_ids_as_list(self) -> None:
+        data = page_analysis_to_dict(self._analysis())
+
+        self.assertEqual(
+            self._candidate_data(data)["primitive_ids"],
+            ["primitive-1", "primitive-3"],
+        )
 
     def test_serialization_preserves_region_order(self) -> None:
         data = page_analysis_to_dict(self._analysis())
@@ -219,6 +304,14 @@ class PageAnalysisSerializationTests(unittest.TestCase):
         self.assertEqual(
             [cast(dict[str, object], item)["relation_id"] for item in self._relations_data(data)],
             ["relation-1", "relation-2"],
+        )
+
+    def test_serialization_preserves_candidate_order(self) -> None:
+        data = page_analysis_to_dict(self._analysis())
+
+        self.assertEqual(
+            [cast(dict[str, object], item)["candidate_id"] for item in self._candidates_data(data)],
+            ["candidate-1", "candidate-2"],
         )
 
     def test_serialization_preserves_primitive_id_order(self) -> None:
@@ -243,9 +336,13 @@ class PageAnalysisSerializationTests(unittest.TestCase):
         data = page_analysis_to_dict(analysis)
         cast(list[object], self._region_data(data)["primitive_ids"]).append("changed")
         cast(list[object], self._region_data(data)["bbox"])[0] = 99.0
+        cast(list[object], self._candidate_data(data)["primitive_ids"]).append("changed")
+        cast(list[object], self._candidate_data(data)["bbox"])[0] = 99.0
 
         self.assertEqual(analysis.regions[0].primitive_ids, ("primitive-1", "primitive-2"))
         self.assertEqual(analysis.regions[0].bbox, (0.0, 0.0, 100.0, 200.0))
+        self.assertEqual(analysis.candidates[0].primitive_ids, ("primitive-1", "primitive-3"))
+        self.assertEqual(analysis.candidates[0].bbox, (5.0, 5.0, 15.0, 25.0))
 
     def test_deserializes_complete_dictionary(self) -> None:
         self.assertEqual(page_analysis_from_dict(self._analysis_data()), self._analysis())
@@ -266,6 +363,14 @@ class PageAnalysisSerializationTests(unittest.TestCase):
             analysis.provenance,
         )
 
+    def test_model_round_trip_preserves_candidates(self) -> None:
+        analysis = self._analysis()
+
+        self.assertEqual(
+            page_analysis_from_dict(page_analysis_to_dict(analysis)).candidates,
+            analysis.candidates,
+        )
+
     def test_data_round_trip_preserves_provenance(self) -> None:
         data = self._analysis_data()
 
@@ -276,6 +381,12 @@ class PageAnalysisSerializationTests(unittest.TestCase):
     def test_deserializes_complete_provenance(self) -> None:
         self.assertEqual(
             page_analysis_from_dict(self._analysis_data()).provenance, self._provenance()
+        )
+
+    def test_deserializes_complete_candidates(self) -> None:
+        self.assertEqual(
+            page_analysis_from_dict(self._analysis_data()).candidates,
+            self._analysis().candidates,
         )
 
     def test_data_round_trip_normalizes_bbox_numbers_to_float(self) -> None:
@@ -295,6 +406,10 @@ class PageAnalysisSerializationTests(unittest.TestCase):
         self.assertEqual(
             tuple(relation.relation_id for relation in analysis.relations),
             ("relation-1", "relation-2"),
+        )
+        self.assertEqual(
+            tuple(candidate.candidate_id for candidate in analysis.candidates),
+            ("candidate-1", "candidate-2"),
         )
 
     def test_deserializes_region_without_primitives(self) -> None:
@@ -348,6 +463,20 @@ class PageAnalysisSerializationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             page_analysis_from_dict(data)
 
+    def test_deserialization_rejects_missing_candidates_root_key(self) -> None:
+        data = self._analysis_data()
+        del data["candidates"]
+
+        with self.assertRaises(ValueError):
+            page_analysis_from_dict(data)
+
+    def test_deserialization_rejects_non_list_candidates(self) -> None:
+        data = self._analysis_data()
+        data["candidates"] = "not-list"
+
+        with self.assertRaises(ValueError):
+            page_analysis_from_dict(data)
+
     def test_deserialization_rejects_wrong_root_string_field_type(self) -> None:
         data = self._analysis_data()
         data["generation_id"] = 123
@@ -355,11 +484,18 @@ class PageAnalysisSerializationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             page_analysis_from_dict(data)
 
-    def test_deserialization_accepts_schema_1_1(self) -> None:
+    def test_deserialization_accepts_schema_1_2(self) -> None:
+        data = self._analysis_data()
+        data["schema_version"] = "1.2"
+
+        self.assertEqual(page_analysis_from_dict(data).schema_version, "1.2")
+
+    def test_deserialization_rejects_schema_1_1_via_model(self) -> None:
         data = self._analysis_data()
         data["schema_version"] = "1.1"
 
-        self.assertEqual(page_analysis_from_dict(data).schema_version, "1.1")
+        with self.assertRaises(ValueError):
+            page_analysis_from_dict(data)
 
     def test_deserialization_rejects_schema_1_0_via_model(self) -> None:
         data = self._analysis_data()
@@ -592,6 +728,62 @@ class PageAnalysisSerializationTests(unittest.TestCase):
                 "target_region_id": "region-1",
             }
         )
+
+        with self.assertRaises(ValueError):
+            page_analysis_from_dict(data)
+
+    def test_deserialization_rejects_non_dict_candidate_item(self) -> None:
+        data = self._analysis_data()
+        self._candidates_data(data)[0] = []
+
+        with self.assertRaises(ValueError):
+            page_analysis_from_dict(data)
+
+    def test_deserialization_rejects_missing_candidate_key(self) -> None:
+        data = self._analysis_data()
+        del self._candidate_data(data)["bbox"]
+
+        with self.assertRaises(ValueError):
+            page_analysis_from_dict(data)
+
+    def test_deserialization_rejects_extra_candidate_key(self) -> None:
+        data = self._analysis_data()
+        self._candidate_data(data)["extra"] = None
+
+        with self.assertRaises(ValueError):
+            page_analysis_from_dict(data)
+
+    def test_deserialization_rejects_invalid_candidate_bbox(self) -> None:
+        data = self._analysis_data()
+        self._candidate_data(data)["bbox"] = [0.0, 0.0, 0.0, 1.0]
+
+        with self.assertRaises(ValueError):
+            page_analysis_from_dict(data)
+
+    def test_deserialization_rejects_invalid_candidate_primitive_ids(self) -> None:
+        data = self._analysis_data()
+        self._candidate_data(data)["primitive_ids"] = ["primitive-1", 2]
+
+        with self.assertRaises(ValueError):
+            page_analysis_from_dict(data)
+
+    def test_deserialization_rejects_invalid_candidate_kind(self) -> None:
+        data = self._analysis_data()
+        self._candidate_data(data)["proposed_structural_kind"] = "layout.side-band"
+
+        with self.assertRaises(ValueError):
+            page_analysis_from_dict(data)
+
+    def test_deserialization_rejects_incoherent_candidate_page_id(self) -> None:
+        data = self._analysis_data()
+        self._candidate_data(data)["page_id"] = "page-2"
+
+        with self.assertRaises(ValueError):
+            page_analysis_from_dict(data)
+
+    def test_deserialization_rejects_duplicate_candidate_id(self) -> None:
+        data = self._analysis_data()
+        self._candidate_data(data, 1)["candidate_id"] = "candidate-1"
 
         with self.assertRaises(ValueError):
             page_analysis_from_dict(data)

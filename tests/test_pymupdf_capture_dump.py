@@ -11,6 +11,7 @@ from typing import cast
 
 import fitz
 
+from page_analysis_model import PAGE_ANALYSIS_SCHEMA_VERSION
 from pymupdf_capture_dump import (
     build_argument_parser,
     dump_capture,
@@ -92,7 +93,7 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             relation = payload["relations"][0]
 
             self.assertTrue(json_text.endswith("\n"))
-            self.assertEqual(payload["schema_version"], "1.1")
+            self.assertEqual(payload["schema_version"], PAGE_ANALYSIS_SCHEMA_VERSION)
             self.assertEqual(payload["generation_id"], "diagnostic-page-analysis:0")
             self.assertEqual(payload["page_id"], "diagnostic-page:0")
             self.assertEqual(len(payload["regions"]), 2)
@@ -222,7 +223,7 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
 
             payload = json.loads(dump_page_analysis(pdf_path))
 
-            self.assertEqual(payload["schema_version"], "1.1")
+            self.assertEqual(payload["schema_version"], PAGE_ANALYSIS_SCHEMA_VERSION)
             self.assertEqual(
                 payload["provenance"]["producer_name"],
                 "page-analysis-primitive-extent",
@@ -304,7 +305,7 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
 
             self.assertEqual(return_code, 0)
             payload = json.loads(stdout.getvalue())
-            self.assertEqual(payload["schema_version"], "1.1")
+            self.assertEqual(payload["schema_version"], PAGE_ANALYSIS_SCHEMA_VERSION)
             self.assertEqual(len(payload["regions"]), 2)
             self.assertNotIn("text_observations", payload)
             self.assertNotIn("text_primitives", payload)
