@@ -1,6 +1,6 @@
 # ManReader — Stato progetto
 
-## Versione corrente: v0.14 — Milestone 6 in corso
+## Versione corrente: v0.15 — Milestone 6 in corso
 
 ## 1. Decisione di fase
 
@@ -28,6 +28,8 @@ I primi micro-step della Milestone 6 completati sono:
 a7afdc7 Add page-level region candidate contract
 a926c7c Add side-band geometric measurements
 e25eaa4 Add singleton geometric text hypotheses
+32382e1 Update Milestone 6 hypothesis state
+0d7f416 Rename text hypothesis measurements
 ```
 
 Questo cambio di fase non autorizza una riscrittura generale della pipeline. Ogni modifica deve:
@@ -905,18 +907,20 @@ Motivazione:
 
 La persistenza delle evidence sarà rivalutata soltanto in presenza di un consumatore reale, per esempio composizione multi-producer, resolution basata sulle misure, audit persistente, confronto storico o riproduzione senza rieseguire il producer. Il modello futuro delle evidence non viene progettato ora.
 
-Micro-step 2 — misure geometriche side-band — completato con:
+Micro-step 2 — misure geometriche per ipotesi testuali — completato con:
 
 ```text
 a926c7c Add side-band geometric measurements
 ```
 
+Il commit storico usava ancora una terminologia side-band-specifica. Il contratto corrente è stato poi rinominato per neutralità terminologica.
+
 Sono ora presenti e approvati:
 
-- `page_analysis_side_band_measurements.py`;
-- `tests/test_page_analysis_side_band_measurements.py`;
-- `SideBandMeasurements`;
-- `measure_horizontal_text_side_band_hypothesis(...)`;
+- `page_analysis_text_hypothesis_measurements.py`;
+- `tests/test_page_analysis_text_hypothesis_measurements.py`;
+- `TextHypothesisMeasurements`;
+- `measure_geometric_text_hypothesis(...)`;
 - input come selezione esplicita di `TextPrimitive`;
 - bbox visibile aggregata tramite clipping alla pagina;
 - rapporti geometrici rispetto alla pagina;
@@ -924,6 +928,7 @@ Sono ora presenti e approvati:
 - rifiuto di immagini, drawing, testo verticale/diagonale e primitive invisibili quando selezionate esplicitamente;
 - nessun clustering;
 - nessuna soglia classificatoria;
+- nessuna classificazione `layout.side_band`;
 - nessun `RegionCandidate`;
 - nessuna modifica a `PageAnalysis`.
 
@@ -978,26 +983,50 @@ BasedPyright: 0 errori, 0 warning, 0 note
 git diff --check verde
 ```
 
+Micro-step 4 — rename neutrale delle measurements — completato con:
+
+```text
+0d7f416 Rename text hypothesis measurements
+```
+
+Il comportamento è invariato: il modulo misura una selezione esplicita di primitive testuali compatibili. Il vecchio nome era troppo specifico perché suggeriva una side-band già riconosciuta; il nuovo nome esplicita che il modulo misura una selezione testuale geometrica esplicita. Il modulo resta privo di clustering, classificazione `layout.side_band` e produzione di `RegionCandidate`. `PageAnalysis` schema `1.2` resta invariato. `State.md` e `AGENTS.MD` sono gli unici file previsti per questo riallineamento documentale.
+
 Pipeline interna corrente della Milestone 6:
 
 ```text
 NormalizedPrimitivePage
 → GeometricTextHypothesis singleton
-→ SideBandMeasurements su una selezione esplicita
-→ futuro raggruppamento multi-primitiva
-→ futura decisione side-band
+→ TextHypothesisMeasurements su selezione esplicita
+→ futuro producer layout.side_band
 → futuro RegionCandidate
 ```
 
-`GeometricTextHypothesis` non è una side-band, una regione, un candidato persistito, una decisione, una evidence persistita o reading order.
+`GeometricTextHypothesis` resta il tipo generale per una selezione testuale geometrica. Non è una side-band, una regione, un candidato persistito, una decisione, una evidence persistita o reading order. Il contratto ammette più `primitive_ids`, ma il builder corrente produce solo singleton.
 
-`SideBandMeasurements` non è evidence persistita, score, confidence, classificazione o candidato.
+`TextHypothesisMeasurements` non è evidence persistita, score, confidence, classificazione o candidato.
 
-Prossimo punto autorizzabile: decisione e possibile implementazione separata del raggruppamento multi-primitiva delle ipotesi testuali geometriche.
+Decisione su blocchi e raggruppamento: non viene introdotto ora un nuovo tipo pubblico `GeometricTextBlock`, `GeometricTextCluster`, `GeometricTextSpan`, `TextRunGroup` o equivalente. La membership multi-primitiva è il punto non neutrale: la union della bbox è meccanica, ma la scelta delle primitive no.
 
-Prima di implementarlo va decisa la regola di compatibilità/raggruppamento.
+Un eventuale futuro raggruppamento multi-primitiva non è autorizzato come layer neutrale adesso. Potrà essere un helper privato del futuro producer, dovrà rimanere separato dalla classificazione `layout.side_band`, dovrà essere testato localmente e potrà essere estratto solo se dimostrato riuso da più producer o diagnostica.
 
-Il prossimo step non deve ancora includere produzione di `RegionCandidate`, classificazione `layout.side_band`, soglie decisionali side-band, evidence persistite, `PageAnalysis` producer, diagnostica CLI, IR, Markdown o EPUB.
+Tassonomia sintetica delle bbox:
+
+- bbox meccanica:
+  - page root;
+  - visible primitive extent;
+  - bbox visibile di una singola primitiva.
+- bbox di osservazione aggregata:
+  - bbox restituita da `TextHypothesisMeasurements` per una selezione fornita dal chiamante.
+- bbox di ipotesi strutturale:
+  - futura `GeometricTextHypothesis` multi-ID prodotta da una regola di membership.
+- bbox di candidato layout:
+  - futuro `RegionCandidate` con `proposed_structural_kind="layout.side_band"`.
+- bbox semantica o risolta:
+  - futuro marginalia semantico dopo resolution.
+
+Prossimo punto autorizzabile: progettazione del primo producer `layout.side_band`, mantenendo eventuali selezioni/raggruppamenti multi-primitiva come dettagli interni e non persistiti del producer, salvo nuova decisione esplicita.
+
+Il prossimo step non deve ancora includere produzione effettiva di `RegionCandidate` salvo micro-step esplicitamente approvato, modifica di `PageAnalysis`, schema `1.3`, evidence persistite, score, confidence, nuovo tipo `Block/Cluster/Span`, raggruppatore neutrale pubblico, framework di clustering, diagnostica CLI, IR, Markdown, EPUB o output legacy.
 
 Vincoli iniziali:
 
@@ -1144,19 +1173,24 @@ Il prossimo task implementativo appartiene alla **Milestone 6 — marginalia e b
 
 ### Obiettivo iniziale
 
-Il contratto `RegionCandidate`, le misure geometriche side-band e le ipotesi testuali geometriche singleton sono stati introdotti.
+Il contratto `RegionCandidate`, le ipotesi testuali geometriche singleton e le misure geometriche per ipotesi testuali sono stati introdotti.
 
-Il prossimo micro-step non è ancora un commit implementativo definitivo: va prima decisa la regola di compatibilità/raggruppamento per il raggruppamento multi-primitiva delle `GeometricTextHypothesis`.
+Il prossimo punto è la progettazione del primo producer `layout.side_band`, mantenendo eventuali selezioni/raggruppamenti multi-primitiva come dettagli interni e non persistiti del producer, salvo nuova decisione esplicita.
 
 Il prossimo step deve restare separato da:
 
-- produzione di `RegionCandidate`;
-- classificazione `layout.side_band`;
-- soglie decisionali side-band;
+- produzione effettiva di `RegionCandidate`, salvo micro-step esplicitamente approvato;
+- modifica di `PageAnalysis`;
+- schema `1.3`;
 - evidence persistite;
-- `PageAnalysis` producer;
+- score;
+- confidence;
+- nuovo tipo `Block/Cluster/Span`;
+- raggruppatore neutrale pubblico;
+- framework di clustering;
 - diagnostica CLI;
 - modifica a IR, Markdown o EPUB;
+- modifica dell'output legacy;
 - resolution;
 - policy editoriale;
 - ownership finale;
@@ -1171,7 +1205,7 @@ La Milestone 6 deve restare in shadow mode e produrre dati diagnostici separati.
 
 ## 17. Ultimo avanzamento verificato
 
-La Milestone 5 è stata chiusa dopo la sequenza di commit che ha introdotto il contratto `PageAnalysis`, la validazione cross-model, serializzazione e store JSON, producer strutturali deterministici e dump diagnostico `analysis`. I primi tre micro-step della Milestone 6 sono stati completati con i commit `a7afdc7 Add page-level region candidate contract`, `a926c7c Add side-band geometric measurements` ed `e25eaa4 Add singleton geometric text hypotheses`.
+La Milestone 5 è stata chiusa dopo la sequenza di commit che ha introdotto il contratto `PageAnalysis`, la validazione cross-model, serializzazione e store JSON, producer strutturali deterministici e dump diagnostico `analysis`. I primi micro-step della Milestone 6 sono stati completati con i commit `a7afdc7 Add page-level region candidate contract`, `a926c7c Add side-band geometric measurements`, `e25eaa4 Add singleton geometric text hypotheses`, `32382e1 Update Milestone 6 hypothesis state` e `0d7f416 Rename text hypothesis measurements`.
 
 Commit principali della milestone:
 
@@ -1212,9 +1246,8 @@ Stato successivo approvato:
 ```text
 Milestone 6
 → GeometricTextHypothesis singleton
-→ SideBandMeasurements su selezione esplicita
-→ decisione sul raggruppamento multi-primitiva
-→ futura decisione side-band
+→ TextHypothesisMeasurements su selezione esplicita
+→ progettazione del primo producer layout.side_band
 → futuro RegionCandidate
 → nessuna decisione finale o modifica dell'output
 → pipeline legacy autorevole

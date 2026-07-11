@@ -2,7 +2,7 @@
 
 ## Stato corrente
 
-Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.14.
+Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.15.
 
 L'architettura target e il piano generale di migrazione sono approvati.
 
@@ -369,8 +369,9 @@ La Milestone 6 deve definire il primo vertical slice funzionale per identificare
 Micro-step completati:
 
 - Micro-step 1 — contratto `RegionCandidate` — completato;
-- Micro-step 2 — misure geometriche side-band — completato;
-- Micro-step 3 — ipotesi testuali geometriche singleton — completato.
+- Micro-step 2 — misure geometriche per ipotesi testuali — completato;
+- Micro-step 3 — ipotesi testuali geometriche singleton — completato;
+- Micro-step 4 — rename neutrale delle measurements — completato.
 
 Sono approvati:
 
@@ -378,23 +379,25 @@ Sono approvati:
 - `PageAnalysis.candidates`;
 - schema `1.2`;
 - validazione e serializzazione;
-- `SideBandMeasurements` e `measure_horizontal_text_side_band_hypothesis(...)`;
+- `TextHypothesisMeasurements` e `measure_geometric_text_hypothesis(...)`;
 - `GeometricTextHypothesis` e `build_geometric_text_hypotheses(...)`;
 - ipotesi singleton ordinate in modo canonico ma non equivalente al reading order;
 - nessuna evidence persistita;
 - nessuna provenance candidate-level;
 - nessun producer reale di candidati.
 
-Prossimo micro-step autorizzabile: decisione e possibile implementazione separata del raggruppamento multi-primitiva per `GeometricTextHypothesis`.
+Prossimo micro-step autorizzabile: progettazione del primo producer `layout.side_band`, senza ancora introdurre un layer pubblico di blocchi/raggruppamenti.
 
 Vincoli permanenti per il prossimo step:
 
-- il raggruppamento multi-primitiva non deve produrre `RegionCandidate`;
-- il raggruppamento non deve classificare `layout.side_band`;
-- le soglie, se necessarie, devono essere prima approvate;
-- il raggruppamento deve restare separato dal misuratore;
-- il misuratore non deve creare ipotesi;
-- il builder di ipotesi non deve chiamare il misuratore;
+- `TextHypothesisMeasurements` misura selezioni esplicite di primitive testuali compatibili;
+- `TextHypothesisMeasurements` non classifica side-band;
+- `TextHypothesisMeasurements` non produce `RegionCandidate`;
+- `GeometricTextHypothesis` resta il tipo generale per selezioni testuali geometriche;
+- il builder corrente di `GeometricTextHypothesis` produce solo singleton;
+- non è autorizzato ora un nuovo tipo pubblico `GeometricTextBlock`, `GeometricTextCluster`, `GeometricTextSpan` o equivalente;
+- non è autorizzato ora un raggruppatore neutrale pubblico;
+- eventuali raggruppamenti multi-primitiva devono restare interni al futuro producer finché non esiste riuso dimostrato;
 - l'ordine canonico non è reading order.
 
 Non sono ancora autorizzati:
@@ -403,6 +406,9 @@ Non sono ancora autorizzati:
 - framework di clustering;
 - `ClusterStrategy`;
 - `GroupingEngine`;
+- `GeometricTextBlock`;
+- `GeometricTextCluster`;
+- `GeometricTextSpan`;
 - registry;
 - scoring;
 - ranking;
@@ -410,6 +416,7 @@ Non sono ancora autorizzati:
 - produzione di candidati;
 - schema `1.3`;
 - evidence persistite;
+- modifica di `PageAnalysis`;
 - semantica marginalia;
 - scelta di un detector specifico;
 - soglie numeriche non approvate;
