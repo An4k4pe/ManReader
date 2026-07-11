@@ -1,16 +1,10 @@
-"""Geometric measurements for caller-provided side-band text hypotheses.
+"""Geometric measurements for caller-provided geometric text hypotheses.
 
-This module measures one explicit selection of horizontal ``TextPrimitive`` IDs.
-It does not search for groups, apply thresholds, classify side-bands, or produce
+This module measures one explicit selection of compatible ``TextPrimitive`` IDs.
+It accepts primitives with unspecified direction or an explicitly horizontal
+direction, and it rejects vertical or diagonal text. It does not search for
+groups, apply thresholds, classify text hypotheses, or produce
 ``RegionCandidate`` values.
-
-For the aggregate visible bbox ``(x0, y0, x1, y1)`` on a page with dimensions
-``page_width`` and ``page_height``, ratios are computed as:
-
-- ``horizontal_center_ratio = ((x0 + x1) / 2.0) / page_width``
-- ``nearest_vertical_edge_distance_ratio = min(x0, page_width - x1) / page_width``
-- ``width_ratio = (x1 - x0) / page_width``
-- ``height_ratio = (y1 - y0) / page_height``
 """
 
 from __future__ import annotations
@@ -30,7 +24,7 @@ _DIRECTION_TOLERANCE = 1e-6
 
 
 @dataclass(frozen=True, slots=True)
-class SideBandMeasurements:
+class TextHypothesisMeasurements:
     bbox: BBox
     horizontal_center_ratio: float
     nearest_vertical_edge_distance_ratio: float
@@ -76,12 +70,12 @@ class SideBandMeasurements:
             raise ValueError("primitive_count must be a positive integer")
 
 
-def measure_horizontal_text_side_band_hypothesis(
+def measure_geometric_text_hypothesis(
     primitive_page: NormalizedPrimitivePage,
     *,
     primitive_ids: tuple[str, ...],
-) -> SideBandMeasurements:
-    """Measure one explicit horizontal text hypothesis without deciding its kind."""
+) -> TextHypothesisMeasurements:
+    """Measure one explicit compatible text hypothesis without deciding its kind."""
 
     if not isinstance(primitive_page, NormalizedPrimitivePage):
         raise ValueError("primitive_page must be a NormalizedPrimitivePage")
@@ -105,7 +99,7 @@ def measure_horizontal_text_side_band_hypothesis(
     width = x1 - x0
     height = y1 - y0
 
-    return SideBandMeasurements(
+    return TextHypothesisMeasurements(
         bbox=bbox,
         horizontal_center_ratio=((x0 + x1) / 2.0) / page_width,
         nearest_vertical_edge_distance_ratio=min(x0, page_width - x1) / page_width,

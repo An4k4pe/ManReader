@@ -6,9 +6,9 @@ from typing import Any, cast
 
 from capture_model import DrawingCommand
 from geometry_model import PageGeometry
-from page_analysis_side_band_measurements import (
-    SideBandMeasurements,
-    measure_horizontal_text_side_band_hypothesis,
+from page_analysis_text_hypothesis_measurements import (
+    TextHypothesisMeasurements,
+    measure_geometric_text_hypothesis,
 )
 from primitive_model import (
     DrawingPrimitive,
@@ -75,9 +75,9 @@ def _primitive_page(
     )
 
 
-class SideBandMeasurementsContractTest(unittest.TestCase):
+class TextHypothesisMeasurementsContractTest(unittest.TestCase):
     def test_constructs_valid_measurements(self) -> None:
-        measurements = SideBandMeasurements(
+        measurements = TextHypothesisMeasurements(
             bbox=(10.0, 20.0, 30.0, 60.0),
             horizontal_center_ratio=0.2,
             nearest_vertical_edge_distance_ratio=0.1,
@@ -94,7 +94,7 @@ class SideBandMeasurementsContractTest(unittest.TestCase):
         self.assertEqual(measurements.primitive_count, 1)
 
     def test_measurements_are_frozen_and_slotted(self) -> None:
-        measurements = SideBandMeasurements(
+        measurements = TextHypothesisMeasurements(
             bbox=(10.0, 20.0, 30.0, 60.0),
             horizontal_center_ratio=0.2,
             nearest_vertical_edge_distance_ratio=0.1,
@@ -109,7 +109,7 @@ class SideBandMeasurementsContractTest(unittest.TestCase):
         self.assertFalse(hasattr(measurements, "__dict__"))
 
     def test_equivalent_measurements_are_equal(self) -> None:
-        first = SideBandMeasurements(
+        first = TextHypothesisMeasurements(
             bbox=(10.0, 20.0, 30.0, 60.0),
             horizontal_center_ratio=0.2,
             nearest_vertical_edge_distance_ratio=0.1,
@@ -117,7 +117,7 @@ class SideBandMeasurementsContractTest(unittest.TestCase):
             height_ratio=0.2,
             primitive_count=1,
         )
-        second = SideBandMeasurements(
+        second = TextHypothesisMeasurements(
             bbox=(10.0, 20.0, 30.0, 60.0),
             horizontal_center_ratio=0.2,
             nearest_vertical_edge_distance_ratio=0.1,
@@ -129,7 +129,7 @@ class SideBandMeasurementsContractTest(unittest.TestCase):
         self.assertEqual(first, second)
 
     def test_float_values_are_not_rounded(self) -> None:
-        measurements = SideBandMeasurements(
+        measurements = TextHypothesisMeasurements(
             bbox=(1.25, 2.5, 33.75, 44.125),
             horizontal_center_ratio=0.175,
             nearest_vertical_edge_distance_ratio=0.0125,
@@ -142,13 +142,13 @@ class SideBandMeasurementsContractTest(unittest.TestCase):
         self.assertEqual(measurements.height_ratio, 0.208125)
 
 
-class MeasureHorizontalTextSideBandHypothesisTest(unittest.TestCase):
+class MeasureGeometricTextHypothesisTest(unittest.TestCase):
     def test_single_primitive_measurements_use_visible_bbox(self) -> None:
         page = _primitive_page(
             text_primitives=(_text_primitive("text-1", (10.0, 20.0, 30.0, 60.0)),)
         )
 
-        measurements = measure_horizontal_text_side_band_hypothesis(
+        measurements = measure_geometric_text_hypothesis(
             page,
             primitive_ids=("text-1",),
         )
@@ -168,7 +168,7 @@ class MeasureHorizontalTextSideBandHypothesisTest(unittest.TestCase):
             )
         )
 
-        measurements = measure_horizontal_text_side_band_hypothesis(
+        measurements = measure_geometric_text_hypothesis(
             page,
             primitive_ids=("text-1", "text-2"),
         )
@@ -188,11 +188,11 @@ class MeasureHorizontalTextSideBandHypothesisTest(unittest.TestCase):
             )
         )
 
-        first = measure_horizontal_text_side_band_hypothesis(
+        first = measure_geometric_text_hypothesis(
             page,
             primitive_ids=("text-1", "text-2"),
         )
-        second = measure_horizontal_text_side_band_hypothesis(
+        second = measure_geometric_text_hypothesis(
             page,
             primitive_ids=("text-2", "text-1"),
         )
@@ -207,11 +207,11 @@ class MeasureHorizontalTextSideBandHypothesisTest(unittest.TestCase):
             )
         )
 
-        first = measure_horizontal_text_side_band_hypothesis(
+        first = measure_geometric_text_hypothesis(
             page,
             primitive_ids=("text-1", "text-2"),
         )
-        second = measure_horizontal_text_side_band_hypothesis(
+        second = measure_geometric_text_hypothesis(
             page,
             primitive_ids=("text-1", "text-2"),
         )
@@ -223,7 +223,7 @@ class MeasureHorizontalTextSideBandHypothesisTest(unittest.TestCase):
             text_primitives=(_text_primitive("text-1", (-5.0, 10.0, 10.0, 20.0)),)
         )
 
-        measurements = measure_horizontal_text_side_band_hypothesis(
+        measurements = measure_geometric_text_hypothesis(
             page,
             primitive_ids=("text-1",),
         )
@@ -235,7 +235,7 @@ class MeasureHorizontalTextSideBandHypothesisTest(unittest.TestCase):
             text_primitives=(_text_primitive("text-1", (90.0, 10.0, 110.0, 20.0)),)
         )
 
-        measurements = measure_horizontal_text_side_band_hypothesis(
+        measurements = measure_geometric_text_hypothesis(
             page,
             primitive_ids=("text-1",),
         )
@@ -247,7 +247,7 @@ class MeasureHorizontalTextSideBandHypothesisTest(unittest.TestCase):
             text_primitives=(_text_primitive("text-1", (10.0, -5.0, 20.0, 10.0)),)
         )
 
-        measurements = measure_horizontal_text_side_band_hypothesis(
+        measurements = measure_geometric_text_hypothesis(
             page,
             primitive_ids=("text-1",),
         )
@@ -259,7 +259,7 @@ class MeasureHorizontalTextSideBandHypothesisTest(unittest.TestCase):
             text_primitives=(_text_primitive("text-1", (10.0, 190.0, 20.0, 210.0)),)
         )
 
-        measurements = measure_horizontal_text_side_band_hypothesis(
+        measurements = measure_geometric_text_hypothesis(
             page,
             primitive_ids=("text-1",),
         )
@@ -274,7 +274,7 @@ class MeasureHorizontalTextSideBandHypothesisTest(unittest.TestCase):
             )
         )
 
-        measurements = measure_horizontal_text_side_band_hypothesis(
+        measurements = measure_geometric_text_hypothesis(
             page,
             primitive_ids=("left", "right"),
         )
@@ -283,7 +283,7 @@ class MeasureHorizontalTextSideBandHypothesisTest(unittest.TestCase):
 
     def test_rejects_wrong_primitive_page_type(self) -> None:
         with self.assertRaisesRegex(ValueError, "primitive_page"):
-            measure_horizontal_text_side_band_hypothesis(
+            measure_geometric_text_hypothesis(
                 cast(Any, object()),
                 primitive_ids=("text-1",),
             )
@@ -294,7 +294,7 @@ class MeasureHorizontalTextSideBandHypothesisTest(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(ValueError, "primitive_ids"):
-            measure_horizontal_text_side_band_hypothesis(
+            measure_geometric_text_hypothesis(
                 page,
                 primitive_ids=cast(Any, ["text-1"]),
             )
@@ -303,13 +303,13 @@ class MeasureHorizontalTextSideBandHypothesisTest(unittest.TestCase):
         page = _primitive_page()
 
         with self.assertRaisesRegex(ValueError, "primitive_ids"):
-            measure_horizontal_text_side_band_hypothesis(page, primitive_ids=())
+            measure_geometric_text_hypothesis(page, primitive_ids=())
 
     def test_rejects_empty_primitive_id(self) -> None:
         page = _primitive_page()
 
         with self.assertRaisesRegex(ValueError, "non-empty string"):
-            measure_horizontal_text_side_band_hypothesis(page, primitive_ids=("",))
+            measure_geometric_text_hypothesis(page, primitive_ids=("",))
 
     def test_rejects_duplicate_primitive_ids(self) -> None:
         page = _primitive_page(
@@ -317,7 +317,7 @@ class MeasureHorizontalTextSideBandHypothesisTest(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(ValueError, "duplicates"):
-            measure_horizontal_text_side_band_hypothesis(
+            measure_geometric_text_hypothesis(
                 page,
                 primitive_ids=("text-1", "text-1"),
             )
@@ -326,19 +326,19 @@ class MeasureHorizontalTextSideBandHypothesisTest(unittest.TestCase):
         page = _primitive_page()
 
         with self.assertRaisesRegex(ValueError, "does not exist"):
-            measure_horizontal_text_side_band_hypothesis(page, primitive_ids=("missing",))
+            measure_geometric_text_hypothesis(page, primitive_ids=("missing",))
 
     def test_rejects_image_primitive_id(self) -> None:
         page = _primitive_page(image_primitives=(_image_primitive("image-1"),))
 
         with self.assertRaisesRegex(ValueError, "image primitive"):
-            measure_horizontal_text_side_band_hypothesis(page, primitive_ids=("image-1",))
+            measure_geometric_text_hypothesis(page, primitive_ids=("image-1",))
 
     def test_rejects_drawing_primitive_id(self) -> None:
         page = _primitive_page(drawing_primitives=(_drawing_primitive("drawing-1"),))
 
         with self.assertRaisesRegex(ValueError, "drawing primitive"):
-            measure_horizontal_text_side_band_hypothesis(page, primitive_ids=("drawing-1",))
+            measure_geometric_text_hypothesis(page, primitive_ids=("drawing-1",))
 
     def test_rejects_completely_off_page_primitive(self) -> None:
         page = _primitive_page(
@@ -346,7 +346,7 @@ class MeasureHorizontalTextSideBandHypothesisTest(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(ValueError, "no visible intersection"):
-            measure_horizontal_text_side_band_hypothesis(page, primitive_ids=("text-1",))
+            measure_geometric_text_hypothesis(page, primitive_ids=("text-1",))
 
     def test_rejects_group_containing_invisible_primitive(self) -> None:
         page = _primitive_page(
@@ -357,7 +357,7 @@ class MeasureHorizontalTextSideBandHypothesisTest(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(ValueError, "invisible"):
-            measure_horizontal_text_side_band_hypothesis(
+            measure_geometric_text_hypothesis(
                 page,
                 primitive_ids=("visible", "invisible"),
             )
@@ -367,7 +367,7 @@ class MeasureHorizontalTextSideBandHypothesisTest(unittest.TestCase):
             text_primitives=(_text_primitive("text-1", (10.0, 10.0, 20.0, 20.0), direction=None),)
         )
 
-        measurements = measure_horizontal_text_side_band_hypothesis(
+        measurements = measure_geometric_text_hypothesis(
             page,
             primitive_ids=("text-1",),
         )
@@ -381,7 +381,7 @@ class MeasureHorizontalTextSideBandHypothesisTest(unittest.TestCase):
             )
         )
 
-        measurements = measure_horizontal_text_side_band_hypothesis(
+        measurements = measure_geometric_text_hypothesis(
             page,
             primitive_ids=("text-1",),
         )
@@ -395,7 +395,7 @@ class MeasureHorizontalTextSideBandHypothesisTest(unittest.TestCase):
             )
         )
 
-        measurements = measure_horizontal_text_side_band_hypothesis(
+        measurements = measure_geometric_text_hypothesis(
             page,
             primitive_ids=("text-1",),
         )
@@ -410,7 +410,7 @@ class MeasureHorizontalTextSideBandHypothesisTest(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(ValueError, "unsupported orientation"):
-            measure_horizontal_text_side_band_hypothesis(page, primitive_ids=("text-1",))
+            measure_geometric_text_hypothesis(page, primitive_ids=("text-1",))
 
     def test_rejects_diagonal_direction(self) -> None:
         page = _primitive_page(
@@ -424,7 +424,7 @@ class MeasureHorizontalTextSideBandHypothesisTest(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(ValueError, "unsupported orientation"):
-            measure_horizontal_text_side_band_hypothesis(page, primitive_ids=("text-1",))
+            measure_geometric_text_hypothesis(page, primitive_ids=("text-1",))
 
     def test_rejects_mixed_horizontal_and_vertical_group(self) -> None:
         page = _primitive_page(
@@ -435,7 +435,7 @@ class MeasureHorizontalTextSideBandHypothesisTest(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(ValueError, "unsupported orientation"):
-            measure_horizontal_text_side_band_hypothesis(
+            measure_geometric_text_hypothesis(
                 page,
                 primitive_ids=("horizontal", "vertical"),
             )
@@ -445,7 +445,7 @@ class MeasureHorizontalTextSideBandHypothesisTest(unittest.TestCase):
             text_primitives=(_text_primitive("text-1", (0.0, 10.0, 20.0, 20.0)),)
         )
 
-        measurements = measure_horizontal_text_side_band_hypothesis(
+        measurements = measure_geometric_text_hypothesis(
             page,
             primitive_ids=("text-1",),
         )
@@ -457,7 +457,7 @@ class MeasureHorizontalTextSideBandHypothesisTest(unittest.TestCase):
             text_primitives=(_text_primitive("text-1", (80.0, 10.0, 100.0, 20.0)),)
         )
 
-        measurements = measure_horizontal_text_side_band_hypothesis(
+        measurements = measure_geometric_text_hypothesis(
             page,
             primitive_ids=("text-1",),
         )
@@ -469,7 +469,7 @@ class MeasureHorizontalTextSideBandHypothesisTest(unittest.TestCase):
             text_primitives=(_text_primitive("text-1", (40.0, 10.0, 60.0, 20.0)),)
         )
 
-        measurements = measure_horizontal_text_side_band_hypothesis(
+        measurements = measure_geometric_text_hypothesis(
             page,
             primitive_ids=("text-1",),
         )
@@ -482,7 +482,7 @@ class MeasureHorizontalTextSideBandHypothesisTest(unittest.TestCase):
             text_primitives=(_text_primitive("text-1", (0.0, 0.0, 100.0, 200.0)),)
         )
 
-        measurements = measure_horizontal_text_side_band_hypothesis(
+        measurements = measure_geometric_text_hypothesis(
             page,
             primitive_ids=("text-1",),
         )
@@ -498,7 +498,7 @@ class MeasureHorizontalTextSideBandHypothesisTest(unittest.TestCase):
             text_primitives=(_text_primitive("text-1", (1.25, 2.5, 33.75, 44.125)),)
         )
 
-        measurements = measure_horizontal_text_side_band_hypothesis(
+        measurements = measure_geometric_text_hypothesis(
             page,
             primitive_ids=("text-1",),
         )
@@ -516,7 +516,7 @@ class MeasureHorizontalTextSideBandHypothesisTest(unittest.TestCase):
         )
         before = page
 
-        measure_horizontal_text_side_band_hypothesis(
+        measure_geometric_text_hypothesis(
             page,
             primitive_ids=("text-2", "text-1"),
         )
