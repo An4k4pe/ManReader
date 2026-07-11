@@ -1,6 +1,6 @@
 # ManReader — Stato progetto
 
-## Versione corrente: v0.13 — Milestone 6 in corso
+## Versione corrente: v0.14 — Milestone 6 in corso
 
 ## 1. Decisione di fase
 
@@ -22,10 +22,12 @@ Stato sintetico delle milestone:
 - Milestone 5 — completata;
 - Milestone 6 — corrente.
 
-Il primo micro-step contrattuale della Milestone 6 è stato completato con il commit:
+I primi micro-step della Milestone 6 completati sono:
 
 ```text
 a7afdc7 Add page-level region candidate contract
+a926c7c Add side-band geometric measurements
+e25eaa4 Add singleton geometric text hypotheses
 ```
 
 Questo cambio di fase non autorizza una riscrittura generale della pipeline. Ogni modifica deve:
@@ -903,27 +905,99 @@ Motivazione:
 
 La persistenza delle evidence sarà rivalutata soltanto in presenza di un consumatore reale, per esempio composizione multi-producer, resolution basata sulle misure, audit persistente, confronto storico o riproduzione senza rieseguire il producer. Il modello futuro delle evidence non viene progettato ora.
 
-Prossimo micro-step autorizzabile: calcolo tipizzato delle misure geometriche per una singola ipotesi testuale orizzontale già fornita.
-
-Il prossimo commit deve separare:
+Micro-step 2 — misure geometriche side-band — completato con:
 
 ```text
-calcolo delle misure
-≠ clustering
-≠ soglie
-≠ decisione
-≠ produzione di RegionCandidate
+a926c7c Add side-band geometric measurements
 ```
 
-Il micro-step successivo può introdurre soltanto:
+Sono ora presenti e approvati:
 
-- un tipo producer-specifico per misure geometriche;
-- una funzione deterministica che misura una selezione esplicita di `TextPrimitive`;
-- bbox visibile aggregata;
-- rapporti relativi alla geometria pagina;
-- test sintetici.
+- `page_analysis_side_band_measurements.py`;
+- `tests/test_page_analysis_side_band_measurements.py`;
+- `SideBandMeasurements`;
+- `measure_horizontal_text_side_band_hypothesis(...)`;
+- input come selezione esplicita di `TextPrimitive`;
+- bbox visibile aggregata tramite clipping alla pagina;
+- rapporti geometrici rispetto alla pagina;
+- orientamento compatibile: `direction=None`, direzione circa `(1, 0)` o `(-1, 0)`;
+- rifiuto di immagini, drawing, testo verticale/diagonale e primitive invisibili quando selezionate esplicitamente;
+- nessun clustering;
+- nessuna soglia classificatoria;
+- nessun `RegionCandidate`;
+- nessuna modifica a `PageAnalysis`.
 
-Non sono ancora autorizzati scansione automatica della pagina, clustering, raggruppamento automatico, soglie, classificazione side-band, produzione effettiva di candidati, diagnostica CLI, evidence persistite, schema `1.3`, semantica marginalia o modifica della pipeline legacy.
+Verifiche riportate:
+
+```text
+test nuovo modulo: 35
+suite completa: 769 test, 7 skipped
+Ruff verde
+BasedPyright: 0 errori, 0 warning, 0 note
+git diff --check verde
+```
+
+Micro-step 3 — ipotesi testuali geometriche singleton — completato con:
+
+```text
+e25eaa4 Add singleton geometric text hypotheses
+```
+
+Sono ora presenti e approvati:
+
+- `page_analysis_text_hypotheses.py`;
+- `tests/test_page_analysis_text_hypotheses.py`;
+- `GeometricTextHypothesis`;
+- `build_geometric_text_hypotheses(...)`;
+- una ipotesi singleton per ogni `TextPrimitive` ammissibile;
+- contratto che ammette più `primitive_ids`, ma il primo builder produce solo singleton;
+- filtro su sole primitive testuali;
+- esclusione di testo verticale e diagonale;
+- inclusione di `direction=None` e di direzioni compatibili con l'asse X entro tolleranza `1e-6`;
+- clipping usato solo per visibilità e ordinamento;
+- ordinamento canonico tramite bbox visibile:
+
+  ```text
+  (visible_y0, visible_x0, visible_y1, visible_x1, primitive_id)
+  ```
+
+- ordine canonico esplicitamente non equivalente al reading order;
+- nessun clustering;
+- nessun raggruppamento multi-primitiva;
+- nessun misuratore chiamato;
+- nessun `RegionCandidate`;
+- nessuna modifica a `PageAnalysis`.
+
+Verifiche riportate:
+
+```text
+test nuovo modulo: 44
+suite completa: 813 test, 7 skipped
+Ruff verde
+BasedPyright: 0 errori, 0 warning, 0 note
+git diff --check verde
+```
+
+Pipeline interna corrente della Milestone 6:
+
+```text
+NormalizedPrimitivePage
+→ GeometricTextHypothesis singleton
+→ SideBandMeasurements su una selezione esplicita
+→ futuro raggruppamento multi-primitiva
+→ futura decisione side-band
+→ futuro RegionCandidate
+```
+
+`GeometricTextHypothesis` non è una side-band, una regione, un candidato persistito, una decisione, una evidence persistita o reading order.
+
+`SideBandMeasurements` non è evidence persistita, score, confidence, classificazione o candidato.
+
+Prossimo punto autorizzabile: decisione e possibile implementazione separata del raggruppamento multi-primitiva delle ipotesi testuali geometriche.
+
+Prima di implementarlo va decisa la regola di compatibilità/raggruppamento.
+
+Il prossimo step non deve ancora includere produzione di `RegionCandidate`, classificazione `layout.side_band`, soglie decisionali side-band, evidence persistite, `PageAnalysis` producer, diagnostica CLI, IR, Markdown o EPUB.
 
 Vincoli iniziali:
 
@@ -1070,33 +1144,18 @@ Il prossimo task implementativo appartiene alla **Milestone 6 — marginalia e b
 
 ### Obiettivo iniziale
 
-Il contratto `RegionCandidate` è stato introdotto. Il prossimo micro-step autorizzabile è il calcolo tipizzato delle misure geometriche per una singola ipotesi testuale orizzontale già fornita.
+Il contratto `RegionCandidate`, le misure geometriche side-band e le ipotesi testuali geometriche singleton sono stati introdotti.
 
-Il prossimo commit deve separare il calcolo delle misure da clustering, soglie, decisione e produzione di `RegionCandidate`.
+Il prossimo micro-step non è ancora un commit implementativo definitivo: va prima decisa la regola di compatibilità/raggruppamento per il raggruppamento multi-primitiva delle `GeometricTextHypothesis`.
 
-Può introdurre soltanto:
+Il prossimo step deve restare separato da:
 
-- un tipo producer-specifico per misure geometriche;
-- una funzione deterministica che misura una selezione esplicita di `TextPrimitive`;
-- bbox visibile aggregata;
-- rapporti relativi alla geometria pagina;
-- test sintetici.
-
-Non deve ancora includere:
-
-- scansione automatica della pagina;
-- clustering;
-- raggruppamento automatico;
-- soglie;
-- classificazione side-band;
-- produzione effettiva di candidati;
-- diagnostica CLI;
+- produzione di `RegionCandidate`;
+- classificazione `layout.side_band`;
+- soglie decisionali side-band;
 - evidence persistite;
-- schema `1.3`;
-- semantica marginalia;
-- detector definitivo o comportamento hardcoded;
-- esclusione automatica di marginalia;
-- modifica o rimozione di primitive dal contenuto;
+- `PageAnalysis` producer;
+- diagnostica CLI;
 - modifica a IR, Markdown o EPUB;
 - resolution;
 - policy editoriale;
@@ -1112,7 +1171,7 @@ La Milestone 6 deve restare in shadow mode e produrre dati diagnostici separati.
 
 ## 17. Ultimo avanzamento verificato
 
-La Milestone 5 è stata chiusa dopo la sequenza di commit che ha introdotto il contratto `PageAnalysis`, la validazione cross-model, serializzazione e store JSON, producer strutturali deterministici e dump diagnostico `analysis`. Il primo micro-step della Milestone 6 è stato completato con il commit `a7afdc7 Add page-level region candidate contract`.
+La Milestone 5 è stata chiusa dopo la sequenza di commit che ha introdotto il contratto `PageAnalysis`, la validazione cross-model, serializzazione e store JSON, producer strutturali deterministici e dump diagnostico `analysis`. I primi tre micro-step della Milestone 6 sono stati completati con i commit `a7afdc7 Add page-level region candidate contract`, `a926c7c Add side-band geometric measurements` ed `e25eaa4 Add singleton geometric text hypotheses`.
 
 Commit principali della milestone:
 
@@ -1139,11 +1198,12 @@ Correzioni finali consolidate:
 - visible primitive extent calcolata tramite intersezione con la geometria effettiva della pagina;
 - stage diagnostico `analysis` in `pymupdf_capture_dump.py`.
 
-Ultime verifiche riportate dopo il primo commit della Milestone 6:
+Ultime verifiche riportate dopo i micro-step completati della Milestone 6:
 
+- Micro-step 2: test nuovo modulo 35, suite completa 769 test eseguiti, 7 skipped;
+- Micro-step 3: test nuovo modulo 44, suite completa 813 test eseguiti, 7 skipped;
 - Ruff verde;
 - BasedPyright: 0 errori, 0 warning, 0 note;
-- suite completa: 734 test eseguiti, 7 skipped;
 - `git diff --check` verde;
 - pipeline legacy, IR 1, Markdown ed EPUB invariati.
 
@@ -1151,9 +1211,11 @@ Stato successivo approvato:
 
 ```text
 Milestone 6
-→ misure geometriche tipizzate
-→ candidati strutturali marginalia/side-band
-→ diagnostica shadow
+→ GeometricTextHypothesis singleton
+→ SideBandMeasurements su selezione esplicita
+→ decisione sul raggruppamento multi-primitiva
+→ futura decisione side-band
+→ futuro RegionCandidate
 → nessuna decisione finale o modifica dell'output
 → pipeline legacy autorevole
 ```

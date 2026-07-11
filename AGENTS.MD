@@ -2,7 +2,7 @@
 
 ## Stato corrente
 
-Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.13.
+Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.14.
 
 L'architettura target e il piano generale di migrazione sono approvati.
 
@@ -366,7 +366,11 @@ NormalizedPrimitivePage
 
 La Milestone 6 deve definire il primo vertical slice funzionale per identificare candidati strutturali di marginalia o banda laterale, mantenendo l'output legacy autorevole.
 
-Micro-step 1 — contratto `RegionCandidate` — completato.
+Micro-step completati:
+
+- Micro-step 1 — contratto `RegionCandidate` — completato;
+- Micro-step 2 — misure geometriche side-band — completato;
+- Micro-step 3 — ipotesi testuali geometriche singleton — completato.
 
 Sono approvati:
 
@@ -374,23 +378,45 @@ Sono approvati:
 - `PageAnalysis.candidates`;
 - schema `1.2`;
 - validazione e serializzazione;
+- `SideBandMeasurements` e `measure_horizontal_text_side_band_hypothesis(...)`;
+- `GeometricTextHypothesis` e `build_geometric_text_hypotheses(...)`;
+- ipotesi singleton ordinate in modo canonico ma non equivalente al reading order;
 - nessuna evidence persistita;
 - nessuna provenance candidate-level;
 - nessun producer reale di candidati.
 
-Prossimo micro-step autorizzabile: misure geometriche tipizzate per una selezione esplicita di primitive testuali orizzontali.
+Prossimo micro-step autorizzabile: decisione e possibile implementazione separata del raggruppamento multi-primitiva per `GeometricTextHypothesis`.
 
-Nel prossimo commit non sono autorizzati clustering, soglie, decisione side-band o produzione di `RegionCandidate`.
+Vincoli permanenti per il prossimo step:
 
-Il calcolo delle misure deve restare separato dalla costruzione delle ipotesi e dalla regola decisionale.
+- il raggruppamento multi-primitiva non deve produrre `RegionCandidate`;
+- il raggruppamento non deve classificare `layout.side_band`;
+- le soglie, se necessarie, devono essere prima approvate;
+- il raggruppamento deve restare separato dal misuratore;
+- il misuratore non deve creare ipotesi;
+- il builder di ipotesi non deve chiamare il misuratore;
+- l'ordine canonico non è reading order.
 
 Non sono ancora autorizzati:
 
+- clustering generico;
+- framework di clustering;
+- `ClusterStrategy`;
+- `GroupingEngine`;
+- registry;
+- scoring;
+- ranking;
+- confidence;
+- produzione di candidati;
+- schema `1.3`;
+- evidence persistite;
+- semantica marginalia;
 - scelta di un detector specifico;
-- soglie numeriche;
+- soglie numeriche non approvate;
 - hardcode su Lancer, Fabula, Kult, Vileborn, DB o altri manuali;
 - hardcode su pagina, titolo, parola o dimensione carta;
-- ingresso diretto dei candidati in IR, Markdown o EPUB.
+- ingresso diretto dei candidati in IR, Markdown o EPUB;
+- modifica dell'output legacy.
 
 Vincoli della milestone:
 
