@@ -2,7 +2,7 @@
 
 ## Stato corrente
 
-Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.15.
+Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.16.
 
 L'architettura target e il piano generale di migrazione sono approvati.
 
@@ -371,7 +371,8 @@ Micro-step completati:
 - Micro-step 1 — contratto `RegionCandidate` — completato;
 - Micro-step 2 — misure geometriche per ipotesi testuali — completato;
 - Micro-step 3 — ipotesi testuali geometriche singleton — completato;
-- Micro-step 4 — rename neutrale delle measurements — completato.
+- Micro-step 4 — rename neutrale delle measurements — completato;
+- Micro-step 5 — builder esplicito di candidate side-band — completato.
 
 Sono approvati:
 
@@ -382,17 +383,21 @@ Sono approvati:
 - `TextHypothesisMeasurements` e `measure_geometric_text_hypothesis(...)`;
 - `GeometricTextHypothesis` e `build_geometric_text_hypotheses(...)`;
 - ipotesi singleton ordinate in modo canonico ma non equivalente al reading order;
+- `build_side_band_candidate_from_text_hypothesis(...)`;
+- builder esplicito da `primitive_ids` a `RegionCandidate(layout.side_band)`;
 - nessuna evidence persistita;
 - nessuna provenance candidate-level;
-- nessun producer reale di candidati.
+- nessun producer autonomo di candidati.
 
-Prossimo micro-step autorizzabile: progettazione del primo producer `layout.side_band`, senza ancora introdurre un layer pubblico di blocchi/raggruppamenti.
+Prossimo micro-step autorizzabile: progettazione del primo producer `layout.side_band` sopra il builder esplicito già presente, senza ancora introdurre un layer pubblico di blocchi/raggruppamenti.
 
 Vincoli permanenti per il prossimo step:
 
 - `TextHypothesisMeasurements` misura selezioni esplicite di primitive testuali compatibili;
 - `TextHypothesisMeasurements` non classifica side-band;
 - `TextHypothesisMeasurements` non produce `RegionCandidate`;
+- il builder esplicito side-band non è un detector, non seleziona primitive, non raggruppa, non introduce soglie e non decide l'accettazione;
+- il producer futuro può usare il builder esplicito, ma la generazione delle selezioni resta una decisione separata;
 - `GeometricTextHypothesis` resta il tipo generale per selezioni testuali geometriche;
 - il builder corrente di `GeometricTextHypothesis` produce solo singleton;
 - non è autorizzato ora un nuovo tipo pubblico `GeometricTextBlock`, `GeometricTextCluster`, `GeometricTextSpan` o equivalente;
@@ -413,7 +418,9 @@ Non sono ancora autorizzati:
 - scoring;
 - ranking;
 - confidence;
-- produzione di candidati;
+- scanner pagina completo;
+- produzione autonoma di candidati;
+- detector con soglie non approvate;
 - schema `1.3`;
 - evidence persistite;
 - modifica di `PageAnalysis`;
