@@ -5,7 +5,11 @@ from typing import Any, cast
 
 from geometry_model import PageGeometry
 from page_analysis_model import PAGE_ANALYSIS_SCHEMA_VERSION, PageAnalysis
-from page_analysis_side_band import build_singleton_side_band_page_analysis
+from page_analysis_side_band import (
+    _build_local_horizontal_fragment_hypotheses,
+    build_singleton_side_band_page_analysis,
+)
+from page_analysis_text_hypotheses import GeometricTextHypothesis
 from page_analysis_validate import validate_page_analysis_against_primitive_page
 from primitive_model import NormalizedPrimitivePage, TextPrimitive
 
@@ -48,6 +52,12 @@ def _primitive_page(
 
 def _candidate_ids(analysis: PageAnalysis) -> tuple[str, ...]:
     return tuple(candidate.candidate_id for candidate in analysis.candidates)
+
+
+def _fragment_ids(
+    hypotheses: tuple[GeometricTextHypothesis, ...],
+) -> tuple[tuple[str, ...], ...]:
+    return tuple(hypothesis.primitive_ids for hypothesis in hypotheses)
 
 
 class BuildSingletonSideBandPageAnalysisInputTest(unittest.TestCase):
@@ -306,6 +316,205 @@ class BuildSingletonSideBandPageAnalysisBoundaryTest(unittest.TestCase):
             build_singleton_side_band_page_analysis(page, generation_id="gen-1").candidates,
             (),
         )
+
+
+class LocalHorizontalFragmentHypothesesTest(unittest.TestCase):
+    def test_rejects_wrong_page_type_and_empty_page(self) -> None:
+        with self.assertRaisesRegex(ValueError, "primitive_page"):
+            _build_local_horizontal_fragment_hypotheses(cast(Any, object()))
+        self.assertEqual(_build_local_horizontal_fragment_hypotheses(_primitive_page()), ())
+
+    def test_returns_hypotheses_without_mutating_page(self) -> None:
+        page = _primitive_page(text_primitives=(_text_primitive("solo", (10.0, 50.0, 20.0, 60.0)),))
+        before = page
+
+        hypotheses = _build_local_horizontal_fragment_hypotheses(page)
+
+        self.assertEqual(_fragment_ids(hypotheses), (("solo",),))
+        self.assertTrue(
+            all(isinstance(hypothesis, GeometricTextHypothesis) for hypothesis in hypotheses)
+        )
+        self.assertEqual(page, before)
+
+    def test_merges_two_and_three_local_fragments_left_to_right(self) -> None:
+        two = _primitive_page(
+            text_primitives=(
+                _text_primitive("left", (10.0, 50.0, 20.0, 60.0)),
+                _text_primitive("right", (21.0, 50.0, 31.0, 60.0)),
+            )
+        )
+        three = _primitive_page(
+            text_primitives=(
+                _text_primitive("third", (32.0, 51.0, 42.0, 61.0)),
+                _text_primitive("first", (10.0, 50.0, 20.0, 60.0)),
+                _text_primitive("second", (21.0, 50.0, 31.0, 60.0)),
+            )
+        )
+
+        self.assertEqual(
+            _fragment_ids(_build_local_horizontal_fragment_hypotheses(two)),
+            (("left", "right"),),
+        )
+        self.assertEqual(
+            _fragment_ids(_build_local_horizontal_fragment_hypotheses(three)),
+            (("first", "second", "third"),),
+        )
+
+    def test_output_is_independent_of_input_order_and_keeps_isolated_singleton(self) -> None:
+        page = _primitive_page(
+            text_primitives=(
+                _text_primitive("isolated", (10.0, 90.0, 20.0, 100.0)),
+                _text_primitive("second", (21.0, 50.0, 31.0, 60.0)),
+                _text_primitive("first", (10.0, 50.0, 20.0, 60.0)),
+            )
+        )
+        reversed_page = _primitive_page(text_primitives=tuple(reversed(page.text_primitives)))
+
+        hypotheses = _build_local_horizontal_fragment_hypotheses(page)
+
+        self.assertEqual(_fragment_ids(hypotheses), (("first", "second"), ("isolated",)))
+        self.assertEqual(hypotheses, _build_local_horizontal_fragment_hypotheses(reversed_page))
+        self.assertEqual(
+            tuple(
+                primitive_id
+                for hypothesis in hypotheses
+                for primitive_id in hypothesis.primitive_ids
+            ),
+            ("first", "second", "isolated"),
+        )
+
+    def test_does_not_cross_gutters_columns_or_opposite_page_sides(self) -> None:
+        for primitives in (
+            (
+                _text_primitive("left", (0.0, 50.0, 10.0, 60.0)),
+                _text_primitive("right", (30.0, 50.0, 40.0, 60.0)),
+            ),
+            (
+                _text_primitive("column-a", (0.0, 50.0, 10.0, 60.0)),
+                _text_primitive("column-b", (50.0, 50.0, 60.0, 60.0)),
+            ),
+            (
+                _text_primitive("page-left", (0.0, 50.0, 10.0, 60.0)),
+                _text_primitive("page-right", (90.0, 50.0, 100.0, 60.0)),
+            ),
+        ):
+            with self.subTest(primitives=primitives):
+                hypotheses = _build_local_horizontal_fragment_hypotheses(
+                    _primitive_page(text_primitives=primitives)
+                )
+                self.assertTrue(
+                    all(len(hypothesis.primitive_ids) == 1 for hypothesis in hypotheses)
+                )
+
+    def test_stops_before_gutter_and_allows_centered_local_fragments(self) -> None:
+        chain = _primitive_page(
+            text_primitives=(
+                _text_primitive("a", (0.0, 50.0, 10.0, 60.0)),
+                _text_primitive("b", (11.0, 50.0, 21.0, 60.0)),
+                _text_primitive("c", (40.0, 50.0, 50.0, 60.0)),
+            )
+        )
+        title = _primitive_page(
+            text_primitives=(
+                _text_primitive("title-a", (40.0, 50.0, 50.0, 60.0)),
+                _text_primitive("title-b", (51.0, 50.0, 61.0, 60.0)),
+            )
+        )
+
+        self.assertEqual(
+            _fragment_ids(_build_local_horizontal_fragment_hypotheses(chain)),
+            (("a", "b"), ("c",)),
+        )
+        self.assertEqual(
+            _fragment_ids(_build_local_horizontal_fragment_hypotheses(title)),
+            (("title-a", "title-b"),),
+        )
+
+    def test_does_not_connect_text_separated_like_boxes_or_ambiguous_choices(self) -> None:
+        separated = _primitive_page(
+            text_primitives=(
+                _text_primitive("outside", (0.0, 50.0, 10.0, 60.0)),
+                _text_primitive("box", (30.0, 50.0, 40.0, 60.0)),
+                _text_primitive("other-box", (60.0, 50.0, 70.0, 60.0)),
+            )
+        )
+        ambiguous = _primitive_page(
+            text_primitives=(
+                _text_primitive("left", (0.0, 50.0, 10.0, 60.0)),
+                _text_primitive("choice-a", (11.0, 50.0, 21.0, 60.0)),
+                _text_primitive("choice-b", (11.0, 50.0, 21.0, 60.0)),
+            )
+        )
+
+        self.assertTrue(
+            all(
+                len(hypothesis.primitive_ids) == 1
+                for hypothesis in _build_local_horizontal_fragment_hypotheses(separated)
+            )
+        )
+        self.assertTrue(
+            all(
+                len(hypothesis.primitive_ids) == 1
+                for hypothesis in _build_local_horizontal_fragment_hypotheses(ambiguous)
+            )
+        )
+
+    def test_requires_common_vertical_corridor_and_total_gap_budget(self) -> None:
+        incompatible_chain = _primitive_page(
+            text_primitives=(
+                _text_primitive("a", (0.0, 0.0, 10.0, 10.0)),
+                _text_primitive("b", (11.0, 4.0, 21.0, 14.0)),
+                _text_primitive("c", (22.0, 8.0, 32.0, 18.0)),
+            )
+        )
+        excessive_budget = _primitive_page(
+            text_primitives=(
+                _text_primitive("a", (0.0, 50.0, 10.0, 60.0)),
+                _text_primitive("b", (16.0, 50.0, 26.0, 60.0)),
+                _text_primitive("c", (32.0, 50.0, 42.0, 60.0)),
+                _text_primitive("d", (48.0, 50.0, 58.0, 60.0)),
+            )
+        )
+
+        self.assertTrue(
+            all(
+                len(hypothesis.primitive_ids) == 1
+                for hypothesis in _build_local_horizontal_fragment_hypotheses(incompatible_chain)
+            )
+        )
+        self.assertTrue(
+            all(
+                len(hypothesis.primitive_ids) == 1
+                for hypothesis in _build_local_horizontal_fragment_hypotheses(excessive_budget)
+            )
+        )
+
+    def test_excludes_unsupported_or_invisible_text_and_does_not_change_producer(self) -> None:
+        excluded = _primitive_page(
+            text_primitives=(
+                _text_primitive("vertical", (0.0, 50.0, 10.0, 60.0), direction=(0.0, 1.0)),
+                _text_primitive(
+                    "diagonal",
+                    (11.0, 50.0, 21.0, 60.0),
+                    direction=(0.7071067811865476, 0.7071067811865476),
+                ),
+                _text_primitive("outside", (110.0, 50.0, 120.0, 60.0)),
+            )
+        )
+        singleton_page = _primitive_page(
+            text_primitives=(
+                _text_primitive("a", (0.0, 50.0, 10.0, 60.0)),
+                _text_primitive("b", (11.0, 50.0, 21.0, 60.0)),
+            )
+        )
+
+        self.assertEqual(_build_local_horizontal_fragment_hypotheses(excluded), ())
+        analysis = build_singleton_side_band_page_analysis(singleton_page, generation_id="gen-1")
+        self.assertEqual(
+            _candidate_ids(analysis), ("candidate:side-band:a", "candidate:side-band:b")
+        )
+        self.assertEqual(analysis.provenance.configuration_id, "singleton-side-band-v1")
+        self.assertEqual(analysis.provenance.producer_name, "page_analysis.singleton_side_band")
 
 
 if __name__ == "__main__":
