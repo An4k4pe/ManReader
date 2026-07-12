@@ -1,6 +1,6 @@
 # ManReader — Stato progetto
 
-## Versione corrente: v0.16 — Milestone 6 in corso
+## Versione corrente: v0.17 — Milestone 6 in corso
 
 ## 1. Decisione di fase
 
@@ -31,6 +31,7 @@ e25eaa4 Add singleton geometric text hypotheses
 32382e1 Update Milestone 6 hypothesis state
 0d7f416 Rename text hypothesis measurements
 e308fac Add explicit side-band candidate builder
+265ca16 Add singleton side-band producer
 ```
 
 Questo cambio di fase non autorizza una riscrittura generale della pipeline. Ogni modifica deve:
@@ -1025,6 +1026,43 @@ BasedPyright: 0 errori, 0 warning, 0 note
 git diff --check verde
 ```
 
+Micro-step 6 — producer singleton side-band — completato con:
+
+```text
+265ca16 Add singleton side-band producer
+```
+
+Sono ora presenti e approvati:
+
+- `page_analysis_side_band.py`;
+- `tests/test_page_analysis_side_band.py`;
+- `build_singleton_side_band_page_analysis(...)`.
+
+Comportamento:
+
+```text
+NormalizedPrimitivePage
+→ build_geometric_text_hypotheses(...)
+→ measure_geometric_text_hypothesis(...)
+→ filtro geometrico conservativo su singleton
+→ build_side_band_candidate_from_text_hypothesis(...)
+→ PageAnalysis(schema 1.2, candidates=...)
+```
+
+Il producer restituisce una `PageAnalysis` validata e produce zero o più `RegionCandidate(proposed_structural_kind="layout.side_band")`, esclusivamente singleton. I candidate ID sono deterministici e derivati dal `primitive_id`; le bbox sono quelle visibili misurate da `TextHypothesisMeasurements`. Le soglie geometriche sono private, page-relative e tracciate da `configuration_id="singleton-side-band-v1"`. Nel primo micro-step il risultato conserva `regions=()` e `relations=()`.
+
+Il producer non raggruppa primitive, non ricostruisce bande laterali complete, non deduce semantica marginalia e non introduce score, confidence, ranking o evidence. Non modifica `PageAnalysis`, non cambia lo schema `1.2` e non modifica IR, Markdown, EPUB o output legacy.
+
+Verifiche riportate:
+
+```text
+test nuovo modulo: 23
+suite completa: 847 test, 7 skipped
+Ruff verde
+BasedPyright: 0 errori, 0 warning, 0 note
+git diff --check verde
+```
+
 Pipeline interna corrente della Milestone 6:
 
 ```text
@@ -1032,7 +1070,8 @@ NormalizedPrimitivePage
 → GeometricTextHypothesis singleton
 → TextHypothesisMeasurements su selezione esplicita
 → explicit side-band candidate builder
-→ futuro producer layout.side_band
+→ singleton side-band producer
+→ futuro affinamento producer / diagnostica shadow
 ```
 
 `GeometricTextHypothesis` resta il tipo generale per una selezione testuale geometrica. Non è una side-band, una regione, un candidato persistito, una decisione, una evidence persistita o reading order. Il contratto ammette più `primitive_ids`, ma il builder corrente produce solo singleton.
@@ -1054,13 +1093,13 @@ Tassonomia sintetica delle bbox:
 - bbox di ipotesi strutturale:
   - futura `GeometricTextHypothesis` multi-ID prodotta da una regola di membership.
 - bbox di candidato layout:
-  - futuro `RegionCandidate` con `proposed_structural_kind="layout.side_band"`.
+  - `RegionCandidate` singleton prodotto con `proposed_structural_kind="layout.side_band"`; eventuali candidati multi-primitiva restano futuri.
 - bbox semantica o risolta:
   - futuro marginalia semantico dopo resolution.
 
-Prossimo punto autorizzabile: progettazione del primo producer `layout.side_band`. Il producer potrà usare il builder esplicito già presente, ma dovrà ancora decidere quali selezioni esplicite generare, se e quali soglie introdurre, come evitare membership non neutrale non controllata e come restare testabile e shadow-only.
+Prossimo punto autorizzabile: decidere se collegare il producer singleton side-band alla diagnostica shadow `analysis`, oppure prima valutare su campioni reali i candidati generati per stabilire se serva un raggruppamento multi-primitiva privato e side-band-specifico. Il producer singleton è volutamente incompleto: rileva frammenti singleton compatibili con side-band, non regioni marginalia complete.
 
-Il prossimo step non deve ancora includere modifica di `PageAnalysis`, schema `1.3`, evidence persistite, score, confidence, ranking, nuovo tipo `Block/Cluster/Span`, raggruppatore neutrale pubblico, framework di clustering, diagnostica CLI, IR, Markdown, EPUB o output legacy.
+Il prossimo step non deve ancora includere modifica di `PageAnalysis`, schema `1.3`, evidence persistite, score, confidence, ranking, nuovo tipo `Block/Cluster/Span`, raggruppatore neutrale pubblico, framework di clustering, diagnostica CLI, IR, Markdown, EPUB, output legacy, resolution, coverage, ownership, policy editoriale, profili, GUI o AI.
 
 Vincoli iniziali:
 
@@ -1207,9 +1246,9 @@ Il prossimo task implementativo appartiene alla **Milestone 6 — marginalia e b
 
 ### Obiettivo iniziale
 
-Il contratto `RegionCandidate`, le ipotesi testuali geometriche singleton, le misure geometriche per ipotesi testuali e il builder esplicito side-band sono stati introdotti.
+Il contratto `RegionCandidate`, le ipotesi testuali geometriche singleton, le misure geometriche per ipotesi testuali, il builder esplicito side-band e il producer singleton side-band sono stati introdotti.
 
-Il prossimo punto resta la progettazione del primo producer `layout.side_band`. Il producer potrà usare il builder esplicito già presente, ma dovrà ancora decidere quali selezioni esplicite generare, se e quali soglie introdurre, come evitare membership non neutrale non controllata e come restare testabile e shadow-only.
+Il prossimo punto è decidere se collegare il producer singleton side-band alla diagnostica shadow `analysis`, oppure prima valutare su campioni reali i candidati generati per stabilire se serva un raggruppamento multi-primitiva privato e side-band-specifico.
 
 Il prossimo step deve restare separato da:
 
@@ -1239,7 +1278,7 @@ La Milestone 6 deve restare in shadow mode e produrre dati diagnostici separati.
 
 ## 17. Ultimo avanzamento verificato
 
-La Milestone 5 è stata chiusa dopo la sequenza di commit che ha introdotto il contratto `PageAnalysis`, la validazione cross-model, serializzazione e store JSON, producer strutturali deterministici e dump diagnostico `analysis`. I micro-step completati della Milestone 6 includono `a7afdc7 Add page-level region candidate contract`, `a926c7c Add side-band geometric measurements`, `e25eaa4 Add singleton geometric text hypotheses`, `32382e1 Update Milestone 6 hypothesis state`, `0d7f416 Rename text hypothesis measurements` ed `e308fac Add explicit side-band candidate builder`.
+La Milestone 5 è stata chiusa dopo la sequenza di commit che ha introdotto il contratto `PageAnalysis`, la validazione cross-model, serializzazione e store JSON, producer strutturali deterministici e dump diagnostico `analysis`. I micro-step completati della Milestone 6 includono `a7afdc7 Add page-level region candidate contract`, `a926c7c Add side-band geometric measurements`, `e25eaa4 Add singleton geometric text hypotheses`, `32382e1 Update Milestone 6 hypothesis state`, `0d7f416 Rename text hypothesis measurements`, `e308fac Add explicit side-band candidate builder` e `265ca16 Add singleton side-band producer`.
 
 Commit principali della milestone:
 
@@ -1271,6 +1310,7 @@ Ultime verifiche riportate dopo i micro-step completati della Milestone 6:
 - Micro-step 2: test nuovo modulo 35, suite completa 769 test eseguiti, 7 skipped;
 - Micro-step 3: test nuovo modulo 44, suite completa 813 test eseguiti, 7 skipped;
 - Micro-step 5: test nuovo modulo 11, suite completa 824 test eseguiti, 7 skipped;
+- Micro-step 6: test nuovo modulo 23, suite completa 847 test eseguiti, 7 skipped;
 - Ruff verde;
 - BasedPyright: 0 errori, 0 warning, 0 note;
 - `git diff --check` verde;
@@ -1283,7 +1323,8 @@ Milestone 6
 → GeometricTextHypothesis singleton
 → TextHypothesisMeasurements su selezione esplicita
 → explicit side-band candidate builder
-→ progettazione del primo producer layout.side_band
+→ singleton side-band producer
+→ diagnostica shadow o valutazione su campioni reali
 → nessuna decisione finale o modifica dell'output
 → pipeline legacy autorevole
 ```

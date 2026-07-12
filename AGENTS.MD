@@ -2,7 +2,7 @@
 
 ## Stato corrente
 
-Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.16.
+Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.17.
 
 L'architettura target e il piano generale di migrazione sono approvati.
 
@@ -372,7 +372,8 @@ Micro-step completati:
 - Micro-step 2 — misure geometriche per ipotesi testuali — completato;
 - Micro-step 3 — ipotesi testuali geometriche singleton — completato;
 - Micro-step 4 — rename neutrale delle measurements — completato;
-- Micro-step 5 — builder esplicito di candidate side-band — completato.
+- Micro-step 5 — builder esplicito di candidate side-band — completato;
+- Micro-step 6 — producer singleton side-band — completato.
 
 Sono approvati:
 
@@ -385,11 +386,14 @@ Sono approvati:
 - ipotesi singleton ordinate in modo canonico ma non equivalente al reading order;
 - `build_side_band_candidate_from_text_hypothesis(...)`;
 - builder esplicito da `primitive_ids` a `RegionCandidate(layout.side_band)`;
+- `build_singleton_side_band_page_analysis(...)`;
+- producer conservativo singleton `layout.side_band`;
+- soglie geometriche private, page-relative e tracciate da `configuration_id="singleton-side-band-v1"`;
 - nessuna evidence persistita;
 - nessuna provenance candidate-level;
-- nessun producer autonomo di candidati.
+- nessun producer generale di candidati.
 
-Prossimo micro-step autorizzabile: progettazione del primo producer `layout.side_band` sopra il builder esplicito già presente, senza ancora introdurre un layer pubblico di blocchi/raggruppamenti.
+Prossimo micro-step autorizzabile: decidere se collegare il producer singleton side-band alla diagnostica shadow `analysis`, oppure valutare prima i risultati su campioni reali.
 
 Vincoli permanenti per il prossimo step:
 
@@ -397,12 +401,16 @@ Vincoli permanenti per il prossimo step:
 - `TextHypothesisMeasurements` non classifica side-band;
 - `TextHypothesisMeasurements` non produce `RegionCandidate`;
 - il builder esplicito side-band non è un detector, non seleziona primitive, non raggruppa, non introduce soglie e non decide l'accettazione;
+- il producer singleton side-band produce candidati, non decisioni finali; non riconosce bande laterali complete, non raggruppa primitive, non produce semantica marginalia e non modifica l'output legacy;
+- il producer singleton side-band non introduce score, confidence, ranking o evidence;
+- eventuali cambi alle soglie o alla loro semantica devono cambiare `configuration_id`;
 - il producer futuro può usare il builder esplicito, ma la generazione delle selezioni resta una decisione separata;
 - `GeometricTextHypothesis` resta il tipo generale per selezioni testuali geometriche;
 - il builder corrente di `GeometricTextHypothesis` produce solo singleton;
 - non è autorizzato ora un nuovo tipo pubblico `GeometricTextBlock`, `GeometricTextCluster`, `GeometricTextSpan` o equivalente;
 - non è autorizzato ora un raggruppatore neutrale pubblico;
 - eventuali raggruppamenti multi-primitiva devono restare interni al futuro producer finché non esiste riuso dimostrato;
+- un futuro raggruppamento, se approvato, dovrà essere privato, side-band-specifico e testato come micro-step separato;
 - l'ordine canonico non è reading order.
 
 Non sono ancora autorizzati:
@@ -418,8 +426,8 @@ Non sono ancora autorizzati:
 - scoring;
 - ranking;
 - confidence;
-- scanner pagina completo;
-- produzione autonoma di candidati;
+- scanner generale di marginalia;
+- produzione generale di candidati;
 - detector con soglie non approvate;
 - schema `1.3`;
 - evidence persistite;
