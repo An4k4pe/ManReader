@@ -17,6 +17,7 @@ from pymupdf_capture_dump import (
     dump_capture,
     dump_normalized_primitives,
     dump_page_analysis,
+    dump_singleton_side_band_page_analysis,
     main,
 )
 
@@ -30,6 +31,11 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
         args = build_argument_parser().parse_args(("sample.pdf", "--stage", "analysis"))
 
         self.assertEqual(args.stage, "analysis")
+
+    def test_parser_accepts_singleton_side_band_analysis_stage(self) -> None:
+        args = build_argument_parser().parse_args(("sample.pdf", "--stage", "analysis-side-band"))
+
+        self.assertEqual(args.stage, "analysis-side-band")
 
     def test_dump_capture_returns_pretty_json_without_writing(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -133,6 +139,51 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
                     "configuration_id": "primitive-extent-analysis-v1",
                 },
             )
+
+    def test_dump_singleton_side_band_analysis_returns_candidate_json_without_writing(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            pdf_path = root / "side-band.pdf"
+            _create_pdf_with_side_band_text(pdf_path)
+
+            json_text = dump_singleton_side_band_page_analysis(pdf_path)
+            payload = json.loads(json_text)
+
+            self.assertTrue(json_text.endswith("\n"))
+            self.assertEqual(payload["schema_version"], PAGE_ANALYSIS_SCHEMA_VERSION)
+            self.assertIn("candidates", payload)
+            self.assertEqual(payload["regions"], [])
+            self.assertEqual(payload["relations"], [])
+            self.assertEqual(
+                payload["provenance"]["producer_name"],
+                "page_analysis.singleton_side_band",
+            )
+            self.assertEqual(
+                payload["provenance"]["configuration_id"],
+                "singleton-side-band-v1",
+            )
+            self.assertEqual(len(payload["candidates"]), 1)
+            self.assertEqual(
+                payload["candidates"][0]["proposed_structural_kind"],
+                "layout.side_band",
+            )
+            self.assertEqual(list(root.glob("*.json")), [])
+
+    def test_singleton_side_band_stage_does_not_change_existing_analysis_or_legacy_diagnostics(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            pdf_path = Path(temporary_directory) / "side-band.pdf"
+            _create_pdf_with_side_band_text(pdf_path)
+            analysis_before = dump_page_analysis(pdf_path)
+            capture_before = dump_capture(pdf_path)
+            primitives_before = dump_normalized_primitives(pdf_path)
+
+            dump_singleton_side_band_page_analysis(pdf_path)
+
+            self.assertEqual(dump_page_analysis(pdf_path), analysis_before)
+            self.assertEqual(dump_capture(pdf_path), capture_before)
+            self.assertEqual(dump_normalized_primitives(pdf_path), primitives_before)
 
     def test_dump_page_analysis_clips_partially_off_page_primitives(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -310,6 +361,24 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             self.assertNotIn("text_observations", payload)
             self.assertNotIn("text_primitives", payload)
 
+    def test_main_prints_singleton_side_band_json_for_requested_stage(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            pdf_path = Path(temporary_directory) / "side-band.pdf"
+            _create_pdf_with_side_band_text(pdf_path)
+            stdout = StringIO()
+
+            with redirect_stdout(stdout):
+                return_code = main((str(pdf_path), "--stage", "analysis-side-band"))
+
+            self.assertEqual(return_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["schema_version"], PAGE_ANALYSIS_SCHEMA_VERSION)
+            self.assertEqual(
+                payload["provenance"]["producer_name"],
+                "page_analysis.singleton_side_band",
+            )
+            self.assertIn("candidates", payload)
+
     def test_main_prints_primitive_json_for_requested_stage(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             pdf_path = Path(temporary_directory) / "sample.pdf"
@@ -399,6 +468,16 @@ def _create_empty_pdf(path: Path) -> None:
     document = fitz.open()
     try:
         document.new_page(width=200.0, height=300.0)
+        document.save(path)
+    finally:
+        document.close()
+
+
+def _create_pdf_with_side_band_text(path: Path) -> None:
+    document = fitz.open()
+    try:
+        page = document.new_page(width=200.0, height=300.0)
+        page.insert_text((10.0, 150.0), "Side")
         document.save(path)
     finally:
         document.close()
