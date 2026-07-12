@@ -1,6 +1,6 @@
 # ManReader — Stato progetto
 
-## Versione corrente: v0.17 — Milestone 6 in corso
+## Versione corrente: v0.18 — Milestone 6 in corso
 
 ## 1. Decisione di fase
 
@@ -32,6 +32,7 @@ e25eaa4 Add singleton geometric text hypotheses
 0d7f416 Rename text hypothesis measurements
 e308fac Add explicit side-band candidate builder
 265ca16 Add singleton side-band producer
+1fc65ce Add singleton side-band diagnostic stage
 ```
 
 Questo cambio di fase non autorizza una riscrittura generale della pipeline. Ogni modifica deve:
@@ -1063,6 +1064,46 @@ BasedPyright: 0 errori, 0 warning, 0 note
 git diff --check verde
 ```
 
+Micro-step 7 — diagnostica shadow singleton side-band — completato con:
+
+```text
+1fc65ce Add singleton side-band diagnostic stage
+```
+
+Sono ora presenti e approvati:
+
+- stage diagnostico `analysis-side-band`;
+- `dump_singleton_side_band_page_analysis(...)`;
+- supporto CLI `--stage analysis-side-band`;
+- serializzazione JSON tramite `page_analysis_to_dict(...)`;
+- producer `build_singleton_side_band_page_analysis(...)`.
+
+Comportamento:
+
+```text
+PDF reale
+→ capture PyMuPDF
+→ NormalizedPrimitivePage
+→ build_singleton_side_band_page_analysis(...)
+→ PageAnalysis(schema 1.2, candidates=...)
+→ page_analysis_to_dict(...)
+→ JSON diagnostico
+```
+
+Lo stage `analysis` esistente resta invariato; `analysis-side-band` è separato e il suo JSON contiene `candidates`. La provenance del producer è `page_analysis.singleton_side_band` con `configuration_id="singleton-side-band-v1"`. Non vengono scritti file se non richiesto esplicitamente dalla diagnostica esistente e non vengono modificati output legacy, IR, Markdown o EPUB.
+
+Non vengono introdotti raggruppamento, score, confidence, ranking o evidence; `PageAnalysis` non viene modificato e lo schema resta `1.2`. Lo stage diagnostico non è output prodotto finale e non cambia il percorso legacy.
+
+Verifiche riportate:
+
+```text
+test mirati pymupdf_capture_dump: 23
+suite completa: 851 test, 7 skipped
+Ruff verde
+BasedPyright: 0 errori, 0 warning, 0 note
+git diff --check verde
+```
+
 Pipeline interna corrente della Milestone 6:
 
 ```text
@@ -1071,7 +1112,8 @@ NormalizedPrimitivePage
 → TextHypothesisMeasurements su selezione esplicita
 → explicit side-band candidate builder
 → singleton side-band producer
-→ futuro affinamento producer / diagnostica shadow
+→ diagnostics stage analysis-side-band
+→ valutazione su campioni reali
 ```
 
 `GeometricTextHypothesis` resta il tipo generale per una selezione testuale geometrica. Non è una side-band, una regione, un candidato persistito, una decisione, una evidence persistita o reading order. Il contratto ammette più `primitive_ids`, ma il builder corrente produce solo singleton.
@@ -1097,9 +1139,9 @@ Tassonomia sintetica delle bbox:
 - bbox semantica o risolta:
   - futuro marginalia semantico dopo resolution.
 
-Prossimo punto autorizzabile: decidere se collegare il producer singleton side-band alla diagnostica shadow `analysis`, oppure prima valutare su campioni reali i candidati generati per stabilire se serva un raggruppamento multi-primitiva privato e side-band-specifico. Il producer singleton è volutamente incompleto: rileva frammenti singleton compatibili con side-band, non regioni marginalia complete.
+Prossimo punto autorizzabile: eseguire lo stage `analysis-side-band` su campioni reali già disponibili, raccogliendo conteggi e JSON diagnostici non committati, per valutare falsi positivi, falsi negativi evidenti e necessità di un futuro raggruppamento multi-primitiva privato side-band-specifico. Il producer singleton è volutamente incompleto: rileva frammenti singleton compatibili con side-band, non regioni marginalia complete.
 
-Il prossimo step non deve ancora includere modifica di `PageAnalysis`, schema `1.3`, evidence persistite, score, confidence, ranking, nuovo tipo `Block/Cluster/Span`, raggruppatore neutrale pubblico, framework di clustering, diagnostica CLI, IR, Markdown, EPUB, output legacy, resolution, coverage, ownership, policy editoriale, profili, GUI o AI.
+Il prossimo step non deve ancora includere modifica di `PageAnalysis`, schema `1.3`, evidence persistite, score, confidence, ranking, nuovo tipo `Block/Cluster/Span`, raggruppatore neutrale pubblico, framework di clustering, nuovi stage diagnostici oltre `analysis-side-band`, IR, Markdown, EPUB, output legacy, resolution, coverage, ownership, policy editoriale, profili, GUI o AI.
 
 Vincoli iniziali:
 
@@ -1246,9 +1288,9 @@ Il prossimo task implementativo appartiene alla **Milestone 6 — marginalia e b
 
 ### Obiettivo iniziale
 
-Il contratto `RegionCandidate`, le ipotesi testuali geometriche singleton, le misure geometriche per ipotesi testuali, il builder esplicito side-band e il producer singleton side-band sono stati introdotti.
+Il contratto `RegionCandidate`, le ipotesi testuali geometriche singleton, le misure geometriche per ipotesi testuali, il builder esplicito side-band, il producer singleton side-band e lo stage diagnostico `analysis-side-band` sono stati introdotti.
 
-Il prossimo punto è decidere se collegare il producer singleton side-band alla diagnostica shadow `analysis`, oppure prima valutare su campioni reali i candidati generati per stabilire se serva un raggruppamento multi-primitiva privato e side-band-specifico.
+Il prossimo punto è eseguire lo stage `analysis-side-band` su campioni reali già disponibili, raccogliendo conteggi e JSON diagnostici non committati per valutare falsi positivi, falsi negativi evidenti e necessità di un futuro raggruppamento multi-primitiva privato side-band-specifico.
 
 Il prossimo step deve restare separato da:
 
@@ -1261,7 +1303,7 @@ Il prossimo step deve restare separato da:
 - nuovo tipo `Block/Cluster/Span`;
 - raggruppatore neutrale pubblico;
 - framework di clustering;
-- diagnostica CLI;
+- nuovi stage diagnostici oltre `analysis-side-band`;
 - modifica a IR, Markdown o EPUB;
 - modifica dell'output legacy;
 - resolution;
@@ -1278,7 +1320,7 @@ La Milestone 6 deve restare in shadow mode e produrre dati diagnostici separati.
 
 ## 17. Ultimo avanzamento verificato
 
-La Milestone 5 è stata chiusa dopo la sequenza di commit che ha introdotto il contratto `PageAnalysis`, la validazione cross-model, serializzazione e store JSON, producer strutturali deterministici e dump diagnostico `analysis`. I micro-step completati della Milestone 6 includono `a7afdc7 Add page-level region candidate contract`, `a926c7c Add side-band geometric measurements`, `e25eaa4 Add singleton geometric text hypotheses`, `32382e1 Update Milestone 6 hypothesis state`, `0d7f416 Rename text hypothesis measurements`, `e308fac Add explicit side-band candidate builder` e `265ca16 Add singleton side-band producer`.
+La Milestone 5 è stata chiusa dopo la sequenza di commit che ha introdotto il contratto `PageAnalysis`, la validazione cross-model, serializzazione e store JSON, producer strutturali deterministici e dump diagnostico `analysis`. I micro-step completati della Milestone 6 includono `a7afdc7 Add page-level region candidate contract`, `a926c7c Add side-band geometric measurements`, `e25eaa4 Add singleton geometric text hypotheses`, `32382e1 Update Milestone 6 hypothesis state`, `0d7f416 Rename text hypothesis measurements`, `e308fac Add explicit side-band candidate builder`, `265ca16 Add singleton side-band producer` e `1fc65ce Add singleton side-band diagnostic stage`.
 
 Commit principali della milestone:
 
@@ -1303,7 +1345,7 @@ Correzioni finali consolidate:
 - serializzazione/deserializzazione stretta e store JSON minimale;
 - root page region deterministica;
 - visible primitive extent calcolata tramite intersezione con la geometria effettiva della pagina;
-- stage diagnostico `analysis` in `pymupdf_capture_dump.py`.
+- stage diagnostici `analysis` e `analysis-side-band` in `pymupdf_capture_dump.py`.
 
 Ultime verifiche riportate dopo i micro-step completati della Milestone 6:
 
@@ -1311,6 +1353,7 @@ Ultime verifiche riportate dopo i micro-step completati della Milestone 6:
 - Micro-step 3: test nuovo modulo 44, suite completa 813 test eseguiti, 7 skipped;
 - Micro-step 5: test nuovo modulo 11, suite completa 824 test eseguiti, 7 skipped;
 - Micro-step 6: test nuovo modulo 23, suite completa 847 test eseguiti, 7 skipped;
+- Micro-step 7: test mirati `pymupdf_capture_dump` 23, suite completa 851 test eseguiti, 7 skipped;
 - Ruff verde;
 - BasedPyright: 0 errori, 0 warning, 0 note;
 - `git diff --check` verde;
@@ -1324,7 +1367,8 @@ Milestone 6
 → TextHypothesisMeasurements su selezione esplicita
 → explicit side-band candidate builder
 → singleton side-band producer
-→ diagnostica shadow o valutazione su campioni reali
+→ diagnostics stage analysis-side-band
+→ valutazione su campioni reali
 → nessuna decisione finale o modifica dell'output
 → pipeline legacy autorevole
 ```

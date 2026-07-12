@@ -2,7 +2,7 @@
 
 ## Stato corrente
 
-Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.17.
+Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.18.
 
 L'architettura target e il piano generale di migrazione sono approvati.
 
@@ -373,7 +373,8 @@ Micro-step completati:
 - Micro-step 3 — ipotesi testuali geometriche singleton — completato;
 - Micro-step 4 — rename neutrale delle measurements — completato;
 - Micro-step 5 — builder esplicito di candidate side-band — completato;
-- Micro-step 6 — producer singleton side-band — completato.
+- Micro-step 6 — producer singleton side-band — completato;
+- Micro-step 7 — diagnostica shadow singleton side-band — completato.
 
 Sono approvati:
 
@@ -389,11 +390,15 @@ Sono approvati:
 - `build_singleton_side_band_page_analysis(...)`;
 - producer conservativo singleton `layout.side_band`;
 - soglie geometriche private, page-relative e tracciate da `configuration_id="singleton-side-band-v1"`;
+- stage diagnostico `analysis-side-band`;
+- `dump_singleton_side_band_page_analysis(...)`;
+- CLI `--stage analysis-side-band`;
+- diagnostica JSON per `PageAnalysis` con candidate singleton side-band;
 - nessuna evidence persistita;
 - nessuna provenance candidate-level;
 - nessun producer generale di candidati.
 
-Prossimo micro-step autorizzabile: decidere se collegare il producer singleton side-band alla diagnostica shadow `analysis`, oppure valutare prima i risultati su campioni reali.
+Prossimo micro-step autorizzabile: test reale diagnostico dello stage `analysis-side-band` su campioni disponibili, senza committare output generati.
 
 Vincoli permanenti per il prossimo step:
 
@@ -403,6 +408,9 @@ Vincoli permanenti per il prossimo step:
 - il builder esplicito side-band non è un detector, non seleziona primitive, non raggruppa, non introduce soglie e non decide l'accettazione;
 - il producer singleton side-band produce candidati, non decisioni finali; non riconosce bande laterali complete, non raggruppa primitive, non produce semantica marginalia e non modifica l'output legacy;
 - il producer singleton side-band non introduce score, confidence, ranking o evidence;
+- `analysis-side-band` è diagnostica shadow, non output finale; non modifica lo stage `analysis` esistente, legacy, IR, Markdown o EPUB;
+- i JSON diagnostici reali generati durante le prove non devono essere committati;
+- eventuali risultati reali servono per decidere il prossimo micro-step, non per attivare comportamento produttivo;
 - eventuali cambi alle soglie o alla loro semantica devono cambiare `configuration_id`;
 - il producer futuro può usare il builder esplicito, ma la generazione delle selezioni resta una decisione separata;
 - `GeometricTextHypothesis` resta il tipo generale per selezioni testuali geometriche;
