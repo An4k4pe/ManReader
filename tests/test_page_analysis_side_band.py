@@ -7,6 +7,7 @@ from geometry_model import PageGeometry
 from page_analysis_model import PAGE_ANALYSIS_SCHEMA_VERSION, PageAnalysis
 from page_analysis_side_band import (
     _build_local_horizontal_fragment_hypotheses,
+    build_local_fragment_side_band_page_analysis,
     build_singleton_side_band_page_analysis,
 )
 from page_analysis_text_hypotheses import GeometricTextHypothesis
@@ -515,6 +516,107 @@ class LocalHorizontalFragmentHypothesesTest(unittest.TestCase):
         )
         self.assertEqual(analysis.provenance.configuration_id, "singleton-side-band-v1")
         self.assertEqual(analysis.provenance.producer_name, "page_analysis.singleton_side_band")
+
+
+class BuildLocalFragmentSideBandPageAnalysisTest(unittest.TestCase):
+    def test_rejects_wrong_input_and_empty_generation_id(self) -> None:
+        with self.assertRaisesRegex(ValueError, "primitive_page"):
+            build_local_fragment_side_band_page_analysis(cast(Any, object()), generation_id="gen-1")
+        with self.assertRaisesRegex(ValueError, "generation_id"):
+            build_local_fragment_side_band_page_analysis(_primitive_page(), generation_id="")
+
+    def test_returns_current_schema_empty_regions_relations_and_new_provenance(self) -> None:
+        page = _primitive_page()
+
+        analysis = build_local_fragment_side_band_page_analysis(page, generation_id="gen-1")
+
+        self.assertEqual(analysis.schema_version, PAGE_ANALYSIS_SCHEMA_VERSION)
+        self.assertEqual(analysis.regions, ())
+        self.assertEqual(analysis.relations, ())
+        self.assertEqual(analysis.provenance.producer_name, "page_analysis.local_fragment_side_band")
+        self.assertEqual(analysis.provenance.producer_version, "0.1")
+        self.assertEqual(analysis.provenance.configuration_id, "local-fragment-side-band-v1")
+
+    def test_contiguous_lateral_fragments_produce_one_ordered_multi_candidate(self) -> None:
+        page = _primitive_page(
+            text_primitives=(
+                _text_primitive("second", (11.0, 50.0, 21.0, 60.0)),
+                _text_primitive("first", (0.0, 50.0, 10.0, 60.0)),
+            )
+        )
+
+        analysis = build_local_fragment_side_band_page_analysis(page, generation_id="gen-1")
+
+        self.assertEqual(
+            _candidate_ids(analysis),
+            ("candidate:side-band:local-fragment:first+second",),
+        )
+        candidate = analysis.candidates[0]
+        self.assertEqual(candidate.proposed_structural_kind, "layout.side_band")
+        self.assertEqual(candidate.primitive_ids, ("first", "second"))
+        self.assertEqual(candidate.bbox, (0.0, 50.0, 21.0, 60.0))
+
+    def test_reversed_input_produces_same_result(self) -> None:
+        page = _primitive_page(
+            text_primitives=(
+                _text_primitive("first", (0.0, 50.0, 10.0, 60.0)),
+                _text_primitive("second", (11.0, 50.0, 21.0, 60.0)),
+            )
+        )
+        reversed_page = _primitive_page(text_primitives=tuple(reversed(page.text_primitives)))
+
+        self.assertEqual(
+            build_local_fragment_side_band_page_analysis(page, generation_id="gen-1"),
+            build_local_fragment_side_band_page_analysis(reversed_page, generation_id="gen-1"),
+        )
+
+    def test_centered_fragments_and_unsupported_text_do_not_produce_side_band(self) -> None:
+        page = _primitive_page(
+            text_primitives=(
+                _text_primitive("title-a", (40.0, 50.0, 50.0, 60.0)),
+                _text_primitive("title-b", (51.0, 50.0, 61.0, 60.0)),
+                _text_primitive("vertical", (0.0, 80.0, 10.0, 90.0), direction=(0.0, 1.0)),
+                _text_primitive(
+                    "diagonal",
+                    (11.0, 80.0, 21.0, 90.0),
+                    direction=(0.7071067811865476, 0.7071067811865476),
+                ),
+                _text_primitive("outside", (110.0, 80.0, 120.0, 90.0)),
+            )
+        )
+
+        self.assertEqual(
+            build_local_fragment_side_band_page_analysis(page, generation_id="gen-1").candidates,
+            (),
+        )
+
+    def test_fragments_separated_by_gutter_are_not_merged(self) -> None:
+        page = _primitive_page(
+            text_primitives=(
+                _text_primitive("left", (0.0, 50.0, 10.0, 60.0)),
+                _text_primitive("farther", (30.0, 50.0, 40.0, 60.0)),
+            )
+        )
+
+        analysis = build_local_fragment_side_band_page_analysis(page, generation_id="gen-1")
+
+        self.assertEqual(
+            _candidate_ids(analysis),
+            ("candidate:side-band:local-fragment:left",),
+        )
+        self.assertEqual(analysis.candidates[0].primitive_ids, ("left",))
+
+    def test_result_validates_against_primitive_page(self) -> None:
+        page = _primitive_page(
+            text_primitives=(
+                _text_primitive("first", (0.0, 50.0, 10.0, 60.0)),
+                _text_primitive("second", (11.0, 50.0, 21.0, 60.0)),
+            )
+        )
+
+        analysis = build_local_fragment_side_band_page_analysis(page, generation_id="gen-1")
+
+        validate_page_analysis_against_primitive_page(analysis, page)
 
 
 if __name__ == "__main__":

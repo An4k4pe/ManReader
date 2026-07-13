@@ -1,9 +1,8 @@
-"""Produce conservative singleton structural side-band candidates.
+"""Produce conservative structural side-band candidates.
 
-This producer considers only the canonical singleton text hypotheses already built
-from a normalized page. It does not group primitives or recognize a complete
-side-band. Each accepted singleton becomes one unresolved ``layout.side_band``
-candidate.
+The singleton producer considers only canonical singleton text hypotheses. The
+local-fragment producer uses conservative locally contiguous hypotheses. Each
+accepted hypothesis becomes one unresolved ``layout.side_band`` candidate.
 """
 
 from __future__ import annotations
@@ -30,6 +29,9 @@ from primitive_model import NormalizedPrimitivePage
 _PRODUCER_NAME = "page_analysis.singleton_side_band"
 _PRODUCER_VERSION = "0.1"
 _CONFIGURATION_ID = "singleton-side-band-v1"
+_LOCAL_FRAGMENT_PRODUCER_NAME = "page_analysis.local_fragment_side_band"
+_LOCAL_FRAGMENT_PRODUCER_VERSION = "0.1"
+_LOCAL_FRAGMENT_CONFIGURATION_ID = "local-fragment-side-band-v1"
 _SIDE_BAND_OUTER_BAND_RATIO = 0.25
 _SIDE_BAND_MAX_WIDTH_RATIO = 0.22
 _SIDE_BAND_VERTICAL_MARGIN_RATIO = 0.12
@@ -89,6 +91,66 @@ def build_singleton_side_band_page_analysis(
             producer_name=_PRODUCER_NAME,
             producer_version=_PRODUCER_VERSION,
             configuration_id=_CONFIGURATION_ID,
+        ),
+        regions=(),
+        relations=(),
+        candidates=tuple(candidates),
+    )
+    validate_page_analysis_against_primitive_page(analysis, primitive_page)
+    return analysis
+
+
+def build_local_fragment_side_band_page_analysis(
+    primitive_page: NormalizedPrimitivePage,
+    *,
+    generation_id: str,
+) -> PageAnalysis:
+    """Build side-band candidates from locally contiguous text fragments."""
+
+    if not isinstance(primitive_page, NormalizedPrimitivePage):
+        raise ValueError("primitive_page must be a NormalizedPrimitivePage")
+    if not isinstance(generation_id, str) or not generation_id:
+        raise ValueError("generation_id must be a non-empty string")
+
+    page_width = primitive_page.page_geometry.width
+    page_height = primitive_page.page_geometry.height
+    candidates = []
+
+    for hypothesis in _build_local_horizontal_fragment_hypotheses(primitive_page):
+        primitive_ids = hypothesis.primitive_ids
+        measurements = measure_geometric_text_hypothesis(
+            primitive_page,
+            primitive_ids=primitive_ids,
+        )
+        if not _is_conservative_side_band_singleton(
+            measurements,
+            page_width=page_width,
+            page_height=page_height,
+        ):
+            continue
+
+        candidates.append(
+            build_side_band_candidate_from_text_hypothesis(
+                primitive_page,
+                candidate_id=(
+                    "candidate:side-band:local-fragment:" + "+".join(primitive_ids)
+                ),
+                primitive_ids=primitive_ids,
+            )
+        )
+
+    analysis = PageAnalysis(
+        schema_version=PAGE_ANALYSIS_SCHEMA_VERSION,
+        generation_id=generation_id,
+        page_id=primitive_page.page_id,
+        provenance=PageAnalysisProvenance(
+            source_id=primitive_page.source_id,
+            source_capture_id=primitive_page.source_capture_id,
+            source_page_id=primitive_page.page_id,
+            source_primitive_schema_version=primitive_page.schema_version,
+            producer_name=_LOCAL_FRAGMENT_PRODUCER_NAME,
+            producer_version=_LOCAL_FRAGMENT_PRODUCER_VERSION,
+            configuration_id=_LOCAL_FRAGMENT_CONFIGURATION_ID,
         ),
         regions=(),
         relations=(),
