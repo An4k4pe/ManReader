@@ -2,7 +2,7 @@
 
 ## Stato corrente
 
-Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.19.
+Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.20.
 
 L'architettura target e il piano generale di migrazione sono approvati.
 
