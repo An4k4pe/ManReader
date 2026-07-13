@@ -1,6 +1,6 @@
 # ManReader — Stato progetto
 
-## Versione corrente: v0.18 — Milestone 6 in corso
+## Versione corrente: v0.19 — Milestone 6 in corso
 
 ## 1. Decisione di fase
 
@@ -22,7 +22,7 @@ Stato sintetico delle milestone:
 - Milestone 5 — completata;
 - Milestone 6 — corrente.
 
-I primi micro-step della Milestone 6 completati sono:
+I micro-step completati della Milestone 6 sono:
 
 ```text
 a7afdc7 Add page-level region candidate contract
@@ -33,6 +33,8 @@ e25eaa4 Add singleton geometric text hypotheses
 e308fac Add explicit side-band candidate builder
 265ca16 Add singleton side-band producer
 1fc65ce Add singleton side-band diagnostic stage
+94d28dd Add local side-band text fragment grouping helper
+41863dc Add local-fragment side-band producer
 ```
 
 Questo cambio di fase non autorizza una riscrittura generale della pipeline. Ogni modifica deve:
@@ -1104,6 +1106,41 @@ BasedPyright: 0 errori, 0 warning, 0 note
 git diff --check verde
 ```
 
+Micro-step 8 — helper privato di raggruppamento local-fragment — completato con:
+
+```text
+94d28dd Add local side-band text fragment grouping helper
+```
+
+Il helper privato `_build_local_horizontal_fragment_hypotheses(...)` costruisce solo ipotesi orizzontali localmente contigue, ordinate e non ambigue. Non introduce tipi pubblici, clustering generico, classificazione, candidate o modifiche a `PageAnalysis`.
+
+Micro-step 9 — local-fragment side-band producer — completato con:
+
+```text
+41863dc Add local-fragment side-band producer
+```
+
+Sono ora presenti e approvati:
+
+- `build_local_fragment_side_band_page_analysis(...)`;
+- producer separato dal singleton che usa `_build_local_horizontal_fragment_hypotheses(...)`;
+- candidate `RegionCandidate(proposed_structural_kind="layout.side_band")` da hypothesis local-fragment, anche multi-primitiva;
+- provenance `producer_name="page_analysis.local_fragment_side_band"`, `producer_version="0.1"`, `configuration_id="local-fragment-side-band-v1"`.
+
+Il producer misura ogni hypothesis con `measure_geometric_text_hypothesis(...)`, applica i predicati side-band conservativi già usati dal singleton e restituisce `PageAnalysis` schema `1.2` con `regions=()` e `relations=()`. Gli ID candidate sono deterministici e distinti dal singleton; per una candidate multi-primitiva usano il prefisso `candidate:side-band:local-fragment:` con primitive ID ordinate da sinistra a destra.
+
+Restano invariati `build_singleton_side_band_page_analysis(...)`, `producer_name="page_analysis.singleton_side_band"`, `configuration_id="singleton-side-band-v1"`, lo stage diagnostico `analysis-side-band`, `PageAnalysis` schema `1.2`, `PageAnalysis`, IR, Markdown, EPUB e output legacy. Non sono introdotti evidence, score, confidence, ranking, nuovi tipi pubblici o framework di clustering.
+
+Verifiche riportate:
+
+```text
+tests/test_page_analysis_side_band.py: 39 test OK
+suite completa: 867 test OK, 7 skipped
+Ruff verde
+BasedPyright: 0 errori, 0 warning, 0 note
+git diff --check verde
+```
+
 Pipeline interna corrente della Milestone 6:
 
 ```text
@@ -1112,8 +1149,9 @@ NormalizedPrimitivePage
 → TextHypothesisMeasurements su selezione esplicita
 → explicit side-band candidate builder
 → singleton side-band producer
+→ local-fragment side-band producer separato
 → diagnostics stage analysis-side-band
-→ valutazione su campioni reali
+→ valutazione di uno stage diagnostico locale separato
 ```
 
 `GeometricTextHypothesis` resta il tipo generale per una selezione testuale geometrica. Non è una side-band, una regione, un candidato persistito, una decisione, una evidence persistita o reading order. Il contratto ammette più `primitive_ids`, ma il builder corrente produce solo singleton.
@@ -1135,13 +1173,13 @@ Tassonomia sintetica delle bbox:
 - bbox di ipotesi strutturale:
   - futura `GeometricTextHypothesis` multi-ID prodotta da una regola di membership.
 - bbox di candidato layout:
-  - `RegionCandidate` singleton prodotto con `proposed_structural_kind="layout.side_band"`; eventuali candidati multi-primitiva restano futuri.
+  - `RegionCandidate` singleton o local-fragment multi-primitiva prodotto con `proposed_structural_kind="layout.side_band"`.
 - bbox semantica o risolta:
   - futuro marginalia semantico dopo resolution.
 
-Prossimo punto autorizzabile: eseguire lo stage `analysis-side-band` su campioni reali già disponibili, raccogliendo conteggi e JSON diagnostici non committati, per valutare falsi positivi, falsi negativi evidenti e necessità di un futuro raggruppamento multi-primitiva privato side-band-specifico. Il producer singleton è volutamente incompleto: rileva frammenti singleton compatibili con side-band, non regioni marginalia complete.
+Prossimo punto autorizzabile: valutare se aggiungere uno stage diagnostico separato per il producer local-fragment, senza modificare `analysis-side-band` e senza sostituire `singleton-side-band-v1`. Se approvato, lo stage dovrà essere distinto dal singleton; entrambi i producer restano incompleti e non riconoscono regioni marginalia complete.
 
-Il prossimo step non deve ancora includere modifica di `PageAnalysis`, schema `1.3`, evidence persistite, score, confidence, ranking, nuovo tipo `Block/Cluster/Span`, raggruppatore neutrale pubblico, framework di clustering, nuovi stage diagnostici oltre `analysis-side-band`, IR, Markdown, EPUB, output legacy, resolution, coverage, ownership, policy editoriale, profili, GUI o AI.
+Il prossimo step non deve ancora includere modifica di `PageAnalysis`, schema `1.3`, evidence persistite, score, confidence, ranking, nuovo tipo `Block/Cluster/Span`, raggruppatore neutrale pubblico, framework di clustering, IR, Markdown, EPUB, output legacy, resolution, coverage, ownership, policy editoriale, profili, GUI o AI. Un eventuale nuovo stage diagnostico è limitato al producer local-fragment e deve restare separato da `analysis-side-band`.
 
 Vincoli iniziali:
 
@@ -1288,9 +1326,9 @@ Il prossimo task implementativo appartiene alla **Milestone 6 — marginalia e b
 
 ### Obiettivo iniziale
 
-Il contratto `RegionCandidate`, le ipotesi testuali geometriche singleton, le misure geometriche per ipotesi testuali, il builder esplicito side-band, il producer singleton side-band e lo stage diagnostico `analysis-side-band` sono stati introdotti.
+Il contratto `RegionCandidate`, le ipotesi testuali geometriche singleton, le misure geometriche per ipotesi testuali, il builder esplicito side-band, i producer singleton e local-fragment side-band e lo stage diagnostico `analysis-side-band` sono stati introdotti.
 
-Il prossimo punto è eseguire lo stage `analysis-side-band` su campioni reali già disponibili, raccogliendo conteggi e JSON diagnostici non committati per valutare falsi positivi, falsi negativi evidenti e necessità di un futuro raggruppamento multi-primitiva privato side-band-specifico.
+Il prossimo punto è valutare se aggiungere uno stage diagnostico separato per il producer local-fragment, senza modificare `analysis-side-band` e senza sostituire `singleton-side-band-v1`. Se approvato, lo stage dovrà restare distinto dal singleton.
 
 Il prossimo step deve restare separato da:
 
@@ -1303,7 +1341,7 @@ Il prossimo step deve restare separato da:
 - nuovo tipo `Block/Cluster/Span`;
 - raggruppatore neutrale pubblico;
 - framework di clustering;
-- nuovi stage diagnostici oltre `analysis-side-band`;
+- nuovi stage diagnostici non limitati a quello separato, se approvato, per il producer local-fragment;
 - modifica a IR, Markdown o EPUB;
 - modifica dell'output legacy;
 - resolution;
@@ -1320,7 +1358,7 @@ La Milestone 6 deve restare in shadow mode e produrre dati diagnostici separati.
 
 ## 17. Ultimo avanzamento verificato
 
-La Milestone 5 è stata chiusa dopo la sequenza di commit che ha introdotto il contratto `PageAnalysis`, la validazione cross-model, serializzazione e store JSON, producer strutturali deterministici e dump diagnostico `analysis`. I micro-step completati della Milestone 6 includono `a7afdc7 Add page-level region candidate contract`, `a926c7c Add side-band geometric measurements`, `e25eaa4 Add singleton geometric text hypotheses`, `32382e1 Update Milestone 6 hypothesis state`, `0d7f416 Rename text hypothesis measurements`, `e308fac Add explicit side-band candidate builder`, `265ca16 Add singleton side-band producer` e `1fc65ce Add singleton side-band diagnostic stage`.
+La Milestone 5 è stata chiusa dopo la sequenza di commit che ha introdotto il contratto `PageAnalysis`, la validazione cross-model, serializzazione e store JSON, producer strutturali deterministici e dump diagnostico `analysis`. I micro-step completati della Milestone 6 includono `a7afdc7 Add page-level region candidate contract`, `a926c7c Add side-band geometric measurements`, `e25eaa4 Add singleton geometric text hypotheses`, `32382e1 Update Milestone 6 hypothesis state`, `0d7f416 Rename text hypothesis measurements`, `e308fac Add explicit side-band candidate builder`, `265ca16 Add singleton side-band producer`, `1fc65ce Add singleton side-band diagnostic stage`, `94d28dd Add local side-band text fragment grouping helper` e `41863dc Add local-fragment side-band producer`.
 
 Commit principali della milestone:
 
@@ -1354,6 +1392,7 @@ Ultime verifiche riportate dopo i micro-step completati della Milestone 6:
 - Micro-step 5: test nuovo modulo 11, suite completa 824 test eseguiti, 7 skipped;
 - Micro-step 6: test nuovo modulo 23, suite completa 847 test eseguiti, 7 skipped;
 - Micro-step 7: test mirati `pymupdf_capture_dump` 23, suite completa 851 test eseguiti, 7 skipped;
+- Micro-step 9: `tests/test_page_analysis_side_band.py` 39 test OK, suite completa 867 test OK, 7 skipped;
 - Ruff verde;
 - BasedPyright: 0 errori, 0 warning, 0 note;
 - `git diff --check` verde;
@@ -1367,8 +1406,11 @@ Milestone 6
 → TextHypothesisMeasurements su selezione esplicita
 → explicit side-band candidate builder
 → singleton side-band producer
+→ local-fragment side-band producer separato
 → diagnostics stage analysis-side-band
-→ valutazione su campioni reali
+→ valutazione di uno stage diagnostico locale separato
 → nessuna decisione finale o modifica dell'output
 → pipeline legacy autorevole
 ```
+
+State.md verrà compattato in un commit documentale separato se approvato.

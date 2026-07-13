@@ -2,7 +2,7 @@
 
 ## Stato corrente
 
-Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.18.
+Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.19.
 
 L'architettura target e il piano generale di migrazione sono approvati.
 
@@ -374,7 +374,9 @@ Micro-step completati:
 - Micro-step 4 — rename neutrale delle measurements — completato;
 - Micro-step 5 — builder esplicito di candidate side-band — completato;
 - Micro-step 6 — producer singleton side-band — completato;
-- Micro-step 7 — diagnostica shadow singleton side-band — completato.
+- Micro-step 7 — diagnostica shadow singleton side-band — completato;
+- Micro-step 8 — helper privato di raggruppamento local-fragment — completato;
+- Micro-step 9 — local-fragment side-band producer — completato.
 
 Sono approvati:
 
@@ -390,6 +392,10 @@ Sono approvati:
 - `build_singleton_side_band_page_analysis(...)`;
 - producer conservativo singleton `layout.side_band`;
 - soglie geometriche private, page-relative e tracciate da `configuration_id="singleton-side-band-v1"`;
+- `_build_local_horizontal_fragment_hypotheses(...)` privato e side-band-specifico;
+- `build_local_fragment_side_band_page_analysis(...)`;
+- producer locale separato con candidate `layout.side_band`, anche multi-primitiva;
+- provenance locale `page_analysis.local_fragment_side_band`, versione `0.1`, `configuration_id="local-fragment-side-band-v1"`;
 - stage diagnostico `analysis-side-band`;
 - `dump_singleton_side_band_page_analysis(...)`;
 - CLI `--stage analysis-side-band`;
@@ -398,7 +404,7 @@ Sono approvati:
 - nessuna provenance candidate-level;
 - nessun producer generale di candidati.
 
-Prossimo micro-step autorizzabile: test reale diagnostico dello stage `analysis-side-band` su campioni disponibili, senza committare output generati.
+Prossimo micro-step autorizzabile: valutare se aggiungere uno stage diagnostico separato per il producer local-fragment, senza modificare `analysis-side-band` e senza sostituire `singleton-side-band-v1`. Se approvato, lo stage dovrà restare distinto da quello singleton.
 
 Vincoli permanenti per il prossimo step:
 
@@ -408,6 +414,8 @@ Vincoli permanenti per il prossimo step:
 - il builder esplicito side-band non è un detector, non seleziona primitive, non raggruppa, non introduce soglie e non decide l'accettazione;
 - il producer singleton side-band produce candidati, non decisioni finali; non riconosce bande laterali complete, non raggruppa primitive, non produce semantica marginalia e non modifica l'output legacy;
 - il producer singleton side-band non introduce score, confidence, ranking o evidence;
+- il producer local-fragment è separato dal singleton, usa il helper privato locale e può produrre candidate multi-primitiva, ma non introduce score, confidence, ranking o evidence;
+- `build_singleton_side_band_page_analysis(...)`, `producer_name="page_analysis.singleton_side_band"` e `configuration_id="singleton-side-band-v1"` restano invariati;
 - `analysis-side-band` è diagnostica shadow, non output finale; non modifica lo stage `analysis` esistente, legacy, IR, Markdown o EPUB;
 - i JSON diagnostici reali generati durante le prove non devono essere committati;
 - eventuali risultati reali servono per decidere il prossimo micro-step, non per attivare comportamento produttivo;
@@ -418,7 +426,7 @@ Vincoli permanenti per il prossimo step:
 - non è autorizzato ora un nuovo tipo pubblico `GeometricTextBlock`, `GeometricTextCluster`, `GeometricTextSpan` o equivalente;
 - non è autorizzato ora un raggruppatore neutrale pubblico;
 - eventuali raggruppamenti multi-primitiva devono restare interni al futuro producer finché non esiste riuso dimostrato;
-- un futuro raggruppamento, se approvato, dovrà essere privato, side-band-specifico e testato come micro-step separato;
+- il raggruppamento local-fragment approvato resta privato, side-band-specifico e non costituisce un raggruppatore neutrale pubblico;
 - l'ordine canonico non è reading order.
 
 Non sono ancora autorizzati:
