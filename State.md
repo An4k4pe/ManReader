@@ -109,6 +109,8 @@ Micro-step completati:
 9. `41863dc` — `build_local_fragment_side_band_page_analysis(...)`;
 10. `f829850` — `Add local-fragment side-band diagnostic stage`.
 11. `dcefd53` — `PrimitivePairMeasurements` e `measure_primitive_pair(...)`.
+12. `624599c` — stage diagnostico `primitive-pair` in `pymupdf_capture_dump.py`.
+13. `fd12ce6` — opzione diagnostica `--render-page-image PATH`.
 
 Contratti disponibili:
 
@@ -117,6 +119,8 @@ Contratti disponibili:
 - `build_side_band_candidate_from_text_hypothesis(...)`, che converte primitive ID espliciti in `RegionCandidate(layout.side_band)` senza selezionare o raggruppare;
 - `analysis-side-band`, `dump_singleton_side_band_page_analysis(...)` e CLI `--stage analysis-side-band` per il producer singleton;
 - `analysis-side-band-local-fragment`, `dump_local_fragment_side_band_page_analysis(...)` e CLI `--stage analysis-side-band-local-fragment` per il producer local-fragment.
+- `dump_primitive_pair_measurements(...)` e CLI `--stage primitive-pair`, con `--first-primitive-id` e `--second-primitive-id`, per misurare due primitive esplicite;
+- `--render-page-image PATH`, opzione trasversale che rende in PNG la stessa pagina analizzata per qualunque stage diagnostico.
 
 ### Producer distinti
 
@@ -154,6 +158,8 @@ Il percorso side-band text-only ha prodotto diagnostica utile e resta mantenuto:
 
 La nuova linea principale è quindi un substrato geometrico comune, multimodale, puro e non persistito. Il micro-step completato introduce `PrimitivePairMeasurements` e `measure_primitive_pair(...)`: misura una coppia esplicita di primitive text/image/drawing usando bbox originale e bbox visibile dopo clipping, e restituisce gap, overlap, ratio, contenimento, distanze dai bordi pagina e delta fra bordi e centri. Non classifica e non produce `RegionCandidate`.
 
+Lo stage `primitive-pair` espone questa misura soltanto per i due ID forniti esplicitamente: non seleziona coppie, non produce candidate e non cambia `PageAnalysis`. L'opzione `--render-page-image PATH` produce esclusivamente il PNG diagnostico della pagina, senza overlay, crop o annotazioni, e non modifica il JSON dello stage.
+
 Questa linea non introduce ancora descrizione geometrica completa della pagina, partizione in blocchi, grafo geometrico, clustering, detector generale, score/confidence/ranking, nuove candidate, modifiche a `PageAnalysis`, IR, Markdown, EPUB o output legacy.
 
 ## Vincoli attivi della Milestone 6
@@ -178,10 +184,10 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-Valutare il primo uso diagnostico di `PrimitivePairMeasurements` su coppie esplicite di primitive, anche multimodali. Non è ancora autorizzato un detector generale, né persistenza o schema nuovo.
+Valutare il primo uso diagnostico di `PrimitivePairMeasurements`, tramite `primitive-pair`, su coppie esplicite di primitive anche multimodali. Non è ancora autorizzato un detector generale, né persistenza o schema nuovo.
 
 ## Ultima baseline verificata
 
-Commit dcefd53: test e controlli qualità verdi.
+Commit fd12ce6: Ruff e BasedPyright verdi; 34 test mirati e 890 test complessivi OK, 7 skipped; `git diff --check` verde.
 
-State.md verrà compattato nuovamente solo in un commit documentale separato, se approvato
+State.md verrà compattato nuovamente solo in un commit documentale separato, se approvato.
