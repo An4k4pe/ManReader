@@ -115,6 +115,7 @@ Micro-step completati:
 15. `2fa3c69` — coverage ratio diagnostiche per `primitive-neighborhood`.
 16. `0f33915` — producer `layout.page_covering_visual`, modulo dedicato e stage CLI `analysis-page-covering-visual`.
 17. `831eae5` — producer `layout.page_edge_visual`, modulo dedicato e stage CLI `analysis-page-edge-visual`.
+18. `9bb3fce` — stage read-only `side-band-local-fragment-diagnostics`.
 
 Contratti disponibili:
 
@@ -123,6 +124,7 @@ Contratti disponibili:
 - `build_side_band_candidate_from_text_hypothesis(...)`, che converte primitive ID espliciti in `RegionCandidate(layout.side_band)` senza selezionare o raggruppare;
 - `analysis-side-band`, `dump_singleton_side_band_page_analysis(...)` e CLI `--stage analysis-side-band` per il producer singleton;
 - `analysis-side-band-local-fragment`, `dump_local_fragment_side_band_page_analysis(...)` e CLI `--stage analysis-side-band-local-fragment` per il producer local-fragment;
+- `dump_side_band_local_fragment_diagnostics(...)` e CLI `--stage side-band-local-fragment-diagnostics`, diagnostica read-only dei candidate local-fragment side-band con JSON plain, non `PageAnalysis`;
 - `PrimitivePairMeasurements` e `measure_primitive_pair(...)` per la misura pura di una coppia esplicita text/image/drawing;
 - `dump_primitive_pair_measurements(...)` e CLI `--stage primitive-pair`, con `--first-primitive-id` e `--second-primitive-id`, per misurare due primitive esplicite;
 - `dump_primitive_neighborhood_measurements(...)` e CLI `--stage primitive-neighborhood`, con `--primitive-id`, per osservare una primitiva esplicita rispetto alle altre primitive visibili della pagina; include `first_visible_width_ratio`, `first_visible_height_ratio`, `first_visible_area_ratio`, `neighbor_visible_width_ratio`, `neighbor_visible_height_ratio` e `neighbor_visible_area_ratio`;
@@ -170,6 +172,8 @@ Lo stage `primitive-pair` espone questa misura soltanto per i due ID forniti esp
 
 `primitive-neighborhood` è solo osservazione diagnostica delle relazioni di una primitiva esplicita rispetto alle altre primitive visibili della pagina: non seleziona automaticamente candidate né introduce decisioni strutturali. Le coverage ratio sono derivate solo da bbox visibili e geometria pagina, non modificano `PrimitivePairMeasurements` né l'ordinamento dei neighbor, e non sono classificazioni, score, confidence o ranking.
 
+Lo stage `side-band-local-fragment-diagnostics` non crea, filtra o modifica candidate e non produce `PageAnalysis`: descrive testo aggregato, ratio pagina, distanze dai bordi, flag formali e diagnostica same-baseline delle candidate local-fragment esistenti. Non introduce score, confidence, ranking, classificazioni semantiche o Resolution. Lo smoke reale su DB p28 e Lan p267 conferma che numeri, punteggiatura, marker/bullet e molti frammenti di riga sono spiegabili descrittivamente senza stringere il producer.
+
 Il producer page-covering produce `RegionCandidate`, non `LayoutRegion`: considera solo `ImageOccurrencePrimitive` e `DrawingPrimitive`, usa bbox visibile clipped alla pagina e soglie conservative `visible_width_ratio >= 0.95` e `visible_height_ratio >= 0.95`. Non classifica come background/decorative, non decide rimozione o export policy e non modifica neighborhood, IR, Markdown, EPUB o output legacy. Lo smoke reale ha individuato candidate page-covering dove presenti e non ne ha prodotto su una pagina sommario priva di visual full-page.
 
 Il producer page-edge produce `RegionCandidate`, non `LayoutRegion`: considera solo `ImageOccurrencePrimitive` e `DrawingPrimitive`, usa bbox visibile clipped alla pagina e soglie conservative page-relative per visuali lunghe, sottili e aderenti ai bordi. Non importa né dipende da page-covering visual, non classifica come `decorative`, non decide rimozione o export policy e non modifica neighborhood, IR, Markdown, EPUB o output legacy.
@@ -200,10 +204,10 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-Eseguire testing diagnostico reale confrontando `analysis-side-band`, `analysis-side-band-local-fragment`, `analysis-page-covering-visual`, `analysis-page-edge-visual`, `primitive-neighborhood` e PNG tramite `--render-page-image`; usare gli output per interpretare falsi positivi side-band/marginalia. Non progettare ancora un nuovo detector prima di leggere i risultati e non committare JSON o PNG generati.
+Continuare a usare la diagnostica per interpretare i candidate side-band; non stringere ancora `local-fragment` e mantenere recall alto. Eventuali filtro o Resolution restano una fase separata futura. Non committare JSON o PNG generati.
 
 ## Ultima baseline verificata
 
-Commit 831eae5: Ruff e BasedPyright verdi; 6 test producer edge e 48 test dump OK; 917 test complessivi OK, 7 skipped; `git diff --check` verde.
+Commit 9bb3fce: Ruff e BasedPyright verdi; 5 test diagnostica e 52 test dump OK; 927 test complessivi OK, 7 skipped; `git diff --check` verde.
 
 State.md verrà compattato nuovamente solo in un commit documentale separato, se approvato.
