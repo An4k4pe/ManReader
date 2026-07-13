@@ -112,6 +112,7 @@ Micro-step completati:
 12. `624599c` — stage diagnostico `primitive-pair` in `pymupdf_capture_dump.py`.
 13. `fd12ce6` — opzione diagnostica `--render-page-image PATH`.
 14. `2943670` — stage diagnostico `primitive-neighborhood` in `pymupdf_capture_dump.py`.
+15. `2fa3c69` — coverage ratio diagnostiche per `primitive-neighborhood`.
 
 Contratti disponibili:
 
@@ -122,7 +123,7 @@ Contratti disponibili:
 - `analysis-side-band-local-fragment`, `dump_local_fragment_side_band_page_analysis(...)` e CLI `--stage analysis-side-band-local-fragment` per il producer local-fragment;
 - `PrimitivePairMeasurements` e `measure_primitive_pair(...)` per la misura pura di una coppia esplicita text/image/drawing;
 - `dump_primitive_pair_measurements(...)` e CLI `--stage primitive-pair`, con `--first-primitive-id` e `--second-primitive-id`, per misurare due primitive esplicite;
-- `dump_primitive_neighborhood_measurements(...)` e CLI `--stage primitive-neighborhood`, con `--primitive-id`, per osservare una primitiva esplicita rispetto alle altre primitive visibili della pagina;
+- `dump_primitive_neighborhood_measurements(...)` e CLI `--stage primitive-neighborhood`, con `--primitive-id`, per osservare una primitiva esplicita rispetto alle altre primitive visibili della pagina; include `first_visible_width_ratio`, `first_visible_height_ratio`, `first_visible_area_ratio`, `neighbor_visible_width_ratio`, `neighbor_visible_height_ratio` e `neighbor_visible_area_ratio`;
 - `--render-page-image PATH`, opzione trasversale che rende in PNG la stessa pagina analizzata per qualunque stage diagnostico.
 
 ### Producer distinti
@@ -163,7 +164,7 @@ La nuova linea principale è quindi un substrato geometrico comune, multimodale,
 
 Lo stage `primitive-pair` espone questa misura soltanto per i due ID forniti esplicitamente: non seleziona coppie, non produce candidate e non cambia `PageAnalysis`. L'opzione `--render-page-image PATH` produce esclusivamente il PNG diagnostico della pagina, senza overlay, crop o annotazioni, e non modifica il JSON dello stage.
 
-`primitive-neighborhood` è solo osservazione diagnostica delle relazioni di una primitiva esplicita rispetto alle altre primitive visibili della pagina: non seleziona automaticamente candidate né introduce decisioni strutturali.
+`primitive-neighborhood` è solo osservazione diagnostica delle relazioni di una primitiva esplicita rispetto alle altre primitive visibili della pagina: non seleziona automaticamente candidate né introduce decisioni strutturali. Le coverage ratio sono derivate solo da bbox visibili e geometria pagina, non modificano `PrimitivePairMeasurements` né l'ordinamento dei neighbor, e non sono classificazioni, score, confidence o ranking.
 
 Questa linea non introduce ancora detector generale, selezione automatica di candidate, score, confidence, ranking semantico, clustering, grafo geometrico persistito, descrizione geometrica completa della pagina, nuove candidate, modifiche a `PageAnalysis`, schema `1.3`, IR, Markdown, EPUB o output legacy.
 
@@ -189,10 +190,10 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-Eseguire testing diagnostico reale su alcune pagine PDF usando `primitives`, `primitive-pair`, `primitive-neighborhood` e `--render-page-image`; raccogliere osservazioni qualitative sulle relazioni testo/drawing/immagine. Non committare JSON o PNG generati e non progettare ancora un detector prima di interpretare i risultati.
+Valutare se introdurre un candidate producer diagnostico per primitive visuali page-covering, con structural kind provvisorio `layout.page_background` o nome equivalente da decidere esplicitamente. Il candidate non deve implicare rimozione editoriale, export policy o classificazione `decorative` definitiva, né modifiche a IR, Markdown, EPUB o output legacy. Non committare JSON o PNG generati.
 
 ## Ultima baseline verificata
 
-Commit 2943670: Ruff e BasedPyright verdi; 40 test mirati e 896 test complessivi OK, 7 skipped; `git diff --check` verde.
+Commit 2fa3c69: Ruff e BasedPyright verdi; 40 test mirati e 896 test complessivi OK, 7 skipped; `git diff --check` verde.
 
 State.md verrà compattato nuovamente solo in un commit documentale separato, se approvato.
