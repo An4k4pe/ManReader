@@ -25,6 +25,7 @@ from pymupdf_capture_dump import (
     dump_normalized_primitives,
     dump_page_analysis,
     dump_page_covering_visual_page_analysis,
+    dump_page_edge_visual_page_analysis,
     dump_primitive_neighborhood_measurements,
     dump_primitive_pair_measurements,
     dump_singleton_side_band_page_analysis,
@@ -60,6 +61,13 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
         )
 
         self.assertEqual(args.stage, "analysis-page-covering-visual")
+
+    def test_parser_accepts_page_edge_visual_analysis_stage(self) -> None:
+        args = build_argument_parser().parse_args(
+            ("sample.pdf", "--stage", "analysis-page-edge-visual")
+        )
+
+        self.assertEqual(args.stage, "analysis-page-edge-visual")
 
     def test_parser_accepts_primitive_pair_stage_without_ids_for_other_stages(self) -> None:
         pair_args = build_argument_parser().parse_args(("sample.pdf", "--stage", "primitive-pair"))
@@ -222,7 +230,9 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             )
             self.assertEqual(list(root.glob("*.json")), [])
 
-    def test_local_fragment_stage_produces_multi_candidate_distinct_from_singleton_stage(self) -> None:
+    def test_local_fragment_stage_produces_multi_candidate_distinct_from_singleton_stage(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             pdf_path = Path(temporary_directory) / "local-fragment-side-band.pdf"
             _create_pdf_with_local_fragment_side_band_text(pdf_path)
@@ -281,6 +291,30 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             self.assertEqual(
                 payload["candidates"][0]["proposed_structural_kind"],
                 "layout.page_covering_visual",
+            )
+
+    def test_page_edge_visual_helper_returns_candidate_json(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            pdf_path = Path(temporary_directory) / "page-edge-visual.pdf"
+            _create_pdf_with_page_edge_visual(pdf_path)
+
+            payload = json.loads(dump_page_edge_visual_page_analysis(pdf_path))
+
+            self.assertEqual(payload["schema_version"], PAGE_ANALYSIS_SCHEMA_VERSION)
+            self.assertEqual(payload["regions"], [])
+            self.assertEqual(payload["relations"], [])
+            self.assertEqual(
+                payload["provenance"]["producer_name"],
+                "page_analysis.page_edge_visual",
+            )
+            self.assertEqual(
+                payload["provenance"]["configuration_id"],
+                "page-edge-visual-v1",
+            )
+            self.assertEqual(len(payload["candidates"]), 1)
+            self.assertEqual(
+                payload["candidates"][0]["proposed_structural_kind"],
+                "layout.page_edge_visual",
             )
 
     def test_local_fragment_helper_writes_compact_requested_output(self) -> None:
@@ -377,8 +411,10 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             )
             self.assertAlmostEqual(
                 image_neighbor["first_visible_area_ratio"],
-                ((first_visible_bbox[2] - first_visible_bbox[0])
-                * (first_visible_bbox[3] - first_visible_bbox[1]))
+                (
+                    (first_visible_bbox[2] - first_visible_bbox[0])
+                    * (first_visible_bbox[3] - first_visible_bbox[1])
+                )
                 / (200.0 * 300.0),
             )
             self.assertAlmostEqual(image_neighbor["neighbor_visible_width_ratio"], 0.25)
@@ -436,8 +472,7 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             primitives = json.loads(dump_normalized_primitives(pdf_path))
             primitive_id = primitives["text_primitives"][0]["primitive_id"]
             expected_message = (
-                "primitive has no visible intersection with the page: "
-                f"{primitive_id}"
+                f"primitive has no visible intersection with the page: {primitive_id}"
             )
 
             with (
@@ -479,6 +514,20 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             primitives_before = dump_normalized_primitives(pdf_path)
 
             dump_page_covering_visual_page_analysis(pdf_path)
+
+            self.assertEqual(dump_page_analysis(pdf_path), analysis_before)
+            self.assertEqual(dump_capture(pdf_path), capture_before)
+            self.assertEqual(dump_normalized_primitives(pdf_path), primitives_before)
+
+    def test_page_edge_visual_stage_does_not_change_existing_diagnostics(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            pdf_path = Path(temporary_directory) / "page-edge-visual.pdf"
+            _create_pdf_with_page_edge_visual(pdf_path)
+            analysis_before = dump_page_analysis(pdf_path)
+            capture_before = dump_capture(pdf_path)
+            primitives_before = dump_normalized_primitives(pdf_path)
+
+            dump_page_edge_visual_page_analysis(pdf_path)
 
             self.assertEqual(dump_page_analysis(pdf_path), analysis_before)
             self.assertEqual(dump_capture(pdf_path), capture_before)
@@ -801,6 +850,29 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             self.assertEqual(image_path.read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
             self.assertEqual(len(json.loads(stdout.getvalue())["candidates"]), 1)
 
+    def test_main_renders_page_image_for_page_edge_visual_stage(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            pdf_path = root / "page-edge-visual.pdf"
+            image_path = root / "diagnostics" / "page.png"
+            _create_pdf_with_page_edge_visual(pdf_path)
+            stdout = StringIO()
+
+            with redirect_stdout(stdout):
+                return_code = main(
+                    (
+                        str(pdf_path),
+                        "--stage",
+                        "analysis-page-edge-visual",
+                        "--render-page-image",
+                        str(image_path),
+                    )
+                )
+
+            self.assertEqual(return_code, 0)
+            self.assertEqual(image_path.read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
+            self.assertEqual(len(json.loads(stdout.getvalue())["candidates"]), 1)
+
     def test_main_prints_analysis_json_for_requested_stage(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             pdf_path = Path(temporary_directory) / "sample.pdf"
@@ -842,9 +914,7 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             stdout = StringIO()
 
             with redirect_stdout(stdout):
-                return_code = main(
-                    (str(pdf_path), "--stage", "analysis-side-band-local-fragment")
-                )
+                return_code = main((str(pdf_path), "--stage", "analysis-side-band-local-fragment"))
 
             self.assertEqual(return_code, 0)
             payload = json.loads(stdout.getvalue())
@@ -982,6 +1052,19 @@ def _create_pdf_with_page_covering_visual(path: Path) -> None:
         document.close()
 
 
+def _create_pdf_with_page_edge_visual(path: Path) -> None:
+    document = fitz.open()
+    try:
+        page = document.new_page(width=200.0, height=300.0)
+        page.insert_image(
+            fitz.Rect(0.0, 0.0, 200.0, 30.0),
+            stream=_ONE_PIXEL_PNG,
+        )
+        document.save(path)
+    finally:
+        document.close()
+
+
 def _create_pdf_with_primitives(path: Path) -> None:
     document = fitz.open()
     try:
@@ -1086,8 +1169,7 @@ def _neighborhood_sort_key(neighbor: dict[str, object]) -> tuple[bool, float, fl
     second_visible_bbox = cast(list[float], measurements["second_visible_bbox"])
     return (
         cast(bool, measurements["is_disjoint"]),
-        cast(float, measurements["horizontal_gap"])
-        + cast(float, measurements["vertical_gap"]),
+        cast(float, measurements["horizontal_gap"]) + cast(float, measurements["vertical_gap"]),
         second_visible_bbox[1],
         second_visible_bbox[0],
         cast(str, neighbor["primitive_id"]),

@@ -4,9 +4,9 @@ This tool is intentionally disconnected from ManReader's legacy pipeline.
 It opens one PDF page and can serialize the raw ``BackendPageCapture``,
 the derived ``NormalizedPrimitivePage``, a primitive-extent ``PageAnalysis``,
 or singleton/local-fragment side-band ``PageAnalysis`` values, page-covering
-visual ``PageAnalysis`` values, explicit primitive-pair measurements, or
-primitive-neighborhood measurements, to stdout or to an explicitly requested
-file.
+visual and page-edge visual ``PageAnalysis`` values, explicit primitive-pair
+measurements, or primitive-neighborhood measurements, to stdout or to an
+explicitly requested file.
 
 The generated identifiers are diagnostic placeholders. They do not establish
 the canonical identity policy for future workspace artifacts.
@@ -25,6 +25,7 @@ from typing import Literal
 import fitz
 
 from page_analysis_page_covering_visual import build_page_covering_visual_page_analysis
+from page_analysis_page_edge_visual import build_page_edge_visual_page_analysis
 from page_analysis_primitive_extent import build_primitive_extent_page_analysis
 from page_analysis_primitive_pair_measurements import (
     PrimitivePairMeasurements,
@@ -45,6 +46,7 @@ type DiagnosticStage = Literal[
     "analysis",
     "analysis-side-band",
     "analysis-side-band-local-fragment",
+    "analysis-page-edge-visual",
     "analysis-page-covering-visual",
     "primitive-pair",
     "primitive-neighborhood",
@@ -74,6 +76,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
             "analysis",
             "analysis-side-band",
             "analysis-side-band-local-fragment",
+            "analysis-page-edge-visual",
             "analysis-page-covering-visual",
             "primitive-pair",
             "primitive-neighborhood",
@@ -219,6 +222,24 @@ def dump_page_covering_visual_page_analysis(
     )
 
 
+def dump_page_edge_visual_page_analysis(
+    pdf_path: Path,
+    *,
+    page_number: int = 1,
+    output_path: Path | None = None,
+    compact: bool = False,
+) -> str:
+    """Capture, normalize, and return page-edge visual analysis JSON."""
+
+    return _dump_page(
+        pdf_path,
+        page_number=page_number,
+        stage="analysis-page-edge-visual",
+        output_path=output_path,
+        compact=compact,
+    )
+
+
 def dump_primitive_pair_measurements(
     pdf_path: Path,
     *,
@@ -327,6 +348,13 @@ def _dump_page(
         analysis = build_page_covering_visual_page_analysis(
             primitive_page,
             generation_id=f"diagnostic-page-covering-visual-analysis:{page_index}",
+        )
+        artifact_data = page_analysis_to_dict(analysis)
+    elif stage == "analysis-page-edge-visual":
+        primitive_page = normalize_backend_page_capture(capture)
+        analysis = build_page_edge_visual_page_analysis(
+            primitive_page,
+            generation_id=f"diagnostic-page-edge-visual-analysis:{page_index}",
         )
         artifact_data = page_analysis_to_dict(analysis)
     elif stage == "primitive-pair":
