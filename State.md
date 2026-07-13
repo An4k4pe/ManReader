@@ -108,6 +108,7 @@ Micro-step completati:
 8. `94d28dd` — helper privato `_build_local_horizontal_fragment_hypotheses(...)`;
 9. `41863dc` — `build_local_fragment_side_band_page_analysis(...)`;
 10. `f829850` — `Add local-fragment side-band diagnostic stage`.
+11. `dcefd53` — `PrimitivePairMeasurements` e `measure_primitive_pair(...)`.
 
 Contratti disponibili:
 
@@ -147,6 +148,14 @@ analysis-side-band-local-fragment
 → local-fragment-side-band-v1
 ```
 
+### Decisione di direzione dopo confronto side-band
+
+Il percorso side-band text-only ha prodotto diagnostica utile e resta mantenuto: singleton e local-fragment sono baseline diagnostiche confrontabili. I risultati reali indicano però che il riconoscimento affidabile di bande laterali o marginalia non può basarsi soltanto su testo orizzontale vicino ai bordi; immagini, drawing e bbox visuali possono definire confini strutturali quanto il testo.
+
+La nuova linea principale è quindi un substrato geometrico comune, multimodale, puro e non persistito. Il micro-step completato introduce `PrimitivePairMeasurements` e `measure_primitive_pair(...)`: misura una coppia esplicita di primitive text/image/drawing usando bbox originale e bbox visibile dopo clipping, e restituisce gap, overlap, ratio, contenimento, distanze dai bordi pagina e delta fra bordi e centri. Non classifica e non produce `RegionCandidate`.
+
+Questa linea non introduce ancora descrizione geometrica completa della pagina, partizione in blocchi, grafo geometrico, clustering, detector generale, score/confidence/ranking, nuove candidate, modifiche a `PageAnalysis`, IR, Markdown, EPUB o output legacy.
+
 ## Vincoli attivi della Milestone 6
 
 - I producer propongono candidate, non semantica marginalia né decisioni finali.
@@ -169,25 +178,10 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-Eseguire un confronto reale sui PDF disponibili tra:
-
-```text
-analysis-side-band
-→ singleton-side-band-v1
-
-analysis-side-band-local-fragment
-→ local-fragment-side-band-v1
-```
-
-Raccogliere conteggi, provenance, numero candidate, primitive per candidate e differenze principali, senza committare JSON diagnostici.
-Micro-step 9:
+Valutare il primo uso diagnostico di `PrimitivePairMeasurements` su coppie esplicite di primitive, anche multimodali. Non è ancora autorizzato un detector generale, né persistenza o schema nuovo.
 
 ## Ultima baseline verificata
 
-Commit f829850: test e controlli qualità verdi.
+Commit dcefd53: test e controlli qualità verdi.
 
 State.md verrà compattato nuovamente solo in un commit documentale separato, se approvato
-
-```
-
-```
