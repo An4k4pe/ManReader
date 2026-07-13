@@ -3,8 +3,8 @@
 This tool is intentionally disconnected from ManReader's legacy pipeline.
 It opens one PDF page and can serialize the raw ``BackendPageCapture``,
 the derived ``NormalizedPrimitivePage``, a primitive-extent ``PageAnalysis``,
-or singleton and local-fragment side-band ``PageAnalysis`` values to stdout or
-to an explicitly requested file.
+or singleton/local-fragment side-band ``PageAnalysis`` values, or explicit
+primitive-pair measurements, to stdout or to an explicitly requested file.
 
 The generated identifiers are diagnostic placeholders. They do not establish
 the canonical identity policy for future workspace artifacts.
@@ -23,6 +23,7 @@ from typing import Literal
 import fitz
 
 from page_analysis_primitive_extent import build_primitive_extent_page_analysis
+from page_analysis_primitive_pair_measurements import measure_primitive_pair
 from page_analysis_serialization import page_analysis_to_dict
 from page_analysis_side_band import (
     build_local_fragment_side_band_page_analysis,
@@ -37,6 +38,7 @@ type DiagnosticStage = Literal[
     "analysis",
     "analysis-side-band",
     "analysis-side-band-local-fragment",
+    "primitive-pair",
 ]
 
 
@@ -63,6 +65,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
             "analysis",
             "analysis-side-band",
             "analysis-side-band-local-fragment",
+            "primitive-pair",
         ),
         default="capture",
         help="Diagnostic stage to serialize. Default: capture.",
@@ -76,6 +79,14 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--compact",
         action="store_true",
         help="Emit compact JSON instead of indented JSON.",
+    )
+    parser.add_argument(
+        "--first-primitive-id",
+        help="First primitive ID; required for stage primitive-pair.",
+    )
+    parser.add_argument(
+        "--second-primitive-id",
+        help="Second primitive ID; required for stage primitive-pair.",
     )
     return parser
 
@@ -170,6 +181,28 @@ def dump_local_fragment_side_band_page_analysis(
     )
 
 
+def dump_primitive_pair_measurements(
+    pdf_path: Path,
+    *,
+    first_primitive_id: str,
+    second_primitive_id: str,
+    page_number: int = 1,
+    output_path: Path | None = None,
+    compact: bool = False,
+) -> str:
+    """Capture, normalize, and return explicit primitive-pair measurement JSON."""
+
+    return _dump_page(
+        pdf_path,
+        page_number=page_number,
+        stage="primitive-pair",
+        output_path=output_path,
+        compact=compact,
+        first_primitive_id=first_primitive_id,
+        second_primitive_id=second_primitive_id,
+    )
+
+
 def _dump_page(
     pdf_path: Path,
     *,
@@ -177,6 +210,8 @@ def _dump_page(
     stage: DiagnosticStage,
     output_path: Path | None,
     compact: bool,
+    first_primitive_id: str | None = None,
+    second_primitive_id: str | None = None,
 ) -> str:
     """Serialize one diagnostic stage for a one-based PDF page number."""
 
@@ -218,13 +253,26 @@ def _dump_page(
             generation_id=f"diagnostic-singleton-side-band-analysis:{page_index}",
         )
         artifact_data = page_analysis_to_dict(analysis)
-    else:
+    elif stage == "analysis-side-band-local-fragment":
         primitive_page = normalize_backend_page_capture(capture)
         analysis = build_local_fragment_side_band_page_analysis(
             primitive_page,
             generation_id=f"diagnostic-local-fragment-side-band-analysis:{page_index}",
         )
         artifact_data = page_analysis_to_dict(analysis)
+    else:
+        if first_primitive_id is None:
+            raise ValueError("first_primitive_id is required for stage primitive-pair")
+        if second_primitive_id is None:
+            raise ValueError("second_primitive_id is required for stage primitive-pair")
+        primitive_page = normalize_backend_page_capture(capture)
+        artifact_data = asdict(
+            measure_primitive_pair(
+                primitive_page,
+                first_primitive_id=first_primitive_id,
+                second_primitive_id=second_primitive_id,
+            )
+        )
 
     json_text = json.dumps(
         artifact_data,
@@ -245,6 +293,11 @@ def _dump_page(
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_argument_parser()
     args = parser.parse_args(argv)
+    if args.stage == "primitive-pair":
+        if args.first_primitive_id is None:
+            parser.error("--first-primitive-id is required for stage primitive-pair")
+        if args.second_primitive_id is None:
+            parser.error("--second-primitive-id is required for stage primitive-pair")
 
     try:
         json_text = _dump_page(
@@ -253,6 +306,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             stage=args.stage,
             output_path=args.output,
             compact=args.compact,
+            first_primitive_id=args.first_primitive_id,
+            second_primitive_id=args.second_primitive_id,
         )
     except (FileNotFoundError, OSError, ValueError, fitz.FileDataError) as exc:
         parser.error(str(exc))

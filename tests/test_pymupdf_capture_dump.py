@@ -18,6 +18,7 @@ from pymupdf_capture_dump import (
     dump_local_fragment_side_band_page_analysis,
     dump_normalized_primitives,
     dump_page_analysis,
+    dump_primitive_pair_measurements,
     dump_singleton_side_band_page_analysis,
     main,
 )
@@ -44,6 +45,14 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
         )
 
         self.assertEqual(args.stage, "analysis-side-band-local-fragment")
+
+    def test_parser_accepts_primitive_pair_stage_without_ids_for_other_stages(self) -> None:
+        pair_args = build_argument_parser().parse_args(("sample.pdf", "--stage", "primitive-pair"))
+        capture_args = build_argument_parser().parse_args(("sample.pdf", "--stage", "capture"))
+
+        self.assertEqual(pair_args.stage, "primitive-pair")
+        self.assertIsNone(capture_args.first_primitive_id)
+        self.assertIsNone(capture_args.second_primitive_id)
 
     def test_dump_capture_returns_pretty_json_without_writing(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -232,6 +241,30 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             self.assertFalse(returned.endswith("\n"))
             self.assertEqual(len(json.loads(returned)["candidates"]), 1)
 
+    def test_dump_primitive_pair_measurements_returns_geometry_json(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            pdf_path = Path(temporary_directory) / "primitives.pdf"
+            _create_pdf_with_primitives(pdf_path)
+            primitives = json.loads(dump_normalized_primitives(pdf_path))
+            text_id = primitives["text_primitives"][0]["primitive_id"]
+            image_id = primitives["image_primitives"][0]["primitive_id"]
+
+            payload = json.loads(
+                dump_primitive_pair_measurements(
+                    pdf_path,
+                    first_primitive_id=text_id,
+                    second_primitive_id=image_id,
+                )
+            )
+
+            self.assertEqual(payload["first_primitive_id"], text_id)
+            self.assertEqual(payload["second_primitive_id"], image_id)
+            self.assertEqual(payload["first_primitive_kind"], "text")
+            self.assertEqual(payload["second_primitive_kind"], "image")
+            self.assertIn("horizontal_gap", payload)
+            self.assertIn("center_y_delta", payload)
+            self.assertNotIn("candidates", payload)
+
     def test_singleton_side_band_stage_does_not_change_existing_analysis_or_legacy_diagnostics(
         self,
     ) -> None:
@@ -407,6 +440,29 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             payload = json.loads(stdout.getvalue())
             self.assertEqual(payload["text_observations"][0]["text"], "CLI text")
             self.assertNotIn("text_primitives", payload)
+
+    def test_main_requires_each_primitive_pair_id_only_for_primitive_pair_stage(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            pdf_path = Path(temporary_directory) / "primitives.pdf"
+            _create_pdf_with_primitives(pdf_path)
+            stderr = StringIO()
+
+            with redirect_stderr(stderr), self.assertRaises(SystemExit):
+                main((str(pdf_path), "--stage", "primitive-pair"))
+            self.assertIn("--first-primitive-id", stderr.getvalue())
+
+            stderr = StringIO()
+            with redirect_stderr(stderr), self.assertRaises(SystemExit):
+                main(
+                    (
+                        str(pdf_path),
+                        "--stage",
+                        "primitive-pair",
+                        "--first-primitive-id",
+                        "first",
+                    )
+                )
+            self.assertIn("--second-primitive-id", stderr.getvalue())
 
     def test_main_prints_analysis_json_for_requested_stage(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
