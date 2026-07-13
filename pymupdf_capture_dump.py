@@ -5,8 +5,8 @@ It opens one PDF page and can serialize the raw ``BackendPageCapture``,
 the derived ``NormalizedPrimitivePage``, a primitive-extent ``PageAnalysis``,
 or singleton/local-fragment side-band ``PageAnalysis`` values, page-covering
 visual and page-edge visual ``PageAnalysis`` values, explicit primitive-pair
-measurements, or primitive-neighborhood measurements, to stdout or to an
-explicitly requested file.
+measurements, primitive-neighborhood measurements, or local-fragment side-band
+diagnostics, to stdout or to an explicitly requested file.
 
 The generated identifiers are diagnostic placeholders. They do not establish
 the canonical identity policy for future workspace artifacts.
@@ -36,6 +36,9 @@ from page_analysis_side_band import (
     build_local_fragment_side_band_page_analysis,
     build_singleton_side_band_page_analysis,
 )
+from page_analysis_side_band_local_fragment_diagnostics import (
+    dump_side_band_local_fragment_diagnostics,
+)
 from primitive_model import NormalizedPrimitivePage
 from primitive_normalizer import normalize_backend_page_capture
 from pymupdf_capture import capture_pymupdf_page
@@ -46,6 +49,7 @@ type DiagnosticStage = Literal[
     "analysis",
     "analysis-side-band",
     "analysis-side-band-local-fragment",
+    "side-band-local-fragment-diagnostics",
     "analysis-page-edge-visual",
     "analysis-page-covering-visual",
     "primitive-pair",
@@ -76,6 +80,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
             "analysis",
             "analysis-side-band",
             "analysis-side-band-local-fragment",
+            "side-band-local-fragment-diagnostics",
             "analysis-page-edge-visual",
             "analysis-page-covering-visual",
             "primitive-pair",
@@ -199,6 +204,24 @@ def dump_local_fragment_side_band_page_analysis(
         pdf_path,
         page_number=page_number,
         stage="analysis-side-band-local-fragment",
+        output_path=output_path,
+        compact=compact,
+    )
+
+
+def dump_local_fragment_side_band_diagnostics(
+    pdf_path: Path,
+    *,
+    page_number: int = 1,
+    output_path: Path | None = None,
+    compact: bool = False,
+) -> str:
+    """Capture, normalize, and return local-fragment side-band diagnostics JSON."""
+
+    return _dump_page(
+        pdf_path,
+        page_number=page_number,
+        stage="side-band-local-fragment-diagnostics",
         output_path=output_path,
         compact=compact,
     )
@@ -343,6 +366,12 @@ def _dump_page(
             generation_id=f"diagnostic-local-fragment-side-band-analysis:{page_index}",
         )
         artifact_data = page_analysis_to_dict(analysis)
+    elif stage == "side-band-local-fragment-diagnostics":
+        primitive_page = normalize_backend_page_capture(capture)
+        artifact_data = dump_side_band_local_fragment_diagnostics(
+            primitive_page,
+            generation_id=f"diagnostic-local-fragment-side-band-diagnostics:{page_index}",
+        )
     elif stage == "analysis-page-covering-visual":
         primitive_page = normalize_backend_page_capture(capture)
         analysis = build_page_covering_visual_page_analysis(

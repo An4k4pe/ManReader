@@ -21,6 +21,7 @@ from primitive_model import NormalizedPrimitivePage
 from pymupdf_capture_dump import (
     build_argument_parser,
     dump_capture,
+    dump_local_fragment_side_band_diagnostics,
     dump_local_fragment_side_band_page_analysis,
     dump_normalized_primitives,
     dump_page_analysis,
@@ -54,6 +55,13 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
         )
 
         self.assertEqual(args.stage, "analysis-side-band-local-fragment")
+
+    def test_parser_accepts_local_fragment_side_band_diagnostics_stage(self) -> None:
+        args = build_argument_parser().parse_args(
+            ("sample.pdf", "--stage", "side-band-local-fragment-diagnostics")
+        )
+
+        self.assertEqual(args.stage, "side-band-local-fragment-diagnostics")
 
     def test_parser_accepts_page_covering_visual_analysis_stage(self) -> None:
         args = build_argument_parser().parse_args(
@@ -269,6 +277,23 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
                 )
             )
 
+    def test_local_fragment_diagnostics_helper_returns_plain_json(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            pdf_path = Path(temporary_directory) / "local-fragment-side-band.pdf"
+            _create_pdf_with_local_fragment_side_band_text(pdf_path)
+
+            payload = json.loads(dump_local_fragment_side_band_diagnostics(pdf_path))
+
+            self.assertEqual(payload["page_id"], "diagnostic-page:0")
+            self.assertEqual(len(payload["candidates"]), 1)
+            entry = payload["candidates"][0]
+            self.assertIn("candidate_id", entry)
+            self.assertIn("bbox", entry)
+            self.assertIn("primitive_ids", entry)
+            self.assertIn("text", entry)
+            self.assertIn("primitive_count", entry)
+            self.assertNotIn("schema_version", payload)
+
     def test_page_covering_visual_helper_returns_candidate_json(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             pdf_path = Path(temporary_directory) / "page-covering-visual.pdf"
@@ -334,6 +359,16 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             self.assertEqual(output_path.read_text(encoding="utf-8"), returned)
             self.assertFalse(returned.endswith("\n"))
             self.assertEqual(len(json.loads(returned)["candidates"]), 1)
+
+    def test_local_fragment_diagnostics_stage_does_not_change_existing_stage(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            pdf_path = Path(temporary_directory) / "local-fragment-side-band.pdf"
+            _create_pdf_with_local_fragment_side_band_text(pdf_path)
+            local_before = dump_local_fragment_side_band_page_analysis(pdf_path)
+
+            dump_local_fragment_side_band_diagnostics(pdf_path)
+
+            self.assertEqual(dump_local_fragment_side_band_page_analysis(pdf_path), local_before)
 
     def test_dump_primitive_pair_measurements_returns_geometry_json(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -864,6 +899,29 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
                         str(pdf_path),
                         "--stage",
                         "analysis-page-edge-visual",
+                        "--render-page-image",
+                        str(image_path),
+                    )
+                )
+
+            self.assertEqual(return_code, 0)
+            self.assertEqual(image_path.read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
+            self.assertEqual(len(json.loads(stdout.getvalue())["candidates"]), 1)
+
+    def test_main_renders_page_image_for_local_fragment_diagnostics_stage(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            pdf_path = root / "local-fragment-side-band.pdf"
+            image_path = root / "diagnostics" / "page.png"
+            _create_pdf_with_local_fragment_side_band_text(pdf_path)
+            stdout = StringIO()
+
+            with redirect_stdout(stdout):
+                return_code = main(
+                    (
+                        str(pdf_path),
+                        "--stage",
+                        "side-band-local-fragment-diagnostics",
                         "--render-page-image",
                         str(image_path),
                     )
