@@ -2,7 +2,7 @@
 
 ## Versione corrente
 
-**v0.19** — **Modalità I: implementazione incrementale**.
+**v0.20** — **Modalità I: implementazione incrementale**.
 
 La progettazione globale è conclusa. La direzione architetturale A-0.2 e il piano di migrazione sono approvati; ogni task resta piccolo, verificabile, con file ammessi espliciti e senza commit automatici.
 
@@ -106,14 +106,16 @@ Micro-step completati:
 6. `265ca16` — producer singleton side-band;
 7. `1fc65ce` — diagnostica shadow singleton `analysis-side-band`;
 8. `94d28dd` — helper privato `_build_local_horizontal_fragment_hypotheses(...)`;
-9. `41863dc` — `build_local_fragment_side_band_page_analysis(...)`.
+9. `41863dc` — `build_local_fragment_side_band_page_analysis(...)`;
+10. `f829850` — `Add local-fragment side-band diagnostic stage`.
 
 Contratti disponibili:
 
 - `RegionCandidate` e `PageAnalysis.candidates`, con `PageAnalysis` schema `1.2`, validazione e serializzazione;
 - `GeometricTextHypothesis` e `TextHypothesisMeasurements` per selezioni testuali compatibili;
 - `build_side_band_candidate_from_text_hypothesis(...)`, che converte primitive ID espliciti in `RegionCandidate(layout.side_band)` senza selezionare o raggruppare;
-- `analysis-side-band`, `dump_singleton_side_band_page_analysis(...)` e CLI `--stage analysis-side-band` per il solo producer singleton.
+- `analysis-side-band`, `dump_singleton_side_band_page_analysis(...)` e CLI `--stage analysis-side-band` per il producer singleton;
+- `analysis-side-band-local-fragment`, `dump_local_fragment_side_band_page_analysis(...)` e CLI `--stage analysis-side-band-local-fragment` per il producer local-fragment.
 
 ### Producer distinti
 
@@ -133,7 +135,17 @@ build_local_fragment_side_band_page_analysis(...)
 
 Il producer local-fragment è separato, usa il helper privato locale, misura ogni hypothesis e può produrre candidate `layout.side_band` multi-primitiva con ID deterministici. Non sostituisce il singleton.
 
-`analysis-side-band` resta legato al producer singleton. Il producer local-fragment non ha ancora uno stage diagnostico separato.
+Gli stage diagnostici sono separati:
+
+```text
+analysis-side-band
+→ page_analysis.singleton_side_band
+→ singleton-side-band-v1
+
+analysis-side-band-local-fragment
+→ page_analysis.local_fragment_side_band
+→ local-fragment-side-band-v1
+```
 
 ## Vincoli attivi della Milestone 6
 
@@ -141,7 +153,7 @@ Il producer local-fragment è separato, usa il helper privato locale, misura ogn
 - Le bbox sono canoniche e page-local; primitive condivise e candidate concorrenti sono ammessi, senza implicare ownership.
 - Le hypothesis singleton sono ordinate canonicamente, non in reading order. Il raggruppamento local-fragment resta privato, side-band-specifico e non è un layer neutrale riusabile.
 - I producer non introducono evidence persistite, score, confidence, ranking o provenance candidate-level.
-- `build_singleton_side_band_page_analysis(...)`, `page_analysis.singleton_side_band`, `singleton-side-band-v1`, `analysis-side-band`, `PageAnalysis` schema `1.2`, IR, Markdown, EPUB e output legacy restano invariati.
+- `build_singleton_side_band_page_analysis(...)`, `page_analysis.singleton_side_band`, `singleton-side-band-v1`, `analysis-side-band`, `PageAnalysis` schema `1.2`, IR, Markdown, EPUB e output legacy restano invariati; il confronto local-fragment usa lo stage separato `analysis-side-band-local-fragment`.
 - I JSON diagnostici reali non vanno committati. Ogni modifica futura a soglie o semantica deve cambiare il relativo `configuration_id`.
 - I test sintetici, diff e stato Git sono obbligatori; eseguire smoke DB quando una modifica influenza pipeline o renderer.
 
@@ -157,14 +169,25 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-Valutare se aggiungere uno stage diagnostico separato per il producer local-fragment, per confrontarlo con il singleton, senza modificare `analysis-side-band` e senza sostituire `singleton-side-band-v1`.
+Eseguire un confronto reale sui PDF disponibili tra:
 
-Lo stage, se approvato, dovrà restare separato dal singleton e non dovrà introdurre modifiche a schema, `PageAnalysis`, IR, renderer, output legacy, evidence, score, confidence, ranking o nuovi tipi pubblici.
+```text
+analysis-side-band
+→ singleton-side-band-v1
 
+analysis-side-band-local-fragment
+→ local-fragment-side-band-v1
+```
+
+Raccogliere conteggi, provenance, numero candidate, primitive per candidate e differenze principali, senza committare JSON diagnostici.
 Micro-step 9:
 
 ## Ultima baseline verificata
 
-Commit 41863dc: test e controlli qualità verdi.
+Commit f829850: test e controlli qualità verdi.
 
 State.md verrà compattato nuovamente solo in un commit documentale separato, se approvato
+
+```
+
+```
