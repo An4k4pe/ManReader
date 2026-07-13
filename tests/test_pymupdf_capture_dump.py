@@ -54,6 +54,13 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
         self.assertIsNone(capture_args.first_primitive_id)
         self.assertIsNone(capture_args.second_primitive_id)
 
+    def test_parser_accepts_render_page_image(self) -> None:
+        args = build_argument_parser().parse_args(
+            ("sample.pdf", "--render-page-image", "diagnostics/page.png")
+        )
+
+        self.assertEqual(args.render_page_image, Path("diagnostics/page.png"))
+
     def test_dump_capture_returns_pretty_json_without_writing(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             pdf_path = Path(temporary_directory) / "sample.pdf"
@@ -440,6 +447,74 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             payload = json.loads(stdout.getvalue())
             self.assertEqual(payload["text_observations"][0]["text"], "CLI text")
             self.assertNotIn("text_primitives", payload)
+
+    def test_main_renders_page_image_without_changing_stdout_json(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            pdf_path = root / "sample.pdf"
+            image_path = root / "diagnostics" / "page.png"
+            _create_pdf(pdf_path, ("CLI image",))
+            stdout = StringIO()
+
+            with redirect_stdout(stdout):
+                return_code = main(
+                    (
+                        str(pdf_path),
+                        "--render-page-image",
+                        str(image_path),
+                    )
+                )
+
+            self.assertEqual(return_code, 0)
+            self.assertTrue(image_path.is_file())
+            self.assertEqual(image_path.read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["text_observations"][0]["text"], "CLI image")
+            self.assertNotIn("render_page_image", payload)
+            self.assertNotIn("render-page-image", payload)
+
+    def test_main_renders_page_image_alongside_requested_json_output(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            pdf_path = root / "sample.pdf"
+            output_path = root / "diagnostics" / "capture.json"
+            image_path = root / "rendered" / "page.png"
+            _create_pdf(pdf_path, ("CLI image file",))
+            stdout = StringIO()
+            stderr = StringIO()
+
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                return_code = main(
+                    (
+                        str(pdf_path),
+                        "--output",
+                        str(output_path),
+                        "--render-page-image",
+                        str(image_path),
+                    )
+                )
+
+            self.assertEqual(return_code, 0)
+            self.assertEqual(stdout.getvalue(), "")
+            self.assertIn("Wrote PyMuPDF shadow capture", stderr.getvalue())
+            self.assertTrue(output_path.is_file())
+            self.assertTrue(image_path.is_file())
+            self.assertEqual(image_path.read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
+            payload = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["text_observations"][0]["text"], "CLI image file")
+            self.assertNotIn("render_page_image", payload)
+
+    def test_existing_stages_do_not_render_page_images_without_option(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            pdf_path = root / "sample.pdf"
+            image_path = root / "page.png"
+            _create_pdf(pdf_path, ("No image output",))
+
+            payload = json.loads(dump_capture(pdf_path))
+
+            self.assertEqual(payload["text_observations"][0]["text"], "No image output")
+            self.assertFalse(image_path.exists())
 
     def test_main_requires_each_primitive_pair_id_only_for_primitive_pair_stage(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

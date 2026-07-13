@@ -76,6 +76,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
         help="Write JSON to this path instead of stdout.",
     )
     parser.add_argument(
+        "--render-page-image",
+        type=Path,
+        help="Render the analyzed PDF page as a PNG to this path.",
+    )
+    parser.add_argument(
         "--compact",
         action="store_true",
         help="Emit compact JSON instead of indented JSON.",
@@ -212,6 +217,7 @@ def _dump_page(
     compact: bool,
     first_primitive_id: str | None = None,
     second_primitive_id: str | None = None,
+    render_page_image_path: Path | None = None,
 ) -> str:
     """Serialize one diagnostic stage for a one-based PDF page number."""
 
@@ -227,6 +233,8 @@ def _dump_page(
                 f"page {page_number} is outside the document (page count: {document.page_count})"
             )
         page = document.load_page(page_index)
+        if render_page_image_path is not None:
+            _render_page_image(page, render_page_image_path)
         capture = capture_pymupdf_page(
             page,
             source_id="diagnostic-source",
@@ -290,6 +298,13 @@ def _dump_page(
     return json_text
 
 
+def _render_page_image(page: fitz.Page, output_path: Path) -> None:
+    """Render one PDF page as a PNG side-output for diagnostics."""
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_bytes(page.get_pixmap().tobytes("png"))
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_argument_parser()
     args = parser.parse_args(argv)
@@ -308,6 +323,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             compact=args.compact,
             first_primitive_id=args.first_primitive_id,
             second_primitive_id=args.second_primitive_id,
+            render_page_image_path=args.render_page_image,
         )
     except (FileNotFoundError, OSError, ValueError, fitz.FileDataError) as exc:
         parser.error(str(exc))
