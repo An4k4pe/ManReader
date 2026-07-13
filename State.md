@@ -111,6 +111,7 @@ Micro-step completati:
 11. `dcefd53` — `PrimitivePairMeasurements` e `measure_primitive_pair(...)`.
 12. `624599c` — stage diagnostico `primitive-pair` in `pymupdf_capture_dump.py`.
 13. `fd12ce6` — opzione diagnostica `--render-page-image PATH`.
+14. `2943670` — stage diagnostico `primitive-neighborhood` in `pymupdf_capture_dump.py`.
 
 Contratti disponibili:
 
@@ -118,8 +119,10 @@ Contratti disponibili:
 - `GeometricTextHypothesis` e `TextHypothesisMeasurements` per selezioni testuali compatibili;
 - `build_side_band_candidate_from_text_hypothesis(...)`, che converte primitive ID espliciti in `RegionCandidate(layout.side_band)` senza selezionare o raggruppare;
 - `analysis-side-band`, `dump_singleton_side_band_page_analysis(...)` e CLI `--stage analysis-side-band` per il producer singleton;
-- `analysis-side-band-local-fragment`, `dump_local_fragment_side_band_page_analysis(...)` e CLI `--stage analysis-side-band-local-fragment` per il producer local-fragment.
+- `analysis-side-band-local-fragment`, `dump_local_fragment_side_band_page_analysis(...)` e CLI `--stage analysis-side-band-local-fragment` per il producer local-fragment;
+- `PrimitivePairMeasurements` e `measure_primitive_pair(...)` per la misura pura di una coppia esplicita text/image/drawing;
 - `dump_primitive_pair_measurements(...)` e CLI `--stage primitive-pair`, con `--first-primitive-id` e `--second-primitive-id`, per misurare due primitive esplicite;
+- `dump_primitive_neighborhood_measurements(...)` e CLI `--stage primitive-neighborhood`, con `--primitive-id`, per osservare una primitiva esplicita rispetto alle altre primitive visibili della pagina;
 - `--render-page-image PATH`, opzione trasversale che rende in PNG la stessa pagina analizzata per qualunque stage diagnostico.
 
 ### Producer distinti
@@ -160,7 +163,9 @@ La nuova linea principale è quindi un substrato geometrico comune, multimodale,
 
 Lo stage `primitive-pair` espone questa misura soltanto per i due ID forniti esplicitamente: non seleziona coppie, non produce candidate e non cambia `PageAnalysis`. L'opzione `--render-page-image PATH` produce esclusivamente il PNG diagnostico della pagina, senza overlay, crop o annotazioni, e non modifica il JSON dello stage.
 
-Questa linea non introduce ancora descrizione geometrica completa della pagina, partizione in blocchi, grafo geometrico, clustering, detector generale, score/confidence/ranking, nuove candidate, modifiche a `PageAnalysis`, IR, Markdown, EPUB o output legacy.
+`primitive-neighborhood` è solo osservazione diagnostica delle relazioni di una primitiva esplicita rispetto alle altre primitive visibili della pagina: non seleziona automaticamente candidate né introduce decisioni strutturali.
+
+Questa linea non introduce ancora detector generale, selezione automatica di candidate, score, confidence, ranking semantico, clustering, grafo geometrico persistito, descrizione geometrica completa della pagina, nuove candidate, modifiche a `PageAnalysis`, schema `1.3`, IR, Markdown, EPUB o output legacy.
 
 ## Vincoli attivi della Milestone 6
 
@@ -184,10 +189,10 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-Valutare il primo uso diagnostico di `PrimitivePairMeasurements`, tramite `primitive-pair`, su coppie esplicite di primitive anche multimodali. Non è ancora autorizzato un detector generale, né persistenza o schema nuovo.
+Eseguire testing diagnostico reale su alcune pagine PDF usando `primitives`, `primitive-pair`, `primitive-neighborhood` e `--render-page-image`; raccogliere osservazioni qualitative sulle relazioni testo/drawing/immagine. Non committare JSON o PNG generati e non progettare ancora un detector prima di interpretare i risultati.
 
 ## Ultima baseline verificata
 
-Commit fd12ce6: Ruff e BasedPyright verdi; 34 test mirati e 890 test complessivi OK, 7 skipped; `git diff --check` verde.
+Commit 2943670: Ruff e BasedPyright verdi; 40 test mirati e 896 test complessivi OK, 7 skipped; `git diff --check` verde.
 
 State.md verrà compattato nuovamente solo in un commit documentale separato, se approvato.
