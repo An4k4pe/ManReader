@@ -404,7 +404,11 @@ Sono approvati:
 - nessuna provenance candidate-level;
 - nessun producer generale di candidati.
 
-Prossimo micro-step autorizzabile: valutare se aggiungere uno stage diagnostico separato per il producer local-fragment, senza modificare `analysis-side-band` e senza sostituire `singleton-side-band-v1`. Se approvato, lo stage dovrà restare distinto da quello singleton.
+Stato aggiornato: oltre ai micro-step side-band singleton e local-fragment, sono approvati `PrimitivePairMeasurements`, lo stage `primitive-pair`, l'opzione `--render-page-image`, lo stage `primitive-neighborhood` con coverage ratio diagnostiche, e i producer `layout.page_covering_visual` e `layout.page_edge_visual`.
+
+Prossimo passo operativo: eseguire testing diagnostico reale confrontando `analysis-side-band`, `analysis-side-band-local-fragment`, `analysis-page-covering-visual`, `analysis-page-edge-visual`, `primitive-neighborhood` e PNG tramite `--render-page-image`.
+
+Non sono autorizzati ora producer per visuali interne, `layout.visual_separator`, `layout.interior_visual_frame`, `layout.section_background`, detector generale, clustering, score/confidence/ranking, classificazione `decorative` definitiva, rimozione editoriale o modifiche a IR, Markdown, EPUB e output legacy.
 
 Vincoli permanenti per il prossimo step:
 
