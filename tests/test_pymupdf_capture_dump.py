@@ -8,16 +8,23 @@ from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 from typing import cast
+from unittest.mock import patch
 
 import fitz
 
 from page_analysis_model import PAGE_ANALYSIS_SCHEMA_VERSION
+from page_analysis_primitive_pair_measurements import (
+    PrimitivePairMeasurements,
+    measure_primitive_pair,
+)
+from primitive_model import NormalizedPrimitivePage
 from pymupdf_capture_dump import (
     build_argument_parser,
     dump_capture,
     dump_local_fragment_side_band_page_analysis,
     dump_normalized_primitives,
     dump_page_analysis,
+    dump_primitive_neighborhood_measurements,
     dump_primitive_pair_measurements,
     dump_singleton_side_band_page_analysis,
     main,
@@ -53,6 +60,20 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
         self.assertEqual(pair_args.stage, "primitive-pair")
         self.assertIsNone(capture_args.first_primitive_id)
         self.assertIsNone(capture_args.second_primitive_id)
+
+    def test_parser_accepts_primitive_neighborhood_stage(self) -> None:
+        args = build_argument_parser().parse_args(
+            (
+                "sample.pdf",
+                "--stage",
+                "primitive-neighborhood",
+                "--primitive-id",
+                "text-1",
+            )
+        )
+
+        self.assertEqual(args.stage, "primitive-neighborhood")
+        self.assertEqual(args.primitive_id, "text-1")
 
     def test_parser_accepts_render_page_image(self) -> None:
         args = build_argument_parser().parse_args(
@@ -271,6 +292,103 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             self.assertIn("horizontal_gap", payload)
             self.assertIn("center_y_delta", payload)
             self.assertNotIn("candidates", payload)
+
+    def test_dump_primitive_neighborhood_measurements_returns_sorted_neighbors(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            pdf_path = Path(temporary_directory) / "primitives.pdf"
+            _create_pdf_with_primitives(pdf_path)
+            primitives = json.loads(dump_normalized_primitives(pdf_path))
+            primitive_id = primitives["text_primitives"][0]["primitive_id"]
+
+            payload = json.loads(
+                dump_primitive_neighborhood_measurements(
+                    pdf_path,
+                    primitive_id=primitive_id,
+                )
+            )
+
+            self.assertEqual(payload["primitive_id"], primitive_id)
+            self.assertEqual(payload["page_id"], "diagnostic-page:0")
+            self.assertGreaterEqual(len(payload["neighbors"]), 1)
+            self.assertNotIn("candidates", payload)
+            for neighbor in payload["neighbors"]:
+                self.assertIn("primitive_id", neighbor)
+                self.assertIn(neighbor["primitive_kind"], {"text", "image", "drawing"})
+                self.assertIn("measurements", neighbor)
+                self.assertEqual(neighbor["measurements"]["first_primitive_id"], primitive_id)
+                self.assertEqual(
+                    neighbor["measurements"]["second_primitive_id"],
+                    neighbor["primitive_id"],
+                )
+            self.assertEqual(
+                payload["neighbors"],
+                sorted(payload["neighbors"], key=_neighborhood_sort_key),
+            )
+
+    def test_primitive_neighborhood_skips_only_an_invisible_neighbor(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            pdf_path = Path(temporary_directory) / "primitives.pdf"
+            _create_pdf_with_primitives(pdf_path)
+            primitives = json.loads(dump_normalized_primitives(pdf_path))
+            primitive_id = primitives["text_primitives"][0]["primitive_id"]
+            invisible_neighbor_id = primitives["image_primitives"][0]["primitive_id"]
+
+            def measure_with_invisible_neighbor(
+                primitive_page: NormalizedPrimitivePage,
+                *,
+                first_primitive_id: str,
+                second_primitive_id: str,
+            ) -> PrimitivePairMeasurements:
+                if second_primitive_id == invisible_neighbor_id:
+                    raise ValueError(
+                        "primitive has no visible intersection with the page: "
+                        f"{invisible_neighbor_id}"
+                    )
+                return measure_primitive_pair(
+                    primitive_page,
+                    first_primitive_id=first_primitive_id,
+                    second_primitive_id=second_primitive_id,
+                )
+
+            with patch(
+                "pymupdf_capture_dump.measure_primitive_pair",
+                side_effect=measure_with_invisible_neighbor,
+            ):
+                payload = json.loads(
+                    dump_primitive_neighborhood_measurements(
+                        pdf_path,
+                        primitive_id=primitive_id,
+                    )
+                )
+
+            neighbor_ids = [neighbor["primitive_id"] for neighbor in payload["neighbors"]]
+            self.assertNotIn(invisible_neighbor_id, neighbor_ids)
+            self.assertGreaterEqual(len(neighbor_ids), 1)
+
+    def test_primitive_neighborhood_rejects_an_invisible_central_primitive(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            pdf_path = Path(temporary_directory) / "primitives.pdf"
+            _create_pdf_with_primitives(pdf_path)
+            primitives = json.loads(dump_normalized_primitives(pdf_path))
+            primitive_id = primitives["text_primitives"][0]["primitive_id"]
+            expected_message = (
+                "primitive has no visible intersection with the page: "
+                f"{primitive_id}"
+            )
+
+            with (
+                patch(
+                    "pymupdf_capture_dump.measure_primitive_pair",
+                    side_effect=ValueError(expected_message),
+                ),
+                self.assertRaises(ValueError) as raised,
+            ):
+                dump_primitive_neighborhood_measurements(
+                    pdf_path,
+                    primitive_id=primitive_id,
+                )
+
+            self.assertEqual(str(raised.exception), expected_message)
 
     def test_singleton_side_band_stage_does_not_change_existing_analysis_or_legacy_diagnostics(
         self,
@@ -539,6 +657,49 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
                 )
             self.assertIn("--second-primitive-id", stderr.getvalue())
 
+    def test_main_requires_primitive_id_only_for_primitive_neighborhood_stage(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            pdf_path = Path(temporary_directory) / "primitives.pdf"
+            _create_pdf_with_primitives(pdf_path)
+            stderr = StringIO()
+
+            with redirect_stderr(stderr), self.assertRaises(SystemExit):
+                main((str(pdf_path), "--stage", "primitive-neighborhood"))
+            self.assertIn("--primitive-id", stderr.getvalue())
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                return_code = main((str(pdf_path), "--stage", "capture"))
+            self.assertEqual(return_code, 0)
+            self.assertIn("text_observations", json.loads(stdout.getvalue()))
+
+    def test_main_renders_page_image_for_primitive_neighborhood_stage(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            pdf_path = root / "primitives.pdf"
+            image_path = root / "diagnostics" / "page.png"
+            _create_pdf_with_primitives(pdf_path)
+            primitives = json.loads(dump_normalized_primitives(pdf_path))
+            primitive_id = primitives["text_primitives"][0]["primitive_id"]
+            stdout = StringIO()
+
+            with redirect_stdout(stdout):
+                return_code = main(
+                    (
+                        str(pdf_path),
+                        "--stage",
+                        "primitive-neighborhood",
+                        "--primitive-id",
+                        primitive_id,
+                        "--render-page-image",
+                        str(image_path),
+                    )
+                )
+
+            self.assertEqual(return_code, 0)
+            self.assertEqual(image_path.read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
+            self.assertGreaterEqual(len(json.loads(stdout.getvalue())["neighbors"]), 1)
+
     def test_main_prints_analysis_json_for_requested_stage(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             pdf_path = Path(temporary_directory) / "sample.pdf"
@@ -803,6 +964,19 @@ def _primitive_count(primitives: dict[str, object]) -> int:
         len(cast(list[object], primitives["text_primitives"]))
         + len(cast(list[object], primitives["image_primitives"]))
         + len(cast(list[object], primitives["drawing_primitives"]))
+    )
+
+
+def _neighborhood_sort_key(neighbor: dict[str, object]) -> tuple[bool, float, float, float, str]:
+    measurements = cast(dict[str, object], neighbor["measurements"])
+    second_visible_bbox = cast(list[float], measurements["second_visible_bbox"])
+    return (
+        cast(bool, measurements["is_disjoint"]),
+        cast(float, measurements["horizontal_gap"])
+        + cast(float, measurements["vertical_gap"]),
+        second_visible_bbox[1],
+        second_visible_bbox[0],
+        cast(str, neighbor["primitive_id"]),
     )
 
 

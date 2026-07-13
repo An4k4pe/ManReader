@@ -3,8 +3,9 @@
 This tool is intentionally disconnected from ManReader's legacy pipeline.
 It opens one PDF page and can serialize the raw ``BackendPageCapture``,
 the derived ``NormalizedPrimitivePage``, a primitive-extent ``PageAnalysis``,
-or singleton/local-fragment side-band ``PageAnalysis`` values, or explicit
-primitive-pair measurements, to stdout or to an explicitly requested file.
+or singleton/local-fragment side-band ``PageAnalysis`` values, explicit
+primitive-pair measurements, or primitive-neighborhood measurements, to stdout
+or to an explicitly requested file.
 
 The generated identifiers are diagnostic placeholders. They do not establish
 the canonical identity policy for future workspace artifacts.
@@ -23,12 +24,16 @@ from typing import Literal
 import fitz
 
 from page_analysis_primitive_extent import build_primitive_extent_page_analysis
-from page_analysis_primitive_pair_measurements import measure_primitive_pair
+from page_analysis_primitive_pair_measurements import (
+    PrimitivePairMeasurements,
+    measure_primitive_pair,
+)
 from page_analysis_serialization import page_analysis_to_dict
 from page_analysis_side_band import (
     build_local_fragment_side_band_page_analysis,
     build_singleton_side_band_page_analysis,
 )
+from primitive_model import NormalizedPrimitivePage
 from primitive_normalizer import normalize_backend_page_capture
 from pymupdf_capture import capture_pymupdf_page
 
@@ -39,6 +44,7 @@ type DiagnosticStage = Literal[
     "analysis-side-band",
     "analysis-side-band-local-fragment",
     "primitive-pair",
+    "primitive-neighborhood",
 ]
 
 
@@ -66,6 +72,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
             "analysis-side-band",
             "analysis-side-band-local-fragment",
             "primitive-pair",
+            "primitive-neighborhood",
         ),
         default="capture",
         help="Diagnostic stage to serialize. Default: capture.",
@@ -92,6 +99,10 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--second-primitive-id",
         help="Second primitive ID; required for stage primitive-pair.",
+    )
+    parser.add_argument(
+        "--primitive-id",
+        help="Primitive ID; required for stage primitive-neighborhood.",
     )
     return parser
 
@@ -208,6 +219,26 @@ def dump_primitive_pair_measurements(
     )
 
 
+def dump_primitive_neighborhood_measurements(
+    pdf_path: Path,
+    *,
+    primitive_id: str,
+    page_number: int = 1,
+    output_path: Path | None = None,
+    compact: bool = False,
+) -> str:
+    """Capture, normalize, and return explicit primitive-neighborhood JSON."""
+
+    return _dump_page(
+        pdf_path,
+        page_number=page_number,
+        stage="primitive-neighborhood",
+        output_path=output_path,
+        compact=compact,
+        primitive_id=primitive_id,
+    )
+
+
 def _dump_page(
     pdf_path: Path,
     *,
@@ -217,6 +248,7 @@ def _dump_page(
     compact: bool,
     first_primitive_id: str | None = None,
     second_primitive_id: str | None = None,
+    primitive_id: str | None = None,
     render_page_image_path: Path | None = None,
 ) -> str:
     """Serialize one diagnostic stage for a one-based PDF page number."""
@@ -268,7 +300,7 @@ def _dump_page(
             generation_id=f"diagnostic-local-fragment-side-band-analysis:{page_index}",
         )
         artifact_data = page_analysis_to_dict(analysis)
-    else:
+    elif stage == "primitive-pair":
         if first_primitive_id is None:
             raise ValueError("first_primitive_id is required for stage primitive-pair")
         if second_primitive_id is None:
@@ -280,6 +312,14 @@ def _dump_page(
                 first_primitive_id=first_primitive_id,
                 second_primitive_id=second_primitive_id,
             )
+        )
+    else:
+        if primitive_id is None:
+            raise ValueError("primitive_id is required for stage primitive-neighborhood")
+        primitive_page = normalize_backend_page_capture(capture)
+        artifact_data = _primitive_neighborhood_data(
+            primitive_page,
+            primitive_id=primitive_id,
         )
 
     json_text = json.dumps(
@@ -305,6 +345,84 @@ def _render_page_image(page: fitz.Page, output_path: Path) -> None:
     output_path.write_bytes(page.get_pixmap().tobytes("png"))
 
 
+def _primitive_neighborhood_data(
+    primitive_page: NormalizedPrimitivePage,
+    *,
+    primitive_id: str,
+) -> dict[str, object]:
+    """Measure one explicit primitive against every visible page neighbor."""
+
+    primitive_ids = _primitive_ids(primitive_page)
+    if primitive_id not in primitive_ids:
+        raise ValueError(f"primitive_id does not exist: {primitive_id}")
+
+    neighbor_measurements: list[PrimitivePairMeasurements] = []
+    for second_primitive_id in primitive_ids:
+        if second_primitive_id == primitive_id:
+            continue
+        try:
+            measurements = measure_primitive_pair(
+                primitive_page,
+                first_primitive_id=primitive_id,
+                second_primitive_id=second_primitive_id,
+            )
+        except ValueError as exc:
+            if _is_no_visible_intersection_error(
+                exc,
+                primitive_id=second_primitive_id,
+            ):
+                continue
+            raise
+        neighbor_measurements.append(measurements)
+
+    neighbor_measurements.sort(key=_primitive_neighborhood_sort_key)
+    return {
+        "primitive_id": primitive_id,
+        "page_id": primitive_page.page_id,
+        "neighbors": [
+            {
+                "primitive_id": measurements.second_primitive_id,
+                "primitive_kind": measurements.second_primitive_kind,
+                "measurements": asdict(measurements),
+            }
+            for measurements in neighbor_measurements
+        ],
+    }
+
+
+def _primitive_ids(primitive_page: NormalizedPrimitivePage) -> tuple[str, ...]:
+    """Return all normalized primitive IDs in their canonical family order."""
+
+    return tuple(
+        primitive.primitive_id
+        for primitive in (
+            *primitive_page.text_primitives,
+            *primitive_page.image_primitives,
+            *primitive_page.drawing_primitives,
+        )
+    )
+
+
+def _is_no_visible_intersection_error(
+    exc: ValueError,
+    *,
+    primitive_id: str,
+) -> bool:
+    return str(exc) == f"primitive has no visible intersection with the page: {primitive_id}"
+
+
+def _primitive_neighborhood_sort_key(
+    measurements: PrimitivePairMeasurements,
+) -> tuple[bool, float, float, float, str]:
+    return (
+        measurements.is_disjoint,
+        measurements.horizontal_gap + measurements.vertical_gap,
+        measurements.second_visible_bbox[1],
+        measurements.second_visible_bbox[0],
+        measurements.second_primitive_id,
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_argument_parser()
     args = parser.parse_args(argv)
@@ -313,6 +431,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.error("--first-primitive-id is required for stage primitive-pair")
         if args.second_primitive_id is None:
             parser.error("--second-primitive-id is required for stage primitive-pair")
+    if args.stage == "primitive-neighborhood" and args.primitive_id is None:
+        parser.error("--primitive-id is required for stage primitive-neighborhood")
 
     try:
         json_text = _dump_page(
@@ -323,6 +443,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             compact=args.compact,
             first_primitive_id=args.first_primitive_id,
             second_primitive_id=args.second_primitive_id,
+            primitive_id=args.primitive_id,
             render_page_image_path=args.render_page_image,
         )
     except (FileNotFoundError, OSError, ValueError, fitz.FileDataError) as exc:
