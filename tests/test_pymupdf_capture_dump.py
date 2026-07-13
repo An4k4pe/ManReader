@@ -315,11 +315,43 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
                 self.assertIn("primitive_id", neighbor)
                 self.assertIn(neighbor["primitive_kind"], {"text", "image", "drawing"})
                 self.assertIn("measurements", neighbor)
+                for ratio_name in (
+                    "first_visible_width_ratio",
+                    "first_visible_height_ratio",
+                    "first_visible_area_ratio",
+                    "neighbor_visible_width_ratio",
+                    "neighbor_visible_height_ratio",
+                    "neighbor_visible_area_ratio",
+                ):
+                    self.assertIn(ratio_name, neighbor)
                 self.assertEqual(neighbor["measurements"]["first_primitive_id"], primitive_id)
                 self.assertEqual(
                     neighbor["measurements"]["second_primitive_id"],
                     neighbor["primitive_id"],
                 )
+            image_neighbor = next(
+                neighbor
+                for neighbor in payload["neighbors"]
+                if neighbor["primitive_kind"] == "image"
+            )
+            first_visible_bbox = image_neighbor["measurements"]["first_visible_bbox"]
+            self.assertAlmostEqual(
+                image_neighbor["first_visible_width_ratio"],
+                (first_visible_bbox[2] - first_visible_bbox[0]) / 200.0,
+            )
+            self.assertAlmostEqual(
+                image_neighbor["first_visible_height_ratio"],
+                (first_visible_bbox[3] - first_visible_bbox[1]) / 300.0,
+            )
+            self.assertAlmostEqual(
+                image_neighbor["first_visible_area_ratio"],
+                ((first_visible_bbox[2] - first_visible_bbox[0])
+                * (first_visible_bbox[3] - first_visible_bbox[1]))
+                / (200.0 * 300.0),
+            )
+            self.assertAlmostEqual(image_neighbor["neighbor_visible_width_ratio"], 0.25)
+            self.assertAlmostEqual(image_neighbor["neighbor_visible_height_ratio"], 1.0 / 6.0)
+            self.assertAlmostEqual(image_neighbor["neighbor_visible_area_ratio"], 1.0 / 24.0)
             self.assertEqual(
                 payload["neighbors"],
                 sorted(payload["neighbors"], key=_neighborhood_sort_key),

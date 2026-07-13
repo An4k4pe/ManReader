@@ -376,6 +376,8 @@ def _primitive_neighborhood_data(
         neighbor_measurements.append(measurements)
 
     neighbor_measurements.sort(key=_primitive_neighborhood_sort_key)
+    page_width = primitive_page.page_geometry.width
+    page_height = primitive_page.page_geometry.height
     return {
         "primitive_id": primitive_id,
         "page_id": primitive_page.page_id,
@@ -384,6 +386,11 @@ def _primitive_neighborhood_data(
                 "primitive_id": measurements.second_primitive_id,
                 "primitive_kind": measurements.second_primitive_kind,
                 "measurements": asdict(measurements),
+                **_primitive_neighborhood_coverage_ratios(
+                    measurements,
+                    page_width=page_width,
+                    page_height=page_height,
+                ),
             }
             for measurements in neighbor_measurements
         ],
@@ -421,6 +428,29 @@ def _primitive_neighborhood_sort_key(
         measurements.second_visible_bbox[0],
         measurements.second_primitive_id,
     )
+
+
+def _primitive_neighborhood_coverage_ratios(
+    measurements: PrimitivePairMeasurements,
+    *,
+    page_width: float,
+    page_height: float,
+) -> dict[str, float]:
+    """Return page-coverage ratios from already measured visible bounding boxes."""
+
+    first_width = measurements.first_visible_bbox[2] - measurements.first_visible_bbox[0]
+    first_height = measurements.first_visible_bbox[3] - measurements.first_visible_bbox[1]
+    neighbor_width = measurements.second_visible_bbox[2] - measurements.second_visible_bbox[0]
+    neighbor_height = measurements.second_visible_bbox[3] - measurements.second_visible_bbox[1]
+    page_area = page_width * page_height
+    return {
+        "first_visible_width_ratio": first_width / page_width,
+        "first_visible_height_ratio": first_height / page_height,
+        "first_visible_area_ratio": (first_width * first_height) / page_area,
+        "neighbor_visible_width_ratio": neighbor_width / page_width,
+        "neighbor_visible_height_ratio": neighbor_height / page_height,
+        "neighbor_visible_area_ratio": (neighbor_width * neighbor_height) / page_area,
+    }
 
 
 def main(argv: Sequence[str] | None = None) -> int:
