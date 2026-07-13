@@ -113,6 +113,7 @@ Micro-step completati:
 13. `fd12ce6` — opzione diagnostica `--render-page-image PATH`.
 14. `2943670` — stage diagnostico `primitive-neighborhood` in `pymupdf_capture_dump.py`.
 15. `2fa3c69` — coverage ratio diagnostiche per `primitive-neighborhood`.
+16. `0f33915` — producer `layout.page_covering_visual`, modulo dedicato e stage CLI `analysis-page-covering-visual`.
 
 Contratti disponibili:
 
@@ -124,6 +125,7 @@ Contratti disponibili:
 - `PrimitivePairMeasurements` e `measure_primitive_pair(...)` per la misura pura di una coppia esplicita text/image/drawing;
 - `dump_primitive_pair_measurements(...)` e CLI `--stage primitive-pair`, con `--first-primitive-id` e `--second-primitive-id`, per misurare due primitive esplicite;
 - `dump_primitive_neighborhood_measurements(...)` e CLI `--stage primitive-neighborhood`, con `--primitive-id`, per osservare una primitiva esplicita rispetto alle altre primitive visibili della pagina; include `first_visible_width_ratio`, `first_visible_height_ratio`, `first_visible_area_ratio`, `neighbor_visible_width_ratio`, `neighbor_visible_height_ratio` e `neighbor_visible_area_ratio`;
+- `build_page_covering_visual_page_analysis(...)`, `dump_page_covering_visual_page_analysis(...)` e CLI `--stage analysis-page-covering-visual` per candidate `layout.page_covering_visual`;
 - `--render-page-image PATH`, opzione trasversale che rende in PNG la stessa pagina analizzata per qualunque stage diagnostico.
 
 ### Producer distinti
@@ -166,7 +168,9 @@ Lo stage `primitive-pair` espone questa misura soltanto per i due ID forniti esp
 
 `primitive-neighborhood` è solo osservazione diagnostica delle relazioni di una primitiva esplicita rispetto alle altre primitive visibili della pagina: non seleziona automaticamente candidate né introduce decisioni strutturali. Le coverage ratio sono derivate solo da bbox visibili e geometria pagina, non modificano `PrimitivePairMeasurements` né l'ordinamento dei neighbor, e non sono classificazioni, score, confidence o ranking.
 
-Questa linea non introduce ancora detector generale, selezione automatica di candidate, score, confidence, ranking semantico, clustering, grafo geometrico persistito, descrizione geometrica completa della pagina, nuove candidate, modifiche a `PageAnalysis`, schema `1.3`, IR, Markdown, EPUB o output legacy.
+Il producer page-covering produce `RegionCandidate`, non `LayoutRegion`: considera solo `ImageOccurrencePrimitive` e `DrawingPrimitive`, usa bbox visibile clipped alla pagina e soglie conservative `visible_width_ratio >= 0.95` e `visible_height_ratio >= 0.95`. Non classifica come background/decorative, non decide rimozione o export policy e non modifica neighborhood, IR, Markdown, EPUB o output legacy. Lo smoke reale ha individuato candidate page-covering dove presenti e non ne ha prodotto su una pagina sommario priva di visual full-page.
+
+Questa linea non introduce ancora detector generale, selezione automatica generalizzata di candidate, score, confidence, ranking semantico, clustering, grafo geometrico persistito, descrizione geometrica completa della pagina, modifiche a `PageAnalysis`, schema `1.3`, IR, Markdown, EPUB o output legacy.
 
 ## Vincoli attivi della Milestone 6
 
@@ -190,10 +194,10 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-Valutare se introdurre un candidate producer diagnostico per primitive visuali page-covering, con structural kind provvisorio `layout.page_background` o nome equivalente da decidere esplicitamente. Il candidate non deve implicare rimozione editoriale, export policy o classificazione `decorative` definitiva, né modifiche a IR, Markdown, EPUB o output legacy. Non committare JSON o PNG generati.
+Valutare un producer separato per visual edge/cornici/bordi pagina, con nome provvisorio da discutere `layout.page_edge_visual`. Non unirlo a page-covering visual e non introdurre ancora clutter o classificazione `decorative` definitiva. Non committare JSON o PNG generati.
 
 ## Ultima baseline verificata
 
-Commit 2fa3c69: Ruff e BasedPyright verdi; 40 test mirati e 896 test complessivi OK, 7 skipped; `git diff --check` verde.
+Commit 0f33915: Ruff e BasedPyright verdi; 7 test producer e 44 test dump OK; 907 test complessivi OK, 7 skipped; `git diff --check` verde.
 
 State.md verrà compattato nuovamente solo in un commit documentale separato, se approvato.
