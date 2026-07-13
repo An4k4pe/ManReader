@@ -3,8 +3,8 @@
 This tool is intentionally disconnected from ManReader's legacy pipeline.
 It opens one PDF page and can serialize the raw ``BackendPageCapture``,
 the derived ``NormalizedPrimitivePage``, a primitive-extent ``PageAnalysis``,
-or a singleton side-band ``PageAnalysis`` to stdout or to an explicitly
-requested file.
+or singleton and local-fragment side-band ``PageAnalysis`` values to stdout or
+to an explicitly requested file.
 
 The generated identifiers are diagnostic placeholders. They do not establish
 the canonical identity policy for future workspace artifacts.
@@ -24,11 +24,20 @@ import fitz
 
 from page_analysis_primitive_extent import build_primitive_extent_page_analysis
 from page_analysis_serialization import page_analysis_to_dict
-from page_analysis_side_band import build_singleton_side_band_page_analysis
+from page_analysis_side_band import (
+    build_local_fragment_side_band_page_analysis,
+    build_singleton_side_band_page_analysis,
+)
 from primitive_normalizer import normalize_backend_page_capture
 from pymupdf_capture import capture_pymupdf_page
 
-type DiagnosticStage = Literal["capture", "primitives", "analysis", "analysis-side-band"]
+type DiagnosticStage = Literal[
+    "capture",
+    "primitives",
+    "analysis",
+    "analysis-side-band",
+    "analysis-side-band-local-fragment",
+]
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
@@ -48,7 +57,13 @@ def build_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--stage",
-        choices=("capture", "primitives", "analysis", "analysis-side-band"),
+        choices=(
+            "capture",
+            "primitives",
+            "analysis",
+            "analysis-side-band",
+            "analysis-side-band-local-fragment",
+        ),
         default="capture",
         help="Diagnostic stage to serialize. Default: capture.",
     )
@@ -137,6 +152,24 @@ def dump_singleton_side_band_page_analysis(
     )
 
 
+def dump_local_fragment_side_band_page_analysis(
+    pdf_path: Path,
+    *,
+    page_number: int = 1,
+    output_path: Path | None = None,
+    compact: bool = False,
+) -> str:
+    """Capture, normalize, and return local-fragment side-band analysis JSON."""
+
+    return _dump_page(
+        pdf_path,
+        page_number=page_number,
+        stage="analysis-side-band-local-fragment",
+        output_path=output_path,
+        compact=compact,
+    )
+
+
 def _dump_page(
     pdf_path: Path,
     *,
@@ -178,11 +211,18 @@ def _dump_page(
             generation_id=f"diagnostic-page-analysis:{page_index}",
         )
         artifact_data = page_analysis_to_dict(analysis)
-    else:
+    elif stage == "analysis-side-band":
         primitive_page = normalize_backend_page_capture(capture)
         analysis = build_singleton_side_band_page_analysis(
             primitive_page,
             generation_id=f"diagnostic-singleton-side-band-analysis:{page_index}",
+        )
+        artifact_data = page_analysis_to_dict(analysis)
+    else:
+        primitive_page = normalize_backend_page_capture(capture)
+        analysis = build_local_fragment_side_band_page_analysis(
+            primitive_page,
+            generation_id=f"diagnostic-local-fragment-side-band-analysis:{page_index}",
         )
         artifact_data = page_analysis_to_dict(analysis)
 

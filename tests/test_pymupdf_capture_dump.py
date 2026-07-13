@@ -15,6 +15,7 @@ from page_analysis_model import PAGE_ANALYSIS_SCHEMA_VERSION
 from pymupdf_capture_dump import (
     build_argument_parser,
     dump_capture,
+    dump_local_fragment_side_band_page_analysis,
     dump_normalized_primitives,
     dump_page_analysis,
     dump_singleton_side_band_page_analysis,
@@ -36,6 +37,13 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
         args = build_argument_parser().parse_args(("sample.pdf", "--stage", "analysis-side-band"))
 
         self.assertEqual(args.stage, "analysis-side-band")
+
+    def test_parser_accepts_local_fragment_side_band_analysis_stage(self) -> None:
+        args = build_argument_parser().parse_args(
+            ("sample.pdf", "--stage", "analysis-side-band-local-fragment")
+        )
+
+        self.assertEqual(args.stage, "analysis-side-band-local-fragment")
 
     def test_dump_capture_returns_pretty_json_without_writing(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -168,6 +176,61 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
                 "layout.side_band",
             )
             self.assertEqual(list(root.glob("*.json")), [])
+
+    def test_local_fragment_stage_produces_multi_candidate_distinct_from_singleton_stage(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            pdf_path = Path(temporary_directory) / "local-fragment-side-band.pdf"
+            _create_pdf_with_local_fragment_side_band_text(pdf_path)
+
+            local_payload = json.loads(dump_local_fragment_side_band_page_analysis(pdf_path))
+            singleton_payload = json.loads(dump_singleton_side_band_page_analysis(pdf_path))
+
+            self.assertEqual(local_payload["schema_version"], PAGE_ANALYSIS_SCHEMA_VERSION)
+            self.assertEqual(local_payload["regions"], [])
+            self.assertEqual(local_payload["relations"], [])
+            self.assertEqual(
+                local_payload["provenance"]["producer_name"],
+                "page_analysis.local_fragment_side_band",
+            )
+            self.assertEqual(
+                local_payload["provenance"]["configuration_id"],
+                "local-fragment-side-band-v1",
+            )
+            self.assertEqual(len(local_payload["candidates"]), 1)
+            self.assertEqual(len(local_payload["candidates"][0]["primitive_ids"]), 2)
+            self.assertEqual(
+                singleton_payload["provenance"]["producer_name"],
+                "page_analysis.singleton_side_band",
+            )
+            self.assertEqual(
+                singleton_payload["provenance"]["configuration_id"],
+                "singleton-side-band-v1",
+            )
+            self.assertEqual(len(singleton_payload["candidates"]), 2)
+            self.assertTrue(
+                all(
+                    len(candidate["primitive_ids"]) == 1
+                    for candidate in singleton_payload["candidates"]
+                )
+            )
+
+    def test_local_fragment_helper_writes_compact_requested_output(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            pdf_path = root / "local-fragment-side-band.pdf"
+            output_path = root / "diagnostics" / "local-fragment.json"
+            _create_pdf_with_local_fragment_side_band_text(pdf_path)
+
+            returned = dump_local_fragment_side_band_page_analysis(
+                pdf_path,
+                output_path=output_path,
+                compact=True,
+            )
+
+            self.assertTrue(output_path.is_file())
+            self.assertEqual(output_path.read_text(encoding="utf-8"), returned)
+            self.assertFalse(returned.endswith("\n"))
+            self.assertEqual(len(json.loads(returned)["candidates"]), 1)
 
     def test_singleton_side_band_stage_does_not_change_existing_analysis_or_legacy_diagnostics(
         self,
@@ -379,6 +442,25 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             )
             self.assertIn("candidates", payload)
 
+    def test_main_prints_local_fragment_side_band_json_for_requested_stage(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            pdf_path = Path(temporary_directory) / "local-fragment-side-band.pdf"
+            _create_pdf_with_local_fragment_side_band_text(pdf_path)
+            stdout = StringIO()
+
+            with redirect_stdout(stdout):
+                return_code = main(
+                    (str(pdf_path), "--stage", "analysis-side-band-local-fragment")
+                )
+
+            self.assertEqual(return_code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(
+                payload["provenance"]["producer_name"],
+                "page_analysis.local_fragment_side_band",
+            )
+            self.assertEqual(len(payload["candidates"]), 1)
+
     def test_main_prints_primitive_json_for_requested_stage(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             pdf_path = Path(temporary_directory) / "sample.pdf"
@@ -478,6 +560,17 @@ def _create_pdf_with_side_band_text(path: Path) -> None:
     try:
         page = document.new_page(width=200.0, height=300.0)
         page.insert_text((10.0, 150.0), "Side")
+        document.save(path)
+    finally:
+        document.close()
+
+
+def _create_pdf_with_local_fragment_side_band_text(path: Path) -> None:
+    document = fitz.open()
+    try:
+        page = document.new_page(width=200.0, height=300.0)
+        page.insert_text((6.0, 150.0), "One")
+        page.insert_text((27.0, 150.0), "Two", fontname="cour")
         document.save(path)
     finally:
         document.close()
