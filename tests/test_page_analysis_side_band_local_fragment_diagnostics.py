@@ -126,6 +126,52 @@ class SideBandLocalFragmentDiagnosticsTest(unittest.TestCase):
         self.assertTrue(entries["candidate:side-band:local-fragment:hexagon"]["is_bullet_or_marker_like"])
         self.assertTrue(entries["candidate:side-band:local-fragment:uppercase"]["is_short_uppercase"])
 
+    def test_reports_unicode_aware_uppercase_status_without_changing_short_uppercase(self) -> None:
+        cases = (
+            ("QUALITÀ", True, False),
+            ("TERMINI CHIAVE", True, False),
+            ("TIRARE 1D6", True, False),
+            ("ABC", True, True),
+            ("ABC\u0301", True, False),
+            ("ABC中文", True, True),
+            ("Ⅻ", True, False),
+            ("Ⓐ", True, False),
+            ("Amuleto", False, False),
+            ("123", False, False),
+            ("!", False, False),
+            ("", False, False),
+            ("中文", False, False),
+            ("ǅ", False, False),
+        )
+
+        for index, (text, expected_uppercase, expected_short_uppercase) in enumerate(cases):
+            with self.subTest(text=text):
+                page = _page(
+                    (
+                        _text(
+                            f"text-{index}",
+                            text,
+                            (0.0, 40.0, 20.0, 50.0),
+                        ),
+                    )
+                )
+
+                entries = _candidate_entries(
+                    dump_side_band_local_fragment_diagnostics(page, generation_id="gen-1")
+                )
+
+                self.assertEqual(len(entries), 1)
+                entry = entries[0]
+                self.assertEqual(
+                    entry["candidate_id"],
+                    f"candidate:side-band:local-fragment:text-{index}",
+                )
+                self.assertEqual(
+                    entry["has_cased_characters_and_all_are_uppercase"],
+                    expected_uppercase,
+                )
+                self.assertEqual(entry["is_short_uppercase"], expected_short_uppercase)
+
     def test_reports_same_baseline_neighbor_without_classifying_it(self) -> None:
         page = _page(
             (

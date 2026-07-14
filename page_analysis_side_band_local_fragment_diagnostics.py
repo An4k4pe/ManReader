@@ -112,6 +112,7 @@ def _candidate_diagnostics(
         "is_punctuation_only": _is_punctuation_only(normalized_text),
         "is_single_character": len(normalized_text) == 1,
         "is_bullet_or_marker_like": normalized_text in _BULLET_OR_MARKER_TEXTS,
+        "has_cased_characters_and_all_are_uppercase": normalized_text.isupper(),
         "is_short_uppercase": (
             normalized_text.isalpha()
             and normalized_text.isupper()
