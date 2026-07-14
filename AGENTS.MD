@@ -237,11 +237,11 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 - IR 1.0 e Markdown correnti;
 - comportamento EPUB legacy non modificato salvo milestone dedicata.
 
-## Milestone corrente
+## Milestone completata più recente
 
-La milestone corrente è:
+La milestone completata più recente è:
 
-> **Milestone 6 — marginalia e bande laterali**
+> **Milestone 6 — marginalia e bande laterali — completata**
 
 ### Stato delle milestone precedenti
 
@@ -353,9 +353,9 @@ git diff --check verde
 
 La Milestone 5 non ha introdotto detector reali, marginalia, sidebar semantiche, callout, tabelle, liste, reading order finale, confidence semantica, ownership finale, coverage finale, resolution, profili, IR 2, GUI, AI o SQLite.
 
-### Milestone 6 — marginalia e bande laterali
+### Milestone 6 — marginalia e bande laterali — completata
 
-Obiettivo iniziale:
+Obiettivo completato:
 
 ```text
 NormalizedPrimitivePage
@@ -364,7 +364,7 @@ NormalizedPrimitivePage
 → diagnostica shadow
 ```
 
-La Milestone 6 deve definire il primo vertical slice funzionale per identificare candidati strutturali di marginalia o banda laterale, mantenendo l'output legacy autorevole.
+La Milestone 6 ha definito il primo vertical slice diagnostico per osservare candidati strutturali di marginalia o banda laterale, mantenendo l'output legacy autorevole; non attesta un detector affidabile o concluso di marginalia.
 
 Micro-step completati:
 
@@ -406,7 +406,7 @@ Sono approvati:
 
 Stato aggiornato: oltre ai micro-step side-band singleton e local-fragment, sono approvati `PrimitivePairMeasurements`, lo stage `primitive-pair`, l'opzione `--render-page-image`, lo stage `primitive-neighborhood` con coverage ratio diagnostiche, e i producer `layout.page_covering_visual` e `layout.page_edge_visual`.
 
-Prossimo passo operativo: eseguire testing diagnostico reale confrontando `analysis-side-band`, `analysis-side-band-local-fragment`, `analysis-page-covering-visual`, `analysis-page-edge-visual`, `primitive-neighborhood` e PNG tramite `--render-page-image`.
+Il passo successivo richiede una futura definizione del contesto strutturale page-level necessario a interpretare i candidate esistenti. Nessun comportamento funzionale è autorizzato prima di una decisione architetturale dedicata.
 
 Non sono autorizzati ora producer per visuali interne, `layout.visual_separator`, `layout.interior_visual_frame`, `layout.section_background`, detector generale, clustering, score/confidence/ranking, classificazione `decorative` definitiva, rimozione editoriale o modifiche a IR, Markdown, EPUB e output legacy.
 
@@ -498,7 +498,7 @@ L'equivalenza non richiede JSON identici, ma almeno:
 - callout e tabelle DB preservati;
 - differenze spiegabili.
 
-## Attività non autorizzate nella milestone corrente
+## Attività non autorizzate senza decisione architetturale dedicata
 
 Non avviare:
 
