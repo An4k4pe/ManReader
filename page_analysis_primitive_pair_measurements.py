@@ -23,6 +23,14 @@ type PrimitiveKind = Literal["text", "image", "drawing"]
 type _Primitive = TextPrimitive | ImageOccurrencePrimitive | DrawingPrimitive
 
 
+class PrimitiveNotVisibleOnPageError(ValueError):
+    """A requested primitive has no positive-area visible page intersection."""
+
+    def __init__(self, primitive_id: str) -> None:
+        self.primitive_id = primitive_id
+        super().__init__(f"primitive has no visible intersection with the page: {primitive_id}")
+
+
 @dataclass(frozen=True, slots=True)
 class PrimitivePairMeasurements:
     """Geometry-only measurements for an ordered explicit primitive pair."""
@@ -296,9 +304,7 @@ def _require_visible_bbox(
         page_height=page_height,
     )
     if visible_bbox is None:
-        raise ValueError(
-            f"primitive has no visible intersection with the page: {primitive.primitive_id}"
-        )
+        raise PrimitiveNotVisibleOnPageError(primitive.primitive_id)
     return visible_bbox
 
 

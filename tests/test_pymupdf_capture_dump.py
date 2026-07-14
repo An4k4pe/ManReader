@@ -14,6 +14,7 @@ import fitz
 
 from page_analysis_model import PAGE_ANALYSIS_SCHEMA_VERSION
 from page_analysis_primitive_pair_measurements import (
+    PrimitiveNotVisibleOnPageError,
     PrimitivePairMeasurements,
     measure_primitive_pair,
 )
@@ -475,10 +476,7 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
                 second_primitive_id: str,
             ) -> PrimitivePairMeasurements:
                 if second_primitive_id == invisible_neighbor_id:
-                    raise ValueError(
-                        "primitive has no visible intersection with the page: "
-                        f"{invisible_neighbor_id}"
-                    )
+                    raise PrimitiveNotVisibleOnPageError(invisible_neighbor_id)
                 return measure_primitive_pair(
                     primitive_page,
                     first_primitive_id=first_primitive_id,
@@ -498,7 +496,10 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
 
             neighbor_ids = [neighbor["primitive_id"] for neighbor in payload["neighbors"]]
             self.assertNotIn(invisible_neighbor_id, neighbor_ids)
-            self.assertGreaterEqual(len(neighbor_ids), 1)
+            self.assertEqual(
+                set(neighbor_ids),
+                set(_primitive_ids(primitives)) - {primitive_id, invisible_neighbor_id},
+            )
 
     def test_primitive_neighborhood_rejects_an_invisible_central_primitive(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -513,7 +514,48 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             with (
                 patch(
                     "pymupdf_capture_dump.measure_primitive_pair",
-                    side_effect=ValueError(expected_message),
+                    side_effect=PrimitiveNotVisibleOnPageError(primitive_id),
+                ),
+                self.assertRaises(PrimitiveNotVisibleOnPageError) as raised,
+            ):
+                dump_primitive_neighborhood_measurements(
+                    pdf_path,
+                    primitive_id=primitive_id,
+                )
+
+            self.assertIs(type(raised.exception), PrimitiveNotVisibleOnPageError)
+            self.assertEqual(raised.exception.primitive_id, primitive_id)
+            self.assertEqual(str(raised.exception), expected_message)
+
+    def test_primitive_neighborhood_propagates_untyped_visible_intersection_value_error(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            pdf_path = Path(temporary_directory) / "primitives.pdf"
+            _create_pdf_with_primitives(pdf_path)
+            primitives = json.loads(dump_normalized_primitives(pdf_path))
+            primitive_id = primitives["text_primitives"][0]["primitive_id"]
+            neighbor_id = primitives["image_primitives"][0]["primitive_id"]
+            expected_message = f"primitive has no visible intersection with the page: {neighbor_id}"
+
+            def measure_with_untyped_error(
+                primitive_page: NormalizedPrimitivePage,
+                *,
+                first_primitive_id: str,
+                second_primitive_id: str,
+            ) -> PrimitivePairMeasurements:
+                if second_primitive_id == neighbor_id:
+                    raise ValueError(expected_message)
+                return measure_primitive_pair(
+                    primitive_page,
+                    first_primitive_id=first_primitive_id,
+                    second_primitive_id=second_primitive_id,
+                )
+
+            with (
+                patch(
+                    "pymupdf_capture_dump.measure_primitive_pair",
+                    side_effect=measure_with_untyped_error,
                 ),
                 self.assertRaises(ValueError) as raised,
             ):
@@ -522,6 +564,7 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
                     primitive_id=primitive_id,
                 )
 
+            self.assertIs(type(raised.exception), ValueError)
             self.assertEqual(str(raised.exception), expected_message)
 
     def test_singleton_side_band_stage_does_not_change_existing_analysis_or_legacy_diagnostics(

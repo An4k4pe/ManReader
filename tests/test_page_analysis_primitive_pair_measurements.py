@@ -7,6 +7,7 @@ from typing import Any, cast
 
 from geometry_model import PageGeometry
 from page_analysis_primitive_pair_measurements import (
+    PrimitiveNotVisibleOnPageError,
     PrimitivePairMeasurements,
     measure_primitive_pair,
 )
@@ -196,12 +197,21 @@ class MeasurePrimitivePairTest(unittest.TestCase):
             drawings=(_drawing("invisible", (110.0, 0.0, 120.0, 10.0)),),
         )
 
-        with self.assertRaisesRegex(ValueError, "no visible intersection"):
+        with self.assertRaises(PrimitiveNotVisibleOnPageError) as raised:
             measure_primitive_pair(
                 page,
                 first_primitive_id="visible",
                 second_primitive_id="invisible",
             )
+
+        error = raised.exception
+        self.assertIs(type(error), PrimitiveNotVisibleOnPageError)
+        self.assertIsInstance(error, ValueError)
+        self.assertEqual(error.primitive_id, "invisible")
+        self.assertEqual(
+            str(error),
+            "primitive has no visible intersection with the page: invisible",
+        )
 
     def test_disjoint_gaps_distances_and_edge_deltas(self) -> None:
         page = _page(

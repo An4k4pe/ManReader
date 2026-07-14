@@ -28,6 +28,7 @@ from page_analysis_page_covering_visual import build_page_covering_visual_page_a
 from page_analysis_page_edge_visual import build_page_edge_visual_page_analysis
 from page_analysis_primitive_extent import build_primitive_extent_page_analysis
 from page_analysis_primitive_pair_measurements import (
+    PrimitiveNotVisibleOnPageError,
     PrimitivePairMeasurements,
     measure_primitive_pair,
 )
@@ -452,11 +453,8 @@ def _primitive_neighborhood_data(
                 first_primitive_id=primitive_id,
                 second_primitive_id=second_primitive_id,
             )
-        except ValueError as exc:
-            if _is_no_visible_intersection_error(
-                exc,
-                primitive_id=second_primitive_id,
-            ):
+        except PrimitiveNotVisibleOnPageError as exc:
+            if exc.primitive_id == second_primitive_id:
                 continue
             raise
         neighbor_measurements.append(measurements)
@@ -494,14 +492,6 @@ def _primitive_ids(primitive_page: NormalizedPrimitivePage) -> tuple[str, ...]:
             *primitive_page.drawing_primitives,
         )
     )
-
-
-def _is_no_visible_intersection_error(
-    exc: ValueError,
-    *,
-    primitive_id: str,
-) -> bool:
-    return str(exc) == f"primitive has no visible intersection with the page: {primitive_id}"
 
 
 def _primitive_neighborhood_sort_key(
