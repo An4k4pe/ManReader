@@ -2,7 +2,7 @@
 
 ## Stato corrente
 
-Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.20.
+Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.21.
 
 L'architettura target e il piano generale di migrazione sono approvati.
 
@@ -237,11 +237,13 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 - IR 1.0 e Markdown correnti;
 - comportamento EPUB legacy non modificato salvo milestone dedicata.
 
-## Milestone completata più recente
+## Milestone corrente
 
-La milestone completata più recente è:
+La milestone corrente è:
 
-> **Milestone 6 — marginalia e bande laterali — completata**
+> **Milestone 7 — contesto strutturale page-level**
+
+La Milestone 6 resta completata e congelata come baseline diagnostica; singleton e local-fragment non sono detector affidabili.
 
 ### Stato delle milestone precedenti
 
@@ -471,6 +473,12 @@ Vincoli della milestone:
 - geometria, semantica e disposizione editoriale restano distinte;
 - eventuale confidence geometrica non è confidence semantica;
 - i formati pagina devono essere trattati tramite coordinate relative o geometria effettiva, non tramite formati nominali.
+
+### Milestone 7 — contesto strutturale page-level
+
+La milestone osserva in modo page-local, verificabile e non decisionale il rapporto fra candidate esistenti, primitive visibili e contesto pagina, senza identificare corpo, colonne, tabelle, marginalia, header/footer, callout o decorazioni. Il primo contratto previsto è `CandidatePageContextMeasurements` con `measure_candidate_page_context(...)`, ma non è ancora implementato; dettagli, semantica e vincoli sono in `State.md`.
+
+Non sono autorizzati prima di un micro-step dedicato CLI, producer, `PageAnalysis`, nuovi candidate o structural kind, persistenza, detector, clustering, Resolution, ownership, coverage finale, schema `1.3`, IR, Markdown, EPUB o output legacy.
 
 ## Migrazione e shadow mode
 
