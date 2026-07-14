@@ -2,13 +2,15 @@
 
 ## Versione corrente
 
-**v0.20** — **Modalità I: implementazione incrementale**.
+**v0.21** — **Modalità I: implementazione incrementale**.
 
 La progettazione globale è conclusa. La direzione architetturale A-0.2 e il piano di migrazione sono approvati; ogni task resta piccolo, verificabile, con file ammessi espliciti e senza commit automatici.
 
 ## Stato operativo
 
-Le Milestone 1–6 sono completate. Non è ancora aperta né definita una milestone successiva.
+Le Milestone 1–6 sono completate. La milestone corrente è:
+
+> **Milestone 7 — contesto strutturale page-level**
 
 La pipeline legacy resta autorevole. I nuovi contratti lavorano in shadow mode e non producono ancora decisioni editoriali, IR o output finale.
 
@@ -220,8 +222,49 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-La milestone successiva dovrà iniziare dalla definizione del contesto strutturale page-level necessario a interpretare i candidate esistenti. Nessun nuovo comportamento funzionale è autorizzato prima di una decisione architetturale dedicata. I debiti dell'audit restano da valutare singolarmente; JSON e PNG reali non vanno committati.
+Preparare soltanto il primo micro-step autorizzato della Milestone 7, il contratto puro `CandidatePageContextMeasurements`; il contratto Python non è ancora implementato. Nessun comportamento funzionale è autorizzato prima di una decisione architetturale dedicata. I debiti dell'audit restano da valutare singolarmente; JSON e PNG reali non vanno committati.
 
 ## Ultima baseline funzionale verificata
 
 Commit `dfca953` — `Add typed invisible primitive error`: 929 test OK, 7 skipped; Ruff verde; BasedPyright: 0 errori, 0 warning, 0 note; `git diff --check` verde.
+
+## Milestone 7 — contesto strutturale page-level
+
+Obiettivo: produrre osservazioni page-local, verificabili e non decisionali sul rapporto fra candidate esistenti, primitive visibili e contesto complessivo della pagina. Non identifica ancora corpo pagina, colonne, tabelle, marginalia, header/footer, callout o decorazioni.
+
+Primo contratto previsto, non ancora implementato:
+
+```python
+CandidatePageContextMeasurements
+
+measure_candidate_page_context(
+    primitive_page: NormalizedPrimitivePage,
+    *,
+    candidate: RegionCandidate,
+) -> CandidatePageContextMeasurements
+```
+
+I futuri file del primo micro-step saranno `page_analysis_candidate_page_context_measurements.py` e `tests/test_page_analysis_candidate_page_context_measurements.py`; non vanno creati in questo commit.
+
+Campi minimi previsti:
+
+```text
+candidate_id: str
+page_id: str
+candidate_bbox: BBox
+candidate_primitive_ids: tuple[str, ...]
+non_candidate_visible_text_primitive_count: int
+non_candidate_visible_text_extent_bbox: BBox | None
+non_candidate_visible_image_primitive_count: int
+non_candidate_visible_image_extent_bbox: BBox | None
+non_candidate_visible_drawing_primitive_count: int
+non_candidate_visible_drawing_extent_bbox: BBox | None
+```
+
+Vincoli: misura pubblica, pura, deterministica e non persistita, senza mutare gli input, produrre `PageAnalysis`, CLI, chiamate interne ai producer esistenti o extent misto. Gli extent restano separati per text, image e drawing. Non introduce gap, overlap, distanza, ratio, score, confidence, ranking, evidence, classificazione, schema `1.3`, modifiche a `PageAnalysis`, nuovi `LayoutRegion`, `RegionCandidate` o structural kind, persistenza, detector generale, clustering, Resolution, ownership, coverage finale o refactor trasversale di `_visible_bbox`.
+
+Semantica: sono escluse tutte le primitive in `candidate.primitive_ids`, anche se non visibili; le altre sono considerate solo nella loro intersezione visibile positiva con la pagina. Le primitive non-candidate completamente invisibili sono ignorate e quelle parzialmente fuori pagina sono clipped prima dell'extent. Per ogni tipo senza primitive non-candidate visibili il risultato è `count == 0` ed `extent is None`; `candidate.primitive_ids == ()` è valido.
+
+Edge case: `candidate.page_id` diverso da `primitive_page.page_id` deve sollevare `ValueError` con il page ID rilevante; un ID candidate inesistente deve sollevare `ValueError` che identifichi il `primitive_id`; input runtime di tipo errato saranno rifiutati coerentemente con lo stile dei contratti esistenti.
+
+Compatibilità: pipeline legacy, IR, Markdown ed EPUB restano autorevoli e invariati; `PageAnalysis` resta schema `1.2`. La Milestone 6 resta completata e congelata come baseline diagnostica; singleton e local-fragment restano baseline diagnostiche, non detector affidabili.
