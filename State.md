@@ -8,9 +8,7 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–5 sono completate. La milestone corrente è:
-
-> **Milestone 6 — marginalia e bande laterali**
+Le Milestone 1–6 sono completate. Non è ancora aperta né definita una milestone successiva.
 
 La pipeline legacy resta autorevole. I nuovi contratti lavorano in shadow mode e non producono ancora decisioni editoriali, IR o output finale.
 
@@ -84,9 +82,11 @@ Milestone 1–5 completate. Hanno consolidato:
 
 I dettagli storici di file, test e commit sono disponibili nei commit precedenti e nelle versioni pregresse di `State.md`.
 
-## Milestone 6 — stato corrente
+## Milestone 6 — marginalia e bande laterali — completata
 
 Obiettivo: proporre candidate strutturali di banda laterale senza cambiare output legacy.
+
+La milestone ha consegnato candidate strutturali e strumenti diagnostici shadow per osservare side-band e geometria visuale senza modificare Resolution, IR, Markdown, EPUB o output legacy. La chiusura attesta il completamento del substrato diagnostico autorizzato, non un riconoscimento affidabile o concluso della marginalia. I producer text-only singleton e local-fragment restano baseline diagnostiche congelate.
 
 ```text
 NormalizedPrimitivePage
@@ -220,8 +220,8 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-La linea text-only resta congelata come baseline: non è autorizzato un nuovo micro-step funzionale, diagnostico o di calibrazione su di essa. Gli eventuali debiti dell'audit saranno valutati singolarmente prima di qualsiasi cleanup; Resolution e il passaggio a comportamento attivo restano fuori scope. Non committare JSON o PNG reali generati.
+La milestone successiva dovrà iniziare dalla definizione del contesto strutturale page-level necessario a interpretare i candidate esistenti. Nessun nuovo comportamento funzionale è autorizzato prima di una decisione architetturale dedicata. I debiti dell'audit restano da valutare singolarmente; JSON e PNG reali non vanno committati.
 
-## Ultima baseline verificata
+## Ultima baseline funzionale verificata
 
 Commit `dfca953` — `Add typed invisible primitive error`: 929 test OK, 7 skipped; Ruff verde; BasedPyright: 0 errori, 0 warning, 0 note; `git diff --check` verde.
