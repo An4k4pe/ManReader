@@ -222,11 +222,11 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-Il contratto puro e la diagnostica JSON read-only del page-context local-fragment sono completati. Eventuali passi successivi restano soggetti a decisione architetturale dedicata; i debiti dell'audit restano da valutare singolarmente e JSON/PNG reali non vanno committati.
+Il contratto page-context, la diagnostica JSON read-only local-fragment e il contratto candidate ↔ extent sono completati. Un eventuale collegamento della nuova misura alla diagnostica o alla CLI richiede un micro-step separato e una decisione esplicita; page-edge e page-covering non sono automaticamente autorizzati. I debiti dell'audit restano da valutare singolarmente e JSON/PNG reali non vanno committati.
 
 ## Ultima baseline funzionale verificata
 
-Commit `dfca953` — `Add typed invisible primitive error`: 929 test OK, 7 skipped; Ruff verde; BasedPyright: 0 errori, 0 warning, 0 note; `git diff --check` verde.
+Commit `7779715` — `Add candidate extent relation measurements`: 963 test OK, 7 skipped; Ruff verde; BasedPyright: 0 errori, 0 warning, 0 note; `git diff --check` verde.
 
 ## Milestone 7 — contesto strutturale page-level
 
@@ -245,6 +245,12 @@ measure_candidate_page_context(
 ```
 
 Il contratto è disponibile in `page_analysis_candidate_page_context_measurements.py`, con test sintetici in `tests/test_page_analysis_candidate_page_context_measurements.py`.
+
+Micro-step completato: `7779715` introduce `page_analysis_candidate_extent_relation_measurements.py` e `measure_candidate_non_candidate_extent_relations(...)`. Riceve direttamente un `CandidatePageContextMeasurements` e restituisce `CandidateNonCandidateExtentRelationMeasurements`, con relazioni separate per extent text, image e drawing tramite `CandidateExtentRelationMeasurements`.
+
+Le relazioni espongono soltanto gap e overlap sui due assi e contenimento inclusivo nei due versi. La bbox della candidate è usata invariata; una famiglia senza extent ha extent e relation entrambi `None`. Il contratto è puro, derivato, deterministico e non persistito: non esegue una nuova scansione delle primitive, clipping, chiamate ai producer o produzione di `PageAnalysis`.
+
+Non introduce `intersects`, ratio, distanza euclidea, direzioni nominali, soglie, score, confidence, ranking, evidence o classificazioni. Non modifica producer, diagnostica CLI, schema `1.2`, serializzazione, store, Resolution, IR, Markdown, EPUB, renderer o pipeline legacy.
 
 Micro-step completato: `page_analysis_candidate_page_context_diagnostics.py` espone `dump_local_fragment_side_band_candidate_page_context(...)` e lo stage CLI `candidate-page-context-local-fragment-side-band`. Riusa `measure_candidate_page_context(...)` sulle candidate, nello stesso ordine, del producer local-fragment side-band congelato e restituisce JSON plain, non `PageAnalysis`. Non modifica producer, schema, IR, Markdown, EPUB, legacy, Resolution, persistenza, score, confidence, ranking o evidence.
 
