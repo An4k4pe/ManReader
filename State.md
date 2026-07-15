@@ -222,7 +222,7 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-Preparare soltanto il primo micro-step autorizzato della Milestone 7, il contratto puro `CandidatePageContextMeasurements`; il contratto Python non è ancora implementato. Nessun comportamento funzionale è autorizzato prima di una decisione architetturale dedicata. I debiti dell'audit restano da valutare singolarmente; JSON e PNG reali non vanno committati.
+Il primo contratto puro della Milestone 7, `CandidatePageContextMeasurements`, è implementato. Il prossimo micro-step da valutare è una diagnostica JSON read-only del page-context per candidate local-fragment side-band, tramite modulo dedicato. Nessuna CLI è ancora autorizzata o completata. I debiti dell'audit restano da valutare singolarmente; JSON e PNG reali non vanno committati.
 
 ## Ultima baseline funzionale verificata
 
@@ -232,7 +232,7 @@ Commit `dfca953` — `Add typed invisible primitive error`: 929 test OK, 7 skipp
 
 Obiettivo: produrre osservazioni page-local, verificabili e non decisionali sul rapporto fra candidate esistenti, primitive visibili e contesto complessivo della pagina. Non identifica ancora corpo pagina, colonne, tabelle, marginalia, header/footer, callout o decorazioni.
 
-Primo contratto previsto, non ancora implementato:
+Primo contratto puro disponibile, implementato:
 
 ```python
 CandidatePageContextMeasurements
@@ -244,9 +244,9 @@ measure_candidate_page_context(
 ) -> CandidatePageContextMeasurements
 ```
 
-I futuri file del primo micro-step saranno `page_analysis_candidate_page_context_measurements.py` e `tests/test_page_analysis_candidate_page_context_measurements.py`; non vanno creati in questo commit.
+Il contratto è disponibile in `page_analysis_candidate_page_context_measurements.py`, con test sintetici in `tests/test_page_analysis_candidate_page_context_measurements.py`.
 
-Campi minimi previsti:
+Campi minimi disponibili:
 
 ```text
 candidate_id: str
