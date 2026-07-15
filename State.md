@@ -222,7 +222,7 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-Il primo contratto puro della Milestone 7, `CandidatePageContextMeasurements`, è implementato. Il prossimo micro-step da valutare è una diagnostica JSON read-only del page-context per candidate local-fragment side-band, tramite modulo dedicato. Nessuna CLI è ancora autorizzata o completata. I debiti dell'audit restano da valutare singolarmente; JSON e PNG reali non vanno committati.
+Il contratto puro e la diagnostica JSON read-only del page-context local-fragment sono completati. Eventuali passi successivi restano soggetti a decisione architetturale dedicata; i debiti dell'audit restano da valutare singolarmente e JSON/PNG reali non vanno committati.
 
 ## Ultima baseline funzionale verificata
 
@@ -245,6 +245,12 @@ measure_candidate_page_context(
 ```
 
 Il contratto è disponibile in `page_analysis_candidate_page_context_measurements.py`, con test sintetici in `tests/test_page_analysis_candidate_page_context_measurements.py`.
+
+Micro-step completato: `page_analysis_candidate_page_context_diagnostics.py` espone `dump_local_fragment_side_band_candidate_page_context(...)` e lo stage CLI `candidate-page-context-local-fragment-side-band`. Riusa `measure_candidate_page_context(...)` sulle candidate, nello stesso ordine, del producer local-fragment side-band congelato e restituisce JSON plain, non `PageAnalysis`. Non modifica producer, schema, IR, Markdown, EPUB, legacy, Resolution, persistenza, score, confidence, ranking o evidence.
+
+Smoke reali: DB p28 ha 12 candidate, con text extent non-candidate ampio e separato da image/drawing quasi page-covering; Fab p271 ha 14 candidate e pattern analogo con image extent quasi full-page; Lan p255 ha una candidate, text extent nella parte bassa e image/drawing page-wide su canali separati.
+
+Conclusione: separare text, image e drawing evita che background, immagini o drawing page-wide nascondano il contesto testuale. Non è una classificazione e non autorizza detector, ranking o Resolution.
 
 Campi minimi disponibili:
 
