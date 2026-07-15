@@ -408,11 +408,11 @@ Sono approvati:
 
 Stato aggiornato: oltre ai micro-step side-band singleton e local-fragment, sono approvati `PrimitivePairMeasurements`, lo stage `primitive-pair`, l'opzione `--render-page-image`, lo stage `primitive-neighborhood` con coverage ratio diagnostiche, e i producer `layout.page_covering_visual` e `layout.page_edge_visual`.
 
-Il passo successivo richiede una futura definizione del contesto strutturale page-level necessario a interpretare i candidate esistenti. Nessun comportamento funzionale è autorizzato prima di una decisione architetturale dedicata.
+Il contesto strutturale page-level necessario a interpretare i candidate esistenti è stato affrontato dalla Milestone 7, ora completata. Nessun ulteriore comportamento funzionale è autorizzato senza una decisione architetturale dedicata.
 
 Non sono autorizzati ora producer per visuali interne, `layout.visual_separator`, `layout.interior_visual_frame`, `layout.section_background`, detector generale, clustering, score/confidence/ranking, classificazione `decorative` definitiva, rimozione editoriale o modifiche a IR, Markdown, EPUB e output legacy.
 
-Vincoli permanenti per il prossimo step:
+Vincoli permanenti:
 
 - `TextHypothesisMeasurements` misura selezioni esplicite di primitive testuali compatibili;
 - `TextHypothesisMeasurements` non classifica side-band;
