@@ -24,6 +24,9 @@ from typing import Literal
 
 import fitz
 
+from page_analysis_candidate_extent_relation_diagnostics import (
+    dump_local_fragment_side_band_candidate_extent_relations as dump_candidate_extent_relation_diagnostics,
+)
 from page_analysis_candidate_page_context_diagnostics import (
     dump_local_fragment_side_band_candidate_page_context as dump_candidate_page_context_diagnostics,
 )
@@ -55,6 +58,7 @@ type DiagnosticStage = Literal[
     "analysis-side-band-local-fragment",
     "side-band-local-fragment-diagnostics",
     "candidate-page-context-local-fragment-side-band",
+    "candidate-page-context-extent-relations-local-fragment-side-band",
     "analysis-page-edge-visual",
     "analysis-page-covering-visual",
     "primitive-pair",
@@ -87,6 +91,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
             "analysis-side-band-local-fragment",
             "side-band-local-fragment-diagnostics",
             "candidate-page-context-local-fragment-side-band",
+            "candidate-page-context-extent-relations-local-fragment-side-band",
             "analysis-page-edge-visual",
             "analysis-page-covering-visual",
             "primitive-pair",
@@ -251,6 +256,24 @@ def dump_local_fragment_side_band_candidate_page_context(
     )
 
 
+def dump_local_fragment_side_band_candidate_extent_relations(
+    pdf_path: Path,
+    *,
+    page_number: int = 1,
+    output_path: Path | None = None,
+    compact: bool = False,
+) -> str:
+    """Capture, normalize, and return local-fragment candidate extent relations JSON."""
+
+    return _dump_page(
+        pdf_path,
+        page_number=page_number,
+        stage="candidate-page-context-extent-relations-local-fragment-side-band",
+        output_path=output_path,
+        compact=compact,
+    )
+
+
 def dump_page_covering_visual_page_analysis(
     pdf_path: Path,
     *,
@@ -402,6 +425,15 @@ def _dump_page(
             primitive_page,
             generation_id=(
                 f"diagnostic-local-fragment-side-band-candidate-page-context:{page_index}"
+            ),
+        )
+    elif stage == "candidate-page-context-extent-relations-local-fragment-side-band":
+        primitive_page = normalize_backend_page_capture(capture)
+        artifact_data = dump_candidate_extent_relation_diagnostics(
+            primitive_page,
+            generation_id=(
+                "diagnostic-local-fragment-side-band-candidate-extent-relations:"
+                f"{page_index}"
             ),
         )
     elif stage == "analysis-page-covering-visual":

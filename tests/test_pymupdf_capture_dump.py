@@ -22,6 +22,7 @@ from primitive_model import NormalizedPrimitivePage
 from pymupdf_capture_dump import (
     build_argument_parser,
     dump_capture,
+    dump_local_fragment_side_band_candidate_extent_relations,
     dump_local_fragment_side_band_candidate_page_context,
     dump_local_fragment_side_band_diagnostics,
     dump_local_fragment_side_band_page_analysis,
@@ -71,6 +72,20 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
         )
 
         self.assertEqual(args.stage, "candidate-page-context-local-fragment-side-band")
+
+    def test_parser_accepts_local_fragment_side_band_candidate_extent_relations_stage(self) -> None:
+        args = build_argument_parser().parse_args(
+            (
+                "sample.pdf",
+                "--stage",
+                "candidate-page-context-extent-relations-local-fragment-side-band",
+            )
+        )
+
+        self.assertEqual(
+            args.stage,
+            "candidate-page-context-extent-relations-local-fragment-side-band",
+        )
 
     def test_parser_accepts_page_covering_visual_analysis_stage(self) -> None:
         args = build_argument_parser().parse_args(
@@ -323,6 +338,25 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
                 payload["candidates"][0],
             )
 
+    def test_local_fragment_candidate_extent_relations_helper_returns_plain_json(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            pdf_path = Path(temporary_directory) / "local-fragment-side-band.pdf"
+            _create_pdf_with_local_fragment_side_band_text(pdf_path)
+
+            payload = json.loads(dump_local_fragment_side_band_candidate_extent_relations(pdf_path))
+
+            self.assertEqual(payload["page_id"], "diagnostic-page:0")
+            self.assertIn("candidates", payload)
+            self.assertNotIn("schema_version", payload)
+            self.assertNotIn("regions", payload)
+            self.assertNotIn("relations", payload)
+            self.assertNotIn("provenance", payload)
+            self.assertEqual(len(payload["candidates"]), 1)
+            self.assertIn(
+                "non_candidate_visible_text_extent_relation",
+                payload["candidates"][0],
+            )
+
     def test_page_covering_visual_helper_returns_candidate_json(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             pdf_path = Path(temporary_directory) / "page-covering-visual.pdf"
@@ -400,6 +434,23 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
 
             self.assertEqual(dump_local_fragment_side_band_page_analysis(pdf_path), local_before)
             self.assertEqual(dump_local_fragment_side_band_diagnostics(pdf_path), diagnostics_before)
+
+    def test_candidate_extent_relations_stage_does_not_change_local_fragment_stages(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            pdf_path = Path(temporary_directory) / "local-fragment-side-band.pdf"
+            _create_pdf_with_local_fragment_side_band_text(pdf_path)
+            analysis_before = dump_local_fragment_side_band_page_analysis(pdf_path)
+            diagnostics_before = dump_local_fragment_side_band_diagnostics(pdf_path)
+            context_before = dump_local_fragment_side_band_candidate_page_context(pdf_path)
+
+            dump_local_fragment_side_band_candidate_extent_relations(pdf_path)
+
+            self.assertEqual(dump_local_fragment_side_band_page_analysis(pdf_path), analysis_before)
+            self.assertEqual(dump_local_fragment_side_band_diagnostics(pdf_path), diagnostics_before)
+            self.assertEqual(
+                dump_local_fragment_side_band_candidate_page_context(pdf_path),
+                context_before,
+            )
 
     def test_local_fragment_candidate_page_context_writes_compact_requested_output(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -1046,6 +1097,36 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             self.assertEqual(return_code, 0)
             self.assertEqual(image_path.read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
             self.assertEqual(len(json.loads(stdout.getvalue())["candidates"]), 1)
+
+    def test_main_uses_dedicated_generation_id_for_candidate_extent_relations_stage(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            pdf_path = root / "local-fragment-side-band.pdf"
+            image_path = root / "diagnostics" / "page.png"
+            _create_pdf_with_local_fragment_side_band_text(pdf_path)
+            stdout = StringIO()
+
+            with redirect_stdout(stdout):
+                return_code = main(
+                    (
+                        str(pdf_path),
+                        "--stage",
+                        "candidate-page-context-extent-relations-local-fragment-side-band",
+                        "--render-page-image",
+                        str(image_path),
+                    )
+                )
+
+            self.assertEqual(return_code, 0)
+            self.assertEqual(image_path.read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(
+                payload["generation_id"],
+                "diagnostic-local-fragment-side-band-candidate-extent-relations:0",
+            )
+            self.assertEqual(len(payload["candidates"]), 1)
 
     def test_main_prints_analysis_json_for_requested_stage(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
