@@ -237,13 +237,13 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 - IR 1.0 e Markdown correnti;
 - comportamento EPUB legacy non modificato salvo milestone dedicata.
 
-## Milestone corrente
+## Stato delle milestone
 
-La milestone corrente è:
+La milestone completata più recente è:
 
-> **Milestone 7 — contesto strutturale page-level**
+> **Milestone 7 — contesto strutturale page-level — completata**
 
-La Milestone 6 resta completata e congelata come baseline diagnostica; singleton e local-fragment non sono detector affidabili.
+Nessuna milestone successiva è aperta o definita. La Milestone 6 resta completata e congelata come baseline diagnostica; singleton e local-fragment non sono detector affidabili.
 
 ### Stato delle milestone precedenti
 
@@ -474,11 +474,11 @@ Vincoli della milestone:
 - eventuale confidence geometrica non è confidence semantica;
 - i formati pagina devono essere trattati tramite coordinate relative o geometria effettiva, non tramite formati nominali.
 
-### Milestone 7 — contesto strutturale page-level
+### Milestone 7 — contesto strutturale page-level — completata
 
-La milestone osserva in modo page-local, verificabile e non decisionale il rapporto fra candidate esistenti, primitive visibili e contesto pagina, senza identificare corpo, colonne, tabelle, marginalia, header/footer, callout o decorazioni. Il primo contratto puro disponibile è `CandidatePageContextMeasurements` con `measure_candidate_page_context(...)`; dettagli, semantica e vincoli sono in `State.md`.
+La milestone ha osservato in modo page-local, verificabile e non decisionale il rapporto fra candidate esistenti, primitive visibili e contesto pagina, senza identificare corpo, colonne, tabelle, marginalia, header/footer, callout o decorazioni. Ha completato i contratti puri page-context e candidate ↔ extent con diagnostiche shadow separate; dettagli, semantica e vincoli restano in `State.md`.
 
-Non sono autorizzati prima di un micro-step dedicato CLI, producer, `PageAnalysis`, nuovi candidate o structural kind, persistenza, detector, clustering, Resolution, ownership, coverage finale, schema `1.3`, IR, Markdown, EPUB o output legacy.
+Restano esclusi ulteriori CLI o producer, modifiche a `PageAnalysis`, nuovi candidate o structural kind, persistenza, detector, clustering, Resolution, ownership, coverage finale, schema `1.3`, IR, Markdown, EPUB e output legacy, salvo una futura decisione architetturale dedicata.
 
 ## Migrazione e shadow mode
 

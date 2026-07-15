@@ -8,9 +8,7 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–6 sono completate. La milestone corrente è:
-
-> **Milestone 7 — contesto strutturale page-level**
+Le Milestone 1–7 sono completate. Nessuna milestone successiva è ancora aperta o definita.
 
 La pipeline legacy resta autorevole. I nuovi contratti lavorano in shadow mode e non producono ancora decisioni editoriali, IR o output finale.
 
@@ -222,15 +220,17 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-I contratti puri, le diagnostiche local-fragment e gli smoke relazionali della Milestone 7 sono completati. Il prossimo passo è una revisione architetturale dedicata per decidere fra chiusura della milestone e un eventuale smoke separato sulle candidate visuali page-edge. Page-edge e page-covering non sono ancora autorizzati; nessun nuovo campo o comportamento funzionale è autorizzato. I debiti dell'audit restano da valutare singolarmente e JSON/PNG reali non vanno committati.
+Nessuna milestone successiva è ancora aperta o definita. Qualunque nuovo comportamento richiede una decisione architetturale dedicata; ulteriori estensioni page-edge o page-covering non sono autorizzate automaticamente e nessun nuovo campo o comportamento funzionale è autorizzato. I debiti dell'audit restano da valutare singolarmente e JSON/PNG reali non vanno committati.
 
 ## Ultima baseline funzionale verificata
 
 Commit `b5d2321` — `Add candidate extent relation diagnostics stage`: 974 test OK, 7 skipped; Ruff verde; BasedPyright: 0 errori, 0 warning, 0 note; `git diff --check` verde.
 
-## Milestone 7 — contesto strutturale page-level
+## Milestone 7 — contesto strutturale page-level — completata
 
 Obiettivo: produrre osservazioni page-local, verificabili e non decisionali sul rapporto fra candidate esistenti, primitive visibili e contesto complessivo della pagina. Non identifica ancora corpo pagina, colonne, tabelle, marginalia, header/footer, callout o decorazioni.
+
+Risultati completati: `CandidatePageContextMeasurements` e `measure_candidate_page_context(...)`; diagnostica JSON local-fragment page-context; `CandidateExtentRelationMeasurements`, `CandidateNonCandidateExtentRelationMeasurements` e `measure_candidate_non_candidate_extent_relations(...)`; diagnostica JSON relazionale local-fragment e stage CLI diagnostici separati. Gli smoke reali coprono DB p28, Fab p271 e Lan p255.
 
 Primo contratto puro disponibile, implementato:
 
@@ -264,6 +264,8 @@ Smoke relazionali: DB p28 ha 12 candidate, tutte contenute negli extent text, im
 
 Conclusione relazionale: l'invarianza osservata degli extent è comportamento atteso, non un difetto. Le relazioni aggiungono informazione verificabile nei casi di bordo; per candidate interne a extent ampi descrivono soprattutto il contenimento. Gli smoke non autorizzano ratio, nuove distanze, score, confidence, ranking, evidence, detector o classificazioni.
 
+Smoke temporaneo page-edge, tramite sole API pubbliche: Fab p246 conferma 3 candidate `layout.page_edge_visual`, tutte misurate senza eccezioni e con output deterministico. Le candidate visuali sono basate su primitive image; il leave-one-candidate-out funziona e l'image extent non-candidate contiene tutte e tre le candidate per la presenza di altre immagini. Le relazioni text differiscono: barra verticale e barra superiore sono sovrapposte al text extent, mentre la linea sottile superiore ne è separata verticalmente di circa 0.3429 pt, con vertical overlap nullo. Non emergono incoerenze fra extent e relation e nessun file diagnostico è stato committato.
+
 Campi minimi disponibili:
 
 ```text
@@ -285,4 +287,6 @@ Semantica: sono escluse tutte le primitive in `candidate.primitive_ids`, anche s
 
 Edge case: `candidate.page_id` diverso da `primitive_page.page_id` deve sollevare `ValueError` con il page ID rilevante; un ID candidate inesistente deve sollevare `ValueError` che identifichi il `primitive_id`; input runtime di tipo errato saranno rifiutati coerentemente con lo stile dei contratti esistenti.
 
-Compatibilità: pipeline legacy, IR, Markdown ed EPUB restano autorevoli e invariati; `PageAnalysis` resta schema `1.2`. La Milestone 6 resta completata e congelata come baseline diagnostica; singleton e local-fragment restano baseline diagnostiche, non detector affidabili.
+Conclusione architetturale: gli obiettivi della Milestone 7 sono soddisfatti. I contratti sono puri, pubblici, deterministici, producer-agnostic e non persistiti; descrivono contesto page-local e relazioni geometriche senza produrre fatti strutturali. Non identificano body, colonne, tabelle, marginalia, header/footer, callout o decorazioni e non introducono ratio aggiuntivi, score, confidence, ranking, evidence, detector, classificazioni o Resolution. `PageAnalysis` resta schema `1.2`; pipeline legacy, IR, Markdown ed EPUB restano autorevoli e invariati. Page-covering non è stato esteso nella Milestone 7 e non serve altro codice per la chiusura.
+
+Compatibilità: la Milestone 6 resta completata e congelata come baseline diagnostica; singleton e local-fragment restano baseline diagnostiche, non detector affidabili.
