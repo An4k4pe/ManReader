@@ -22,6 +22,7 @@ from primitive_model import NormalizedPrimitivePage
 from pymupdf_capture_dump import (
     build_argument_parser,
     dump_capture,
+    dump_local_fragment_side_band_candidate_page_context,
     dump_local_fragment_side_band_diagnostics,
     dump_local_fragment_side_band_page_analysis,
     dump_normalized_primitives,
@@ -63,6 +64,13 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
         )
 
         self.assertEqual(args.stage, "side-band-local-fragment-diagnostics")
+
+    def test_parser_accepts_local_fragment_side_band_candidate_page_context_stage(self) -> None:
+        args = build_argument_parser().parse_args(
+            ("sample.pdf", "--stage", "candidate-page-context-local-fragment-side-band")
+        )
+
+        self.assertEqual(args.stage, "candidate-page-context-local-fragment-side-band")
 
     def test_parser_accepts_page_covering_visual_analysis_stage(self) -> None:
         args = build_argument_parser().parse_args(
@@ -295,6 +303,26 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             self.assertIn("primitive_count", entry)
             self.assertNotIn("schema_version", payload)
 
+    def test_local_fragment_candidate_page_context_helper_returns_plain_json(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            pdf_path = Path(temporary_directory) / "local-fragment-side-band.pdf"
+            _create_pdf_with_local_fragment_side_band_text(pdf_path)
+
+            payload = json.loads(dump_local_fragment_side_band_candidate_page_context(pdf_path))
+
+            self.assertEqual(payload["page_id"], "diagnostic-page:0")
+            self.assertIn("candidates", payload)
+            self.assertNotIn("schema_version", payload)
+            self.assertNotIn("regions", payload)
+            self.assertNotIn("relations", payload)
+            self.assertNotIn("provenance", payload)
+            self.assertEqual(len(payload["candidates"]), 1)
+            self.assertIn("candidate_id", payload["candidates"][0])
+            self.assertIn(
+                "non_candidate_visible_text_extent_bbox",
+                payload["candidates"][0],
+            )
+
     def test_page_covering_visual_helper_returns_candidate_json(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             pdf_path = Path(temporary_directory) / "page-covering-visual.pdf"
@@ -366,10 +394,30 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             pdf_path = Path(temporary_directory) / "local-fragment-side-band.pdf"
             _create_pdf_with_local_fragment_side_band_text(pdf_path)
             local_before = dump_local_fragment_side_band_page_analysis(pdf_path)
+            diagnostics_before = dump_local_fragment_side_band_diagnostics(pdf_path)
 
-            dump_local_fragment_side_band_diagnostics(pdf_path)
+            dump_local_fragment_side_band_candidate_page_context(pdf_path)
 
             self.assertEqual(dump_local_fragment_side_band_page_analysis(pdf_path), local_before)
+            self.assertEqual(dump_local_fragment_side_band_diagnostics(pdf_path), diagnostics_before)
+
+    def test_local_fragment_candidate_page_context_writes_compact_requested_output(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            pdf_path = root / "local-fragment-side-band.pdf"
+            output_path = root / "diagnostics" / "candidate-page-context.json"
+            _create_pdf_with_local_fragment_side_band_text(pdf_path)
+
+            returned = dump_local_fragment_side_band_candidate_page_context(
+                pdf_path,
+                output_path=output_path,
+                compact=True,
+            )
+
+            self.assertTrue(output_path.is_file())
+            self.assertEqual(output_path.read_text(encoding="utf-8"), returned)
+            self.assertFalse(returned.endswith("\n"))
+            self.assertIn("candidates", json.loads(returned))
 
     def test_dump_primitive_pair_measurements_returns_geometry_json(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -965,6 +1013,31 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
                         str(pdf_path),
                         "--stage",
                         "side-band-local-fragment-diagnostics",
+                        "--render-page-image",
+                        str(image_path),
+                    )
+                )
+
+            self.assertEqual(return_code, 0)
+            self.assertEqual(image_path.read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
+            self.assertEqual(len(json.loads(stdout.getvalue())["candidates"]), 1)
+
+    def test_main_renders_page_image_for_local_fragment_candidate_page_context_stage(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            pdf_path = root / "local-fragment-side-band.pdf"
+            image_path = root / "diagnostics" / "page.png"
+            _create_pdf_with_local_fragment_side_band_text(pdf_path)
+            stdout = StringIO()
+
+            with redirect_stdout(stdout):
+                return_code = main(
+                    (
+                        str(pdf_path),
+                        "--stage",
+                        "candidate-page-context-local-fragment-side-band",
                         "--render-page-image",
                         str(image_path),
                     )
