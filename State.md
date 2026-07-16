@@ -8,9 +8,7 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–7 sono completate. La milestone corrente è:
-
-> **Milestone 8 — contratto document-local di analisi**
+Le Milestone 1–8 sono completate. Nessuna nuova milestone è ancora aperta.
 
 La pipeline legacy resta autorevole. I nuovi contratti lavorano in shadow mode e non producono ancora decisioni editoriali, IR o output finale.
 
@@ -222,7 +220,7 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-Il modello puro `DocumentAnalysis` e la factory validata per un singolo `PageAnalysisReference` della Milestone 8 sono completati. Qualsiasi terzo micro-step richiede una nuova decisione architetturale e non è ancora autorizzato. I debiti dell'audit restano da valutare singolarmente e JSON/PNG reali non vanno committati.
+Prima di aprire una milestone successiva è richiesta una nuova decisione architetturale esplicita. Nessun ulteriore codice o comportamento è autorizzato; i debiti dell'audit restano da valutare singolarmente e JSON/PNG reali non vanno committati.
 
 ## Ultima baseline funzionale verificata
 
@@ -293,9 +291,9 @@ Conclusione architetturale: gli obiettivi della Milestone 7 sono soddisfatti. I 
 
 Compatibilità: la Milestone 6 resta completata e congelata come baseline diagnostica; singleton e local-fragment restano baseline diagnostiche, non detector affidabili.
 
-## Milestone 8 — contratto document-local di analisi
+## Milestone 8 — contratto document-local di analisi — completata
 
-Obiettivo: definire un contenitore immutabile, puro e versionato per una singola generazione documentale coerente, che riferisca in ordine sorgente al massimo una `PageAnalysis` disponibile per pagina e ammetta documenti parziali.
+Obiettivo completato: definire un contenitore immutabile, puro e versionato per una singola generazione documentale coerente, che riferisca in ordine sorgente al massimo una `PageAnalysis` disponibile per pagina e ammetta documenti parziali.
 
 Document-local significa una sola sorgente PDF immutabile, ordine delle pagine sorgente e non reading order, riferimenti logici a `PageAnalysis` e pagine mancanti ammesse. Non identifica ancora pattern documentali e non introduce semantica, Resolution o decisioni sulle candidate.
 
@@ -334,6 +332,10 @@ Micro-step completato: `b950201` introduce `document_analysis_model.py` e `tests
 Secondo micro-step completato: `308f5db` introduce `document_analysis_reference.py` e `tests/test_document_analysis_reference.py`, con `build_validated_page_analysis_reference(...)`. Riceve una `NormalizedPrimitivePage` e la relativa `PageAnalysis`, riusa integralmente `validate_page_analysis_against_primitive_page(...)` e produce un solo `PageAnalysisReference`: `page_index` deriva esclusivamente da `NormalizedPrimitivePage.page_index`, mentre `page_id`, schema, generation ID e provenance derivano dalla `PageAnalysis`. Non ordina, non muta e non carica artifact. Il costruttore diretto della dataclass resta disponibile come contratto dati di basso livello; il percorso canonico da oggetti reali usa la factory validata.
 
 La factory attesta soltanto la coerenza page-local: non attesta che `page_count` o l'indice appartengano a un'autorità documentale superiore, non inferisce `page_count` e non costruisce `DocumentAnalysis`.
+
+Conclusione di chiusura: esiste ora il contratto document-local puro e versionato, con una selezione coerente e ordinata di riferimenti pagina, documenti parziali ammessi e un percorso canonico validato per costruire un singolo riferimento. Non introduce semantica, Resolution o decisioni editoriali e non modifica pipeline legacy, IR, Markdown o EPUB.
+
+L'acquisizione attestata di `page_count` è rinviata a una futura integrazione con un'autorità documentale concreta. Tale integrazione dovrà ottenere `source_id` e `page_count` dalla medesima sorgente immutabile verificata, includere solo riferimenti appartenenti a quella sorgente e non inferire `page_count` da pagine parziali né da `max(page_index) + 1`. Non è deciso ora se l'autorità sarà PDF snapshot, manifest, capture documentale o un altro componente.
 
 Decisioni identitarie: non esiste `document_id`; `source_id` identifica il PDF immutabile e il soggetto tecnico dell'analisi, mentre `DocumentAnalysis.generation_id` identifica la generazione documentale. Il riferimento pagina riusa `PageAnalysisProvenance`; `page_id` deve coincidere con `provenance.source_page_id` e `page_analysis_schema_version` con `PAGE_ANALYSIS_SCHEMA_VERSION` (oggi `1.2`). Non vengono riferiti path, digest o artifact fisici.
 

@@ -239,11 +239,7 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-La milestone corrente è:
-
-> **Milestone 8 — contratto document-local di analisi**
-
-La Milestone 7 è la più recente completata; la Milestone 6 resta completata e congelata come baseline diagnostica. Singleton e local-fragment non sono detector affidabili.
+Le Milestone 1–8 sono completate. Nessuna nuova milestone è ancora aperta o autorizzata. La Milestone 8 è la più recente completata; la Milestone 6 resta completata e congelata come baseline diagnostica. Singleton e local-fragment non sono detector affidabili.
 
 ### Stato delle milestone precedenti
 
@@ -480,13 +476,13 @@ La milestone ha osservato in modo page-local, verificabile e non decisionale il 
 
 Restano esclusi ulteriori CLI o producer, modifiche a `PageAnalysis`, nuovi candidate o structural kind, persistenza, detector, clustering, Resolution, ownership, coverage finale, schema `1.3`, IR, Markdown, EPUB e output legacy, salvo una futura decisione architetturale dedicata.
 
-### Milestone 8 — contratto document-local di analisi
+### Milestone 8 — contratto document-local di analisi — completata
 
-La milestone definisce un contenitore immutabile, puro e versionato per una singola generazione documentale coerente, con riferimenti logici a un massimo di una `PageAnalysis` disponibile per pagina, in ordine sorgente e con pagine mancanti ammesse. Non identifica pattern documentali né introduce semantica, Resolution o decisioni sulle candidate.
+La milestone ha definito un contenitore immutabile, puro e versionato per una singola generazione documentale coerente, con riferimenti logici a un massimo di una `PageAnalysis` disponibile per pagina, in ordine sorgente e con pagine mancanti ammesse. Non identifica pattern documentali né introduce semantica, Resolution o decisioni sulle candidate.
 
 Micro-step completati: il modello puro `DocumentAnalysis`, schema `1.0`, con `PageAnalysisReference` e `DocumentAnalysisProvenance`; e la factory validata di un singolo `PageAnalysisReference`, `build_validated_page_analysis_reference(...)`.
 
-Quando sono disponibili una `NormalizedPrimitivePage` e la relativa `PageAnalysis`, il percorso canonico deve usare `build_validated_page_analysis_reference(...)`: riusa la validazione cross-model e deriva il `page_index` dalla pagina normalizzata, senza riceverlo nuovamente dal chiamante. Nessun terzo micro-step è ancora autorizzato. Restano esclusi builder documentale, serializzazione, store, filesystem, artifact resolution, manifest, workspace, CLI, diagnostica, relazioni multipagina, detector, Resolution, modifiche a `PageAnalysis`, schema `1.3`, IR, Markdown, EPUB e pipeline legacy; dettagli e vincoli completi sono in `State.md`.
+Quando sono disponibili una `NormalizedPrimitivePage` e la relativa `PageAnalysis`, il percorso canonico deve usare `build_validated_page_analysis_reference(...)`: riusa la validazione cross-model e deriva il `page_index` dalla pagina normalizzata, senza riceverlo nuovamente dal chiamante. Non serve un terzo micro-step nella Milestone 8; qualsiasi lavoro successivo richiede l'apertura esplicita di una nuova milestone. L'acquisizione attestata di `page_count` resta una futura responsabilità di integrazione con un'autorità documentale concreta; i dettagli sono in `State.md`. Restano esclusi builder documentale, descrittori della sorgente, serializzazione, store, filesystem, artifact resolution, manifest, workspace, CLI, diagnostica, relazioni multipagina, detector, Resolution, modifiche a `PageAnalysis`, schema `1.3`, IR, Markdown, EPUB e pipeline legacy.
 
 ## Migrazione e shadow mode
 
