@@ -222,11 +222,11 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-Apertura documentale della Milestone 8. Il primo micro-step Python è limitato al modello puro previsto e ai test sintetici: il contratto non è ancora implementato e nessun comportamento funzionale oltre quel micro-step è autorizzato. I debiti dell'audit restano da valutare singolarmente e JSON/PNG reali non vanno committati.
+Il primo modello puro della Milestone 8 è completato. Qualsiasi passo successivo richiede una decisione architetturale e un micro-step separati. I debiti dell'audit restano da valutare singolarmente e JSON/PNG reali non vanno committati.
 
 ## Ultima baseline funzionale verificata
 
-Commit `b5d2321` — `Add candidate extent relation diagnostics stage`: 974 test OK, 7 skipped; Ruff verde; BasedPyright: 0 errori, 0 warning, 0 note; `git diff --check` verde.
+Commit `b950201` — `Add document analysis model`: 991 test OK, 7 skipped; Ruff verde; BasedPyright: 0 errori, 0 warning, 0 note; `git diff --check` verde.
 
 ## Milestone 7 — contesto strutturale page-level — completata
 
@@ -299,7 +299,7 @@ Obiettivo: definire un contenitore immutabile, puro e versionato per una singola
 
 Document-local significa una sola sorgente PDF immutabile, ordine delle pagine sorgente e non reading order, riferimenti logici a `PageAnalysis` e pagine mancanti ammesse. Non identifica ancora pattern documentali e non introduce semantica, Resolution o decisioni sulle candidate.
 
-Primo contratto previsto, non ancora implementato:
+Primo contratto disponibile, implementato:
 
 ```text
 document_analysis_model.py
@@ -329,10 +329,12 @@ DocumentAnalysis
   pages: tuple[PageAnalysisReference, ...] = ()
 ```
 
+Micro-step completato: `b950201` introduce `document_analysis_model.py` e `tests/test_document_analysis_model.py`, con `DocumentAnalysisProvenance`, `PageAnalysisReference` e `DocumentAnalysis`. `DOCUMENT_ANALYSIS_SCHEMA_VERSION = "1.0"`. Il contratto è immutabile, puro, deterministico e non persistito; rappresenta una selezione document-local coerente, ordinata per `page_index`, con al massimo un riferimento per pagina e gap ammessi.
+
 Decisioni identitarie: non esiste `document_id`; `source_id` identifica il PDF immutabile e il soggetto tecnico dell'analisi, mentre `DocumentAnalysis.generation_id` identifica la generazione documentale. Il riferimento pagina riusa `PageAnalysisProvenance`; `page_id` deve coincidere con `provenance.source_page_id` e `page_analysis_schema_version` con `PAGE_ANALYSIS_SCHEMA_VERSION` (oggi `1.2`). Non vengono riferiti path, digest o artifact fisici.
 
 Semantica di `pages`: tuple strettamente ordinata per `page_index`, zero-based, con ogni indice in `0 <= page_index < page_count`, al massimo un riferimento per indice e `page_id` unici. Gap iniziali, interni e finali sono ammessi; `page_count > 0` con `pages == ()` è valido, mentre `page_count == 0` richiede `pages == ()`. I `page_analysis_generation_id` possono essere uguali o differenti fra pagine; i `source_capture_id` devono essere unici fra i riferimenti inclusi.
 
-Le analisi pagina incluse devono condividere `source_id`, schema `PageAnalysis`, schema primitive, producer `PageAnalysis`, versione producer e configurazione. Il producer documentale può differire dal producer pagina. Il contratto è una selezione coerente di analisi pagina, non un catalogo multiproducer, una fusione di analisi concorrenti, una Resolution, una scelta della migliore analisi o un artifact persistito.
+Le analisi pagina incluse riusano `PageAnalysisProvenance` e devono condividere `source_id`, schema `PageAnalysis`, schema primitive, producer `PageAnalysis`, versione producer e configurazione. Il producer documentale può differire dal producer pagina. Il contratto non carica né valida oggetti `PageAnalysis` completi ed è una selezione coerente di analisi pagina, non un catalogo multiproducer, una fusione di analisi concorrenti, una Resolution, una scelta della migliore analisi o un artifact persistito.
 
-Fuori scope nel primo micro-step: serializzazione e store; filesystem, artifact resolution, manifest, capture progress e workspace; validazione contro oggetti `PageAnalysis` caricati; relazioni multipagina, pattern ricorrenti, continuation candidate, candidate↔candidate; accept/reject/unresolved; body, colonne, tabelle, marginalia, header/footer e callout; score, confidence, ranking, ownership e coverage; modifiche a `PageAnalysis` o schema `1.3`; CLI e diagnostiche; IR, Markdown, EPUB, renderer, pipeline legacy e refactor dei debiti delle Milestone 6–7.
+Restano fuori scope: filesystem e artifact fisici, serializzazione, store, CLI e diagnostica; manifest, capture progress e workspace; relazioni multipagina, pattern ricorrenti, continuation candidate, candidate↔candidate; accept/reject/unresolved; body, colonne, tabelle, marginalia, header/footer e callout; score, confidence, ranking, ownership e coverage; modifiche a `PageAnalysis` o schema `1.3`; IR, Markdown, EPUB, renderer, pipeline legacy e refactor dei debiti delle Milestone 6–7.
