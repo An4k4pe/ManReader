@@ -2,7 +2,7 @@
 
 ## Stato corrente
 
-Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.21.
+Il progetto è in **Modalità I — implementazione incrementale**, versione di fase v0.22.
 
 L'architettura target e il piano generale di migrazione sono approvati.
 
@@ -239,11 +239,11 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-La milestone completata più recente è:
+La milestone corrente è:
 
-> **Milestone 7 — contesto strutturale page-level — completata**
+> **Milestone 8 — contratto document-local di analisi**
 
-Nessuna milestone successiva è aperta o definita. La Milestone 6 resta completata e congelata come baseline diagnostica; singleton e local-fragment non sono detector affidabili.
+La Milestone 7 è la più recente completata; la Milestone 6 resta completata e congelata come baseline diagnostica. Singleton e local-fragment non sono detector affidabili.
 
 ### Stato delle milestone precedenti
 
@@ -479,6 +479,12 @@ Vincoli della milestone:
 La milestone ha osservato in modo page-local, verificabile e non decisionale il rapporto fra candidate esistenti, primitive visibili e contesto pagina, senza identificare corpo, colonne, tabelle, marginalia, header/footer, callout o decorazioni. Ha completato i contratti puri page-context e candidate ↔ extent con diagnostiche shadow separate; dettagli, semantica e vincoli restano in `State.md`.
 
 Restano esclusi ulteriori CLI o producer, modifiche a `PageAnalysis`, nuovi candidate o structural kind, persistenza, detector, clustering, Resolution, ownership, coverage finale, schema `1.3`, IR, Markdown, EPUB e output legacy, salvo una futura decisione architetturale dedicata.
+
+### Milestone 8 — contratto document-local di analisi
+
+La milestone definisce un contenitore immutabile, puro e versionato per una singola generazione documentale coerente, con riferimenti logici a un massimo di una `PageAnalysis` disponibile per pagina, in ordine sorgente e con pagine mancanti ammesse. Non identifica pattern documentali né introduce semantica, Resolution o decisioni sulle candidate.
+
+Il primo micro-step, non ancora implementato, è limitato a `document_analysis_model.py` e `tests/test_document_analysis_model.py`: modello puro e test sintetici per `DOCUMENT_ANALYSIS_SCHEMA_VERSION = "1.0"`, `PageAnalysisReference`, `DocumentAnalysisProvenance` e `DocumentAnalysis`. Nessun comportamento funzionale, serializzazione, store, filesystem, CLI, diagnostica, relazioni multipagina, detector, modifiche a `PageAnalysis`, schema `1.3`, IR, Markdown, EPUB o pipeline legacy è autorizzato oltre tale micro-step; dettagli e vincoli completi sono in `State.md`.
 
 ## Migrazione e shadow mode
 

@@ -2,13 +2,15 @@
 
 ## Versione corrente
 
-**v0.21** — **Modalità I: implementazione incrementale**.
+**v0.22** — **Modalità I: implementazione incrementale**.
 
 La progettazione globale è conclusa. La direzione architetturale A-0.2 e il piano di migrazione sono approvati; ogni task resta piccolo, verificabile, con file ammessi espliciti e senza commit automatici.
 
 ## Stato operativo
 
-Le Milestone 1–7 sono completate. Nessuna milestone successiva è ancora aperta o definita.
+Le Milestone 1–7 sono completate. La milestone corrente è:
+
+> **Milestone 8 — contratto document-local di analisi**
 
 La pipeline legacy resta autorevole. I nuovi contratti lavorano in shadow mode e non producono ancora decisioni editoriali, IR o output finale.
 
@@ -220,7 +222,7 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-Nessuna milestone successiva è ancora aperta o definita. Qualunque nuovo comportamento richiede una decisione architetturale dedicata; ulteriori estensioni page-edge o page-covering non sono autorizzate automaticamente e nessun nuovo campo o comportamento funzionale è autorizzato. I debiti dell'audit restano da valutare singolarmente e JSON/PNG reali non vanno committati.
+Apertura documentale della Milestone 8. Il primo micro-step Python è limitato al modello puro previsto e ai test sintetici: il contratto non è ancora implementato e nessun comportamento funzionale oltre quel micro-step è autorizzato. I debiti dell'audit restano da valutare singolarmente e JSON/PNG reali non vanno committati.
 
 ## Ultima baseline funzionale verificata
 
@@ -290,3 +292,47 @@ Edge case: `candidate.page_id` diverso da `primitive_page.page_id` deve sollevar
 Conclusione architetturale: gli obiettivi della Milestone 7 sono soddisfatti. I contratti sono puri, pubblici, deterministici, producer-agnostic e non persistiti; descrivono contesto page-local e relazioni geometriche senza produrre fatti strutturali. Non identificano body, colonne, tabelle, marginalia, header/footer, callout o decorazioni e non introducono ratio aggiuntivi, score, confidence, ranking, evidence, detector, classificazioni o Resolution. `PageAnalysis` resta schema `1.2`; pipeline legacy, IR, Markdown ed EPUB restano autorevoli e invariati. Page-covering non è stato esteso nella Milestone 7 e non serve altro codice per la chiusura.
 
 Compatibilità: la Milestone 6 resta completata e congelata come baseline diagnostica; singleton e local-fragment restano baseline diagnostiche, non detector affidabili.
+
+## Milestone 8 — contratto document-local di analisi
+
+Obiettivo: definire un contenitore immutabile, puro e versionato per una singola generazione documentale coerente, che riferisca in ordine sorgente al massimo una `PageAnalysis` disponibile per pagina e ammetta documenti parziali.
+
+Document-local significa una sola sorgente PDF immutabile, ordine delle pagine sorgente e non reading order, riferimenti logici a `PageAnalysis` e pagine mancanti ammesse. Non identifica ancora pattern documentali e non introduce semantica, Resolution o decisioni sulle candidate.
+
+Primo contratto previsto, non ancora implementato:
+
+```text
+document_analysis_model.py
+tests/test_document_analysis_model.py
+DOCUMENT_ANALYSIS_SCHEMA_VERSION = "1.0"
+```
+
+```text
+PageAnalysisReference
+  page_index: int
+  page_id: str
+  page_analysis_schema_version: str
+  page_analysis_generation_id: str
+  provenance: PageAnalysisProvenance
+
+DocumentAnalysisProvenance
+  source_id: str
+  producer_name: str
+  producer_version: str
+  configuration_id: str
+
+DocumentAnalysis
+  schema_version: str
+  generation_id: str
+  page_count: int
+  provenance: DocumentAnalysisProvenance
+  pages: tuple[PageAnalysisReference, ...] = ()
+```
+
+Decisioni identitarie: non esiste `document_id`; `source_id` identifica il PDF immutabile e il soggetto tecnico dell'analisi, mentre `DocumentAnalysis.generation_id` identifica la generazione documentale. Il riferimento pagina riusa `PageAnalysisProvenance`; `page_id` deve coincidere con `provenance.source_page_id` e `page_analysis_schema_version` con `PAGE_ANALYSIS_SCHEMA_VERSION` (oggi `1.2`). Non vengono riferiti path, digest o artifact fisici.
+
+Semantica di `pages`: tuple strettamente ordinata per `page_index`, zero-based, con ogni indice in `0 <= page_index < page_count`, al massimo un riferimento per indice e `page_id` unici. Gap iniziali, interni e finali sono ammessi; `page_count > 0` con `pages == ()` è valido, mentre `page_count == 0` richiede `pages == ()`. I `page_analysis_generation_id` possono essere uguali o differenti fra pagine; i `source_capture_id` devono essere unici fra i riferimenti inclusi.
+
+Le analisi pagina incluse devono condividere `source_id`, schema `PageAnalysis`, schema primitive, producer `PageAnalysis`, versione producer e configurazione. Il producer documentale può differire dal producer pagina. Il contratto è una selezione coerente di analisi pagina, non un catalogo multiproducer, una fusione di analisi concorrenti, una Resolution, una scelta della migliore analisi o un artifact persistito.
+
+Fuori scope nel primo micro-step: serializzazione e store; filesystem, artifact resolution, manifest, capture progress e workspace; validazione contro oggetti `PageAnalysis` caricati; relazioni multipagina, pattern ricorrenti, continuation candidate, candidate↔candidate; accept/reject/unresolved; body, colonne, tabelle, marginalia, header/footer e callout; score, confidence, ranking, ownership e coverage; modifiche a `PageAnalysis` o schema `1.3`; CLI e diagnostiche; IR, Markdown, EPUB, renderer, pipeline legacy e refactor dei debiti delle Milestone 6–7.
