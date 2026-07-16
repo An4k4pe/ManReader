@@ -239,7 +239,11 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–8 sono completate. Nessuna nuova milestone è ancora aperta o autorizzata. La Milestone 8 è la più recente completata; la Milestone 6 resta completata e congelata come baseline diagnostica. Singleton e local-fragment non sono detector affidabili.
+Le Milestone 1–8 sono completate. La milestone corrente è:
+
+> **Milestone 9 — attestazione della sorgente documentale**
+
+La Milestone 8 resta completata; la Milestone 6 resta completata e congelata come baseline diagnostica. Singleton e local-fragment non sono detector affidabili.
 
 ### Stato delle milestone precedenti
 
@@ -482,7 +486,13 @@ La milestone ha definito un contenitore immutabile, puro e versionato per una si
 
 Micro-step completati: il modello puro `DocumentAnalysis`, schema `1.0`, con `PageAnalysisReference` e `DocumentAnalysisProvenance`; e la factory validata di un singolo `PageAnalysisReference`, `build_validated_page_analysis_reference(...)`.
 
-Quando sono disponibili una `NormalizedPrimitivePage` e la relativa `PageAnalysis`, il percorso canonico deve usare `build_validated_page_analysis_reference(...)`: riusa la validazione cross-model e deriva il `page_index` dalla pagina normalizzata, senza riceverlo nuovamente dal chiamante. Non serve un terzo micro-step nella Milestone 8; qualsiasi lavoro successivo richiede l'apertura esplicita di una nuova milestone. L'acquisizione attestata di `page_count` resta una futura responsabilità di integrazione con un'autorità documentale concreta; i dettagli sono in `State.md`. Restano esclusi builder documentale, descrittori della sorgente, serializzazione, store, filesystem, artifact resolution, manifest, workspace, CLI, diagnostica, relazioni multipagina, detector, Resolution, modifiche a `PageAnalysis`, schema `1.3`, IR, Markdown, EPUB e pipeline legacy.
+Quando sono disponibili una `NormalizedPrimitivePage` e la relativa `PageAnalysis`, il percorso canonico deve usare `build_validated_page_analysis_reference(...)`: riusa la validazione cross-model e deriva il `page_index` dalla pagina normalizzata, senza riceverlo nuovamente dal chiamante. Non serve un terzo micro-step nella Milestone 8; qualsiasi lavoro successivo richiede l'apertura esplicita di una nuova milestone. L'acquisizione attestata di `page_count`, esclusa dalla Milestone 8, è ora assegnata alla Milestone 9. Restano esclusi builder documentale, descrittori della sorgente, serializzazione, store, filesystem, artifact resolution, manifest, workspace, CLI, diagnostica, relazioni multipagina, detector, Resolution, modifiche a `PageAnalysis`, schema `1.3`, IR, Markdown, EPUB e pipeline legacy.
+
+### Milestone 9 — attestazione della sorgente documentale
+
+La milestone corrente definisce un'attestazione tecnica locale, pura e immutabile della precisa sequenza di byte verificata, del `source_id` prodotto e del `page_count` letto da quegli stessi byte. Non è firma, autenticità editoriale, certificazione esterna, prova persistente o garanzia futura del path. `source_id` resta opaco nei contratti generali; il primo producer PDF/PyMuPDF previsto lo deriverà internamente dal digest SHA-256 e attribuirà l'autorità di `page_count` al reader applicato agli stessi byte verificati.
+
+Il primo micro-step è autorizzato ma non ancora implementato: `DocumentSourceAttestation`, schema `1.0`, e `attest_pymupdf_document_source(...)`. Dovrà acquisire una sola volta i byte, verificarne digest e dimensione contro `VerifiedFileReference`, quindi aprire con PyMuPDF il buffer verificato per evitare TOCTOU; il contratto puro resterà backend-neutral. Non sono autorizzati builder documentale, ulteriori descrittori della sorgente, `JobManifest`, persistenza, scritture filesystem, scansione o risoluzione di artifact, workspace, store, serializzazione, produzione di artifact e accessi filesystem diversi dalla sola lettura read-only dello `snapshot_path` esplicitamente ricevuto dal producer; restano inoltre esclusi capture runner, CLI, diagnostica, relazioni multipagina, Resolution, modifiche a `PageAnalysis`, pipeline legacy, IR, Markdown o EPUB. Lo skip anticipato delle pagine già completate resta un possibile debito operativo separato, non diagnosticato né autorizzato alla correzione.
 
 ## Migrazione e shadow mode
 

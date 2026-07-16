@@ -8,7 +8,9 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–8 sono completate. Nessuna nuova milestone è ancora aperta.
+Le Milestone 1–8 sono completate. La milestone corrente è:
+
+> **Milestone 9 — attestazione della sorgente documentale**
 
 La pipeline legacy resta autorevole. I nuovi contratti lavorano in shadow mode e non producono ancora decisioni editoriali, IR o output finale.
 
@@ -220,7 +222,7 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-Prima di aprire una milestone successiva è richiesta una nuova decisione architetturale esplicita. Nessun ulteriore codice o comportamento è autorizzato; i debiti dell'audit restano da valutare singolarmente e JSON/PNG reali non vanno committati.
+Il primo micro-step della Milestone 9 è autorizzato ma non ancora implementato: contratto puro `DocumentSourceAttestation` e producer PDF/PyMuPDF previsto. Nessun altro codice o comportamento è autorizzato; i debiti dell'audit restano da valutare singolarmente e JSON/PNG reali non vanno committati.
 
 ## Ultima baseline funzionale verificata
 
@@ -335,7 +337,7 @@ La factory attesta soltanto la coerenza page-local: non attesta che `page_count`
 
 Conclusione di chiusura: esiste ora il contratto document-local puro e versionato, con una selezione coerente e ordinata di riferimenti pagina, documenti parziali ammessi e un percorso canonico validato per costruire un singolo riferimento. Non introduce semantica, Resolution o decisioni editoriali e non modifica pipeline legacy, IR, Markdown o EPUB.
 
-L'acquisizione attestata di `page_count` è rinviata a una futura integrazione con un'autorità documentale concreta. Tale integrazione dovrà ottenere `source_id` e `page_count` dalla medesima sorgente immutabile verificata, includere solo riferimenti appartenenti a quella sorgente e non inferire `page_count` da pagine parziali né da `max(page_index) + 1`. Non è deciso ora se l'autorità sarà PDF snapshot, manifest, capture documentale o un altro componente.
+Al momento della chiusura della Milestone 8 non era ancora scelta l'autorità concreta per l'acquisizione attestata di `page_count`. La Milestone 9 ha ora scelto come primo confine il producer PDF/PyMuPDF applicato agli stessi byte dello snapshot verificato; manifest, capture completa e altre autorità restano fuori dalla decisione corrente. Resta invariato il vincolo storico: non inferire `page_count` da pagine parziali né da `max(page_index) + 1`.
 
 Decisioni identitarie: non esiste `document_id`; `source_id` identifica il PDF immutabile e il soggetto tecnico dell'analisi, mentre `DocumentAnalysis.generation_id` identifica la generazione documentale. Il riferimento pagina riusa `PageAnalysisProvenance`; `page_id` deve coincidere con `provenance.source_page_id` e `page_analysis_schema_version` con `PAGE_ANALYSIS_SCHEMA_VERSION` (oggi `1.2`). Non vengono riferiti path, digest o artifact fisici.
 
@@ -344,3 +346,61 @@ Semantica di `pages`: tuple strettamente ordinata per `page_index`, zero-based, 
 Le analisi pagina incluse riusano `PageAnalysisProvenance` e devono condividere `source_id`, schema `PageAnalysis`, schema primitive, producer `PageAnalysis`, versione producer e configurazione. Il producer documentale può differire dal producer pagina. Il modello `DocumentAnalysis` non carica né valida oggetti `PageAnalysis` completi; la validazione cross-model avviene esclusivamente nella factory quando il riferimento viene costruito da oggetti reali. `DocumentAnalysis` resta una selezione coerente di analisi pagina, non un catalogo multiproducer, una fusione di analisi concorrenti, una Resolution, una scelta della migliore analisi o un artifact persistito.
 
 Restano fuori scope: builder documentale; filesystem e artifact fisici, artifact resolution, serializzazione e store; CLI e diagnostica; `JobManifest`, capture progress e workspace; relazioni multipagina, pattern ricorrenti, continuation candidate, candidate↔candidate; Resolution e accept/reject/unresolved; body, colonne, tabelle, marginalia, header/footer e callout; detector, score, confidence, ranking, evidence, ownership e coverage; modifiche a `PageAnalysis` o schema `1.3`; IR, Markdown, EPUB, renderer, pipeline legacy e refactor dei debiti delle Milestone 6–7.
+
+## Milestone 9 — attestazione della sorgente documentale
+
+Obiettivo: definire un risultato tecnico locale, puro e immutabile che leghi l'identità verificata di una precisa sequenza di byte, il `source_id` prodotto e il `page_count` letto da quegli stessi byte.
+
+Attestazione non significa firma, autenticità editoriale, certificazione esterna, prova persistente o garanzia che il path mantenga in futuro gli stessi byte.
+
+Decisioni consolidate:
+
+- `source_id` resta opaco nei contratti generali; il primo producer PDF/PyMuPDF lo deriva internamente dal digest SHA-256;
+- l'autorità su `page_count` appartiene al reader applicato agli stessi byte verificati; `CaptureProgress.page_count` è un dato operativo registrato, non l'autorità che determina il conteggio;
+- il controllo corrente in `capture_job_page(...)` resta una precondizione locale e non un'attestazione riusabile;
+- hash, dimensione e `page_count` devono essere calcolati dalla stessa sequenza immutabile di byte acquisita una sola volta, eliminando la finestra TOCTOU fra verifica del file e apertura PDF;
+- il contratto puro resta backend-neutral, mentre il primo producer può essere specifico per PDF/PyMuPDF;
+- `page_count == 0` resta ammesso dal contratto se restituito validamente dal backend; non esiste attestazione parziale.
+
+Primo micro-step autorizzato, non ancora implementato:
+
+```text
+document_source_attestation_model.py
+pymupdf_document_source_attestation.py
+tests/test_document_source_attestation_model.py
+tests/test_pymupdf_document_source_attestation.py
+verified_file_model.py
+tests/test_verified_file_model.py
+```
+
+Contratto puro proposto:
+
+```text
+DOCUMENT_SOURCE_ATTESTATION_SCHEMA_VERSION = "1.0"
+
+DocumentSourceAttestation
+  schema_version: str
+  verified_file: VerifiedFileReference
+  source_id: str
+  page_count: int
+```
+
+`DocumentSourceAttestation` sarà una dataclass `frozen=True, slots=True`: schema esattamente `1.0`, `verified_file` del tipo corretto, `source_id` stringa non vuota e `page_count` intero non booleano e non negativo. Non conterrà path, buffer, handle, oggetti `fitz` o dati backend-specifici; non esisterà un invariante generale `source_id == verified_file.sha256`. La costruzione diretta validerà soltanto la forma, mentre la garanzia di provenienza deriverà dal producer canonico.
+
+L'unica modifica autorizzata a `verified_file_model.py` e `tests/test_verified_file_model.py` è l'aggiunta e la verifica del helper puro `inspect_verified_bytes(data: bytes) -> VerifiedFileReference`, che centralizzerà il calcolo SHA-256 e della dimensione di una sequenza di byte. Non sono autorizzati refactor né cambiamenti di comportamento di `inspect_verified_file(...)` o `verify_file(...)`.
+
+Producer previsto:
+
+```python
+attest_pymupdf_document_source(
+    snapshot_path: Path,
+    *,
+    expected_file: VerifiedFileReference,
+) -> DocumentSourceAttestation
+```
+
+La semantica prevista è acquisire una sola volta i byte dello snapshot, calcolare SHA-256 e dimensione su quegli stessi byte, confrontarli con `expected_file` prima di invocare PyMuPDF e aprire il buffer verificato, non una seconda volta il path. Il producer rifiuterà PDF non leggibili, malformati o che richiedono autenticazione, leggerà e validerà `page_count`, deriverà internamente `source_id` dal digest verificato e non riceverà `source_id` o `page_count` dal chiamante. In caso di errore non produrrà artifact o stato.
+
+Restano fuori scope della Milestone 9 e del primo micro-step: builder di `DocumentAnalysis`; caricamento o selezione di `PageAnalysis`; modifiche a `JobManifest`, `initialize_job(...)`, manifest schema migration, store, serializzazione, artifact resolution, CLI, diagnostica e capture runner; correzione dello skip delle pagine già completate; password per PDF cifrati; detector, relazioni multipagina, Resolution, modifiche a `PageAnalysis`, pipeline legacy, IR, Markdown ed EPUB.
+
+Lo skip anticipato delle pagine già completate resta un possibile debito operativo separato: non viene qui diagnosticato né è autorizzata la sua correzione.
