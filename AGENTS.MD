@@ -239,7 +239,9 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–9 sono completate. La Milestone 9 è la più recente completata; nessuna nuova milestone è ancora aperta o autorizzata.
+Le Milestone 1–9 sono completate. La milestone corrente è:
+
+> **Milestone 10 — costruzione attestata di `DocumentAnalysis`**
 
 La Milestone 8 resta completata; la Milestone 6 resta completata e congelata come baseline diagnostica. Singleton e local-fragment non sono detector affidabili.
 
@@ -498,7 +500,13 @@ Non serve un secondo micro-step: contratto e producer soddisfano già l'obiettiv
 
 Restano debiti operativi separati e non bloccanti: il capture runner verifica il file e successivamente riapre il path, conservando una propria finestra TOCTOU; una pagina già completata può essere saltata prima della nuova verifica dello snapshot. Non invalidano la Milestone 9 perché essa non dichiara che la capture utilizzi già l'attestazione; non vanno ulteriormente diagnosticati né ne è autorizzata la correzione.
 
-Restano fuori scope persistenza e serializzazione; provenance del producer nel contratto; audit trail; password per PDF cifrati; producer alternativi; ottimizzazione della memoria per PDF grandi; builder di `DocumentAnalysis`; caricamento o selezione di `PageAnalysis`; manifest e capture integration; artifact resolution; CLI e diagnostica; detector, relazioni multipagina e Resolution; modifiche a `PageAnalysis`; pipeline legacy, IR, Markdown ed EPUB. Prima di aprire una milestone successiva serve una nuova decisione architetturale esplicita: nessun ulteriore codice o comportamento è autorizzato e non vanno assunti automaticamente builder di `DocumentAnalysis`, integrazione con `JobManifest`, modifica di `initialize_job(...)`, adozione nel capture runner, persistenza dell'attestazione o correzione dei debiti del capture runner.
+Restano fuori scope persistenza e serializzazione; provenance del producer nel contratto; audit trail; password per PDF cifrati; producer alternativi; ottimizzazione della memoria per PDF grandi; builder di `DocumentAnalysis`; caricamento o selezione di `PageAnalysis`; manifest e capture integration; artifact resolution; CLI e diagnostica; detector, relazioni multipagina e Resolution; modifiche a `PageAnalysis`; pipeline legacy, IR, Markdown ed EPUB. La Milestone 9 non autorizza ulteriori lavori oltre al proprio contratto e producer completati.
+
+### Milestone 10 — costruzione attestata di `DocumentAnalysis`
+
+La milestone corrente definisce un bridge puro e validato per un solo `DocumentAnalysis`: quando è disponibile una `DocumentSourceAttestation`, il percorso canonico dovrà derivarne sia `page_count` sia `DocumentAnalysisProvenance.source_id`, delegando gli invarianti document-local ai modelli esistenti. La garanzia riguarda il percorso costruttivo, non aggiunge campi o prova persistita a `DocumentAnalysis`, che resta un contratto dati di basso livello utilizzabile direttamente.
+
+Il primo micro-step è autorizzato ma non ancora implementato, limitato a `document_analysis_from_attestation.py` e `tests/test_document_analysis_from_attestation.py`, con `build_attested_document_analysis(...)`. Riceverà soltanto l'attestazione, metadati producer, generation ID e una tuple già selezionata di `PageAnalysisReference`; non riceverà override per source ID, page count, schema o provenance completa e non ordinerà, selezionerà o muterà le pagine. Nessun ulteriore comportamento è autorizzato. Restano esclusi modifiche ai modelli esistenti, costruzione di riferimenti pagina, caricamento o selezione di `PageAnalysis`, filesystem/PDF, `JobManifest`, workspace, capture runner, persistenza, serializer, store, artifact resolution, CLI, diagnostica, relazioni multipagina, detector, classificazioni, score, confidence, Resolution, pipeline legacy, IR, Markdown ed EPUB.
 
 ## Migrazione e shadow mode
 

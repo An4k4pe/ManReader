@@ -8,7 +8,9 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–9 sono completate. La Milestone 9 è la più recente completata; nessuna nuova milestone è ancora aperta o autorizzata.
+Le Milestone 1–9 sono completate. La milestone corrente è:
+
+> **Milestone 10 — costruzione attestata di `DocumentAnalysis`**
 
 La pipeline legacy resta autorevole. I nuovi contratti lavorano in shadow mode e non producono ancora decisioni editoriali, IR o output finale.
 
@@ -220,7 +222,7 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-La Milestone 9 è completata. Prima di aprire una milestone successiva è richiesta una nuova decisione architetturale esplicita; nessun ulteriore codice o comportamento è autorizzato. Non assumere automaticamente come prossimo passo un builder di `DocumentAnalysis`, l'integrazione con `JobManifest`, una modifica di `initialize_job(...)`, l'adozione nel capture runner, la persistenza dell'attestazione o la correzione dei debiti del capture runner. I debiti dell'audit restano da valutare separatamente e JSON/PNG diagnostici reali non vanno committati.
+Il primo micro-step della Milestone 10 è autorizzato ma non ancora implementato. Nessun ulteriore comportamento è autorizzato; il codice potrà iniziare solo dopo il consolidamento documentale. I debiti del capture runner restano separati e non autorizzati. I debiti dell'audit restano da valutare separatamente e JSON/PNG diagnostici reali non vanno committati.
 
 ## Ultima baseline funzionale verificata
 
@@ -408,3 +410,40 @@ Non è necessario un secondo micro-step: contratto e producer soddisfano già l'
 Debiti operativi separati e non bloccanti: il capture runner verifica il file e successivamente riapre il path, conservando una propria finestra TOCTOU; inoltre una pagina già completata può essere saltata prima della nuova verifica dello snapshot. Questi punti non invalidano la Milestone 9 perché la milestone non dichiara che la capture utilizzi già l'attestazione; non vanno qui ulteriormente diagnosticati né è autorizzata la loro correzione.
 
 Restano fuori scope: persistenza e serializzazione; provenance del producer nel contratto; audit trail; password per PDF cifrati; producer alternativi; ottimizzazione della memoria per PDF grandi; builder di `DocumentAnalysis`; caricamento o selezione di `PageAnalysis`; manifest e capture integration; artifact resolution; CLI e diagnostica; detector, relazioni multipagina e Resolution; modifiche a `PageAnalysis`; pipeline legacy, IR, Markdown ed EPUB.
+
+## Milestone 10 — costruzione attestata di `DocumentAnalysis`
+
+Obiettivo: definire un bridge puro e validato che costruisca un solo `DocumentAnalysis`, derivando `page_count` e `DocumentAnalysisProvenance.source_id` esclusivamente dalla stessa `DocumentSourceAttestation` e delegando al modello tutti gli invarianti document-local già esistenti.
+
+Nel percorso canonico da una sorgente reale attestata, `DocumentAnalysis.page_count` e `DocumentAnalysisProvenance.source_id` derivano dalla stessa `DocumentSourceAttestation`.
+
+Il costruttore diretto di `DocumentAnalysis` resta disponibile come contratto dati di basso livello; la factory diventerà il percorso canonico quando è disponibile una `DocumentSourceAttestation`. `DocumentAnalysis` non incorpora né conserva l'attestazione, `VerifiedFileReference`, digest, path o prova del percorso costruttivo: un oggetto isolato non può dimostrare da solo di essere stato costruito tramite factory. La garanzia riguarda il percorso canonico e non è una nuova proprietà persistita nello schema; nessuno schema viene modificato.
+
+Primo micro-step autorizzato, non ancora implementato:
+
+```text
+document_analysis_from_attestation.py
+tests/test_document_analysis_from_attestation.py
+```
+
+```python
+build_attested_document_analysis(
+    attestation: DocumentSourceAttestation,
+    *,
+    generation_id: str,
+    producer_name: str,
+    producer_version: str,
+    configuration_id: str,
+    pages: tuple[PageAnalysisReference, ...] = (),
+) -> DocumentAnalysis
+```
+
+La factory verificherà preliminarmente soltanto che `attestation` sia una `DocumentSourceAttestation`, altrimenti solleverà `ValueError` con `attestation must be a DocumentSourceAttestation`. Fisserà `DocumentAnalysis.schema_version` a `DOCUMENT_ANALYSIS_SCHEMA_VERSION`, deriverà esclusivamente dall'attestazione `page_count` e `DocumentAnalysisProvenance.source_id`, costruirà la provenance con i tre metadati producer forniti e userà il `generation_id` del chiamante. Passerà `pages` al costruttore di `DocumentAnalysis` senza modificarla e restituirà un solo oggetto; non riceverà `source_id`, `page_count`, `schema_version` o una `DocumentAnalysisProvenance` completa.
+
+La factory non duplicherà i controlli di `DocumentAnalysisProvenance` e `DocumentAnalysis`: tipi e validità dei metadati producer, validità di `generation_id`, tipo e ordinamento di `pages`, unicità, limiti rispetto a `page_count`, coerenza dei `source_id`, omogeneità delle provenance page-level, documenti parziali, gap e i casi `pages == ()` restano delegati ai modelli. I loro errori dovranno propagare senza wrapping.
+
+`pages` accetterà esclusivamente una `tuple[PageAnalysisReference, ...]`, con default `()`, già selezionata e ordinata: la factory non convertirà iterable generici, non ordinerà, deduplicherà, filtrerà, selezionerà, muterà o costruirà riferimenti pagina. Non inferirà `page_count` da `len(pages)`, `max(page_index) + 1` o dalla presenza/assenza delle pagine finali.
+
+I test del futuro micro-step dovranno dimostrare derivazione di `page_count` e source ID dall'attestazione, assenza di parametri di override, provenance documentale corretta e schema corrente; documenti parziali, `pages == ()` e attestazione con `page_count == 0` e tuple vuota; propagazione dei rifiuti per riferimenti fuori intervallo, source ID incoerente, pagine non ordinate, tipo `pages` errato e metadata producer o generation ID invalidi; determinismo, assenza di mutazione e nessun ordinamento implicito.
+
+Restano fuori scope: modifiche a `DocumentAnalysis`, `DocumentAnalysisProvenance`, `PageAnalysis`, relativi schema o `DocumentSourceAttestation`; costruzione dei singoli `PageAnalysisReference`; caricamento o selezione di `PageAnalysis`; filesystem o riapertura PDF; `JobManifest`, workspace, capture runner, persistenza, serializer, store, artifact resolution, CLI, diagnostica, osservazioni o relazioni multipagina, pattern ricorrenti, detector, classificazioni, score, confidence, Resolution, pipeline legacy, IR, Markdown ed EPUB. La Milestone 10 non è integrazione end-to-end: il primo micro-step si ferma alla costruzione pura di un solo `DocumentAnalysis`.
