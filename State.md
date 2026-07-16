@@ -8,9 +8,7 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–8 sono completate. La milestone corrente è:
-
-> **Milestone 9 — attestazione della sorgente documentale**
+Le Milestone 1–9 sono completate. La Milestone 9 è la più recente completata; nessuna nuova milestone è ancora aperta o autorizzata.
 
 La pipeline legacy resta autorevole. I nuovi contratti lavorano in shadow mode e non producono ancora decisioni editoriali, IR o output finale.
 
@@ -222,7 +220,7 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-Il primo micro-step della Milestone 9 è completato. Nessun secondo micro-step è ancora autorizzato: qualsiasi passo successivo richiede una nuova decisione architetturale e non va assunto automaticamente come builder di `DocumentAnalysis`, integrazione con `JobManifest`, persistenza o modifica del capture runner. I debiti dell'audit restano da valutare singolarmente e JSON/PNG reali non vanno committati.
+La Milestone 9 è completata. Prima di aprire una milestone successiva è richiesta una nuova decisione architetturale esplicita; nessun ulteriore codice o comportamento è autorizzato. Non assumere automaticamente come prossimo passo un builder di `DocumentAnalysis`, l'integrazione con `JobManifest`, una modifica di `initialize_job(...)`, l'adozione nel capture runner, la persistenza dell'attestazione o la correzione dei debiti del capture runner. I debiti dell'audit restano da valutare separatamente e JSON/PNG diagnostici reali non vanno committati.
 
 ## Ultima baseline funzionale verificata
 
@@ -347,9 +345,9 @@ Le analisi pagina incluse riusano `PageAnalysisProvenance` e devono condividere 
 
 Restano fuori scope: builder documentale; filesystem e artifact fisici, artifact resolution, serializzazione e store; CLI e diagnostica; `JobManifest`, capture progress e workspace; relazioni multipagina, pattern ricorrenti, continuation candidate, candidate↔candidate; Resolution e accept/reject/unresolved; body, colonne, tabelle, marginalia, header/footer e callout; detector, score, confidence, ranking, evidence, ownership e coverage; modifiche a `PageAnalysis` o schema `1.3`; IR, Markdown, EPUB, renderer, pipeline legacy e refactor dei debiti delle Milestone 6–7.
 
-## Milestone 9 — attestazione della sorgente documentale
+## Milestone 9 — attestazione della sorgente documentale — completata
 
-Obiettivo: definire un risultato tecnico locale, puro e immutabile che leghi l'identità verificata di una precisa sequenza di byte, il `source_id` prodotto e il `page_count` letto da quegli stessi byte.
+Obiettivo completato: definire un risultato tecnico locale, puro e immutabile che leghi l'identità verificata di una precisa sequenza di byte, il `source_id` prodotto e il `page_count` letto da quegli stessi byte.
 
 Attestazione non significa firma, autenticità editoriale, certificazione esterna, prova persistente o garanzia che il path mantenga in futuro gli stessi byte.
 
@@ -401,6 +399,12 @@ attest_pymupdf_document_source(
 
 Il producer legge lo snapshot una sola volta, calcola digest e dimensione sul buffer acquisito e confronta separatamente entrambi con `expected_file` prima di invocare PyMuPDF. PyMuPDF apre lo stesso buffer verificato e non riapre il path: ciò elimina la finestra TOCTOU fra verifica e parsing. Il producer rifiuta mismatch, PDF malformati e documenti che richiedono autenticazione, legge `page_count` dallo stesso buffer, deriva internamente `source_id` dal digest osservato e restituisce il `VerifiedFileReference` ricostruito dai byte acquisiti. Accetta sottoclassi valide di `VerifiedFileReference`, incluso `SourceReference`, senza dipendere da `job_manifest_model`; chiude sempre il documento PyMuPDF e non scrive file né produce artifact o stato. L'attestazione descrive i byte acquisiti e non garantisce che il path resti invariato dopo il ritorno.
 
-Restano fuori scope della Milestone 9 e del primo micro-step: builder di `DocumentAnalysis`; caricamento o selezione di `PageAnalysis`; modifiche a `JobManifest`, `initialize_job(...)`, manifest schema migration, store, serializzazione, artifact resolution, CLI, diagnostica e capture runner; correzione dello skip delle pagine già completate; password per PDF cifrati; detector, relazioni multipagina, Resolution, modifiche a `PageAnalysis`, pipeline legacy, IR, Markdown ed EPUB.
+Conclusione di chiusura: la Milestone 9 attesta che il producer canonico PyMuPDF ha acquisito una precisa sequenza di byte dallo snapshot, ne ha verificato SHA-256 e dimensione rispetto al riferimento atteso, ha derivato da essa il `source_id` e ha letto il `page_count` aprendo quegli stessi byte.
 
-Lo skip anticipato delle pagine già completate resta un possibile debito operativo separato: non viene qui diagnosticato né è autorizzata la sua correzione.
+Non attesta autenticità editoriale, firma, certificazione esterna, futura immutabilità del path, persistenza dell'attestazione, provenance o audit trail persistenti, utilizzo dei byte attestati da parte della capture, né utilizzo da parte di `DocumentAnalysis` o di altri consumer.
+
+Non è necessario un secondo micro-step: contratto e producer soddisfano già l'obiettivo della milestone. Un builder verso `DocumentAnalysis` richiederebbe generation ID, provenance, riferimenti pagina, selezione e ordinamento senza rafforzare la garanzia byte–digest–conteggio; l'integrazione nel capture runner sarebbe una modifica operativa separata; modifiche a `JobManifest` o `initialize_job(...)` introdurrebbero schema, migrazione, lifecycle e persistenza. Streaming, mmap, locking o file temporanei sono ottimizzazioni rinviabili e devono comunque preservare l'identità degli stessi byte. Questa motivazione non costituisce una roadmap implicita.
+
+Debiti operativi separati e non bloccanti: il capture runner verifica il file e successivamente riapre il path, conservando una propria finestra TOCTOU; inoltre una pagina già completata può essere saltata prima della nuova verifica dello snapshot. Questi punti non invalidano la Milestone 9 perché la milestone non dichiara che la capture utilizzi già l'attestazione; non vanno qui ulteriormente diagnosticati né è autorizzata la loro correzione.
+
+Restano fuori scope: persistenza e serializzazione; provenance del producer nel contratto; audit trail; password per PDF cifrati; producer alternativi; ottimizzazione della memoria per PDF grandi; builder di `DocumentAnalysis`; caricamento o selezione di `PageAnalysis`; manifest e capture integration; artifact resolution; CLI e diagnostica; detector, relazioni multipagina e Resolution; modifiche a `PageAnalysis`; pipeline legacy, IR, Markdown ed EPUB.
