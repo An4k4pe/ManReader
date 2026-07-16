@@ -222,11 +222,11 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-Il primo micro-step della Milestone 9 è autorizzato ma non ancora implementato: contratto puro `DocumentSourceAttestation` e producer PDF/PyMuPDF previsto. Nessun altro codice o comportamento è autorizzato; i debiti dell'audit restano da valutare singolarmente e JSON/PNG reali non vanno committati.
+Il primo micro-step della Milestone 9 è completato. Nessun secondo micro-step è ancora autorizzato: qualsiasi passo successivo richiede una nuova decisione architetturale e non va assunto automaticamente come builder di `DocumentAnalysis`, integrazione con `JobManifest`, persistenza o modifica del capture runner. I debiti dell'audit restano da valutare singolarmente e JSON/PNG reali non vanno committati.
 
 ## Ultima baseline funzionale verificata
 
-Commit `308f5db` — `Add validated page analysis reference factory`: 997 test OK, 7 skipped; Ruff verde; BasedPyright: 0 errori, 0 warning, 0 note; `git diff --check` verde.
+Commit `65d4b2c` — `Add document source attestation`: 1012 test OK, 7 skipped; Ruff verde; BasedPyright: 0 errori, 0 warning, 0 note; `git diff --check` verde.
 
 ## Milestone 7 — contesto strutturale page-level — completata
 
@@ -362,7 +362,7 @@ Decisioni consolidate:
 - il contratto puro resta backend-neutral, mentre il primo producer può essere specifico per PDF/PyMuPDF;
 - `page_count == 0` resta ammesso dal contratto se restituito validamente dal backend; non esiste attestazione parziale.
 
-Primo micro-step autorizzato, non ancora implementato:
+Primo micro-step completato: `65d4b2c` — `Add document source attestation`.
 
 ```text
 document_source_attestation_model.py
@@ -373,7 +373,7 @@ verified_file_model.py
 tests/test_verified_file_model.py
 ```
 
-Contratto puro proposto:
+Contratto puro implementato:
 
 ```text
 DOCUMENT_SOURCE_ATTESTATION_SCHEMA_VERSION = "1.0"
@@ -385,11 +385,11 @@ DocumentSourceAttestation
   page_count: int
 ```
 
-`DocumentSourceAttestation` sarà una dataclass `frozen=True, slots=True`: schema esattamente `1.0`, `verified_file` del tipo corretto, `source_id` stringa non vuota e `page_count` intero non booleano e non negativo. Non conterrà path, buffer, handle, oggetti `fitz` o dati backend-specifici; non esisterà un invariante generale `source_id == verified_file.sha256`. La costruzione diretta validerà soltanto la forma, mentre la garanzia di provenienza deriverà dal producer canonico.
+`DocumentSourceAttestation` è una dataclass `frozen=True, slots=True`, pura, immutabile e backend-neutral: schema esattamente `1.0`, `verified_file` del tipo corretto, `source_id` stringa non vuota e `page_count` intero non booleano e non negativo; `page_count == 0` è valido. Non conserva path, byte buffer, handle, oggetti `fitz` o dati backend-specifici; non esiste un invariante generale `source_id == verified_file.sha256`. La costruzione diretta valida soltanto la forma, mentre la provenienza verificata è garantita dal producer canonico. Non è firma, autenticità editoriale o certificazione esterna.
 
-L'unica modifica autorizzata a `verified_file_model.py` e `tests/test_verified_file_model.py` è l'aggiunta e la verifica del helper puro `inspect_verified_bytes(data: bytes) -> VerifiedFileReference`, che centralizzerà il calcolo SHA-256 e della dimensione di una sequenza di byte. Non sono autorizzati refactor né cambiamenti di comportamento di `inspect_verified_file(...)` o `verify_file(...)`.
+`inspect_verified_bytes(data: bytes) -> VerifiedFileReference` è il helper puro e deterministico per una sequenza `bytes` esplicita: calcola SHA-256 e dimensione senza modificare `inspect_verified_file(...)` o `verify_file(...)`, le cui firme e comportamenti restano invariati.
 
-Producer previsto:
+Producer canonico implementato:
 
 ```python
 attest_pymupdf_document_source(
@@ -399,7 +399,7 @@ attest_pymupdf_document_source(
 ) -> DocumentSourceAttestation
 ```
 
-La semantica prevista è acquisire una sola volta i byte dello snapshot, calcolare SHA-256 e dimensione su quegli stessi byte, confrontarli con `expected_file` prima di invocare PyMuPDF e aprire il buffer verificato, non una seconda volta il path. Il producer rifiuterà PDF non leggibili, malformati o che richiedono autenticazione, leggerà e validerà `page_count`, deriverà internamente `source_id` dal digest verificato e non riceverà `source_id` o `page_count` dal chiamante. In caso di errore non produrrà artifact o stato.
+Il producer legge lo snapshot una sola volta, calcola digest e dimensione sul buffer acquisito e confronta separatamente entrambi con `expected_file` prima di invocare PyMuPDF. PyMuPDF apre lo stesso buffer verificato e non riapre il path: ciò elimina la finestra TOCTOU fra verifica e parsing. Il producer rifiuta mismatch, PDF malformati e documenti che richiedono autenticazione, legge `page_count` dallo stesso buffer, deriva internamente `source_id` dal digest osservato e restituisce il `VerifiedFileReference` ricostruito dai byte acquisiti. Accetta sottoclassi valide di `VerifiedFileReference`, incluso `SourceReference`, senza dipendere da `job_manifest_model`; chiude sempre il documento PyMuPDF e non scrive file né produce artifact o stato. L'attestazione descrive i byte acquisiti e non garantisce che il path resti invariato dopo il ritorno.
 
 Restano fuori scope della Milestone 9 e del primo micro-step: builder di `DocumentAnalysis`; caricamento o selezione di `PageAnalysis`; modifiche a `JobManifest`, `initialize_job(...)`, manifest schema migration, store, serializzazione, artifact resolution, CLI, diagnostica e capture runner; correzione dello skip delle pagine già completate; password per PDF cifrati; detector, relazioni multipagina, Resolution, modifiche a `PageAnalysis`, pipeline legacy, IR, Markdown ed EPUB.
 
