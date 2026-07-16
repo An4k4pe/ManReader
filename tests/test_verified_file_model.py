@@ -10,6 +10,7 @@ from pathlib import Path
 
 from verified_file_model import (
     VerifiedFileReference,
+    inspect_verified_bytes,
     inspect_verified_file,
     verify_file,
 )
@@ -55,6 +56,29 @@ class VerifiedFileModelTests(unittest.TestCase):
             self.assertRaises(FileNotFoundError),
         ):
             inspect_verified_file(Path(temp_dir) / "missing.bin")
+
+    def test_inspect_verified_bytes_returns_known_digest_and_size(self) -> None:
+        payload = b"verified-bytes"
+
+        reference = inspect_verified_bytes(payload)
+
+        self.assertEqual(reference.sha256, hashlib.sha256(payload).hexdigest())
+        self.assertEqual(reference.size_bytes, len(payload))
+        self.assertEqual(reference, inspect_verified_bytes(payload))
+
+    def test_inspect_verified_bytes_accepts_empty_bytes(self) -> None:
+        reference = inspect_verified_bytes(b"")
+
+        self.assertEqual(reference.sha256, hashlib.sha256(b"").hexdigest())
+        self.assertEqual(reference.size_bytes, 0)
+
+    def test_inspect_verified_bytes_rejects_non_bytes_runtime_values(self) -> None:
+        for value in (bytearray(b"data"), memoryview(b"data"), "data", 1):
+            with self.subTest(value_type=type(value)), self.assertRaisesRegex(
+                ValueError,
+                "data must be bytes",
+            ):
+                inspect_verified_bytes(value)  # type: ignore[arg-type]
 
     def test_verify_file_accepts_matching_file(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

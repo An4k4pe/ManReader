@@ -28,6 +28,17 @@ class VerifiedFileReference:
             raise ValueError("size_bytes must be greater than or equal to zero")
 
 
+def inspect_verified_bytes(data: bytes) -> VerifiedFileReference:
+    """Build a verified reference for one explicit immutable byte sequence."""
+
+    if not isinstance(data, bytes):
+        raise ValueError("data must be bytes")
+    return VerifiedFileReference(
+        sha256=hashlib.sha256(data).hexdigest(),
+        size_bytes=len(data),
+    )
+
+
 def inspect_verified_file(path: Path) -> VerifiedFileReference:
     """Build a verified reference for an existing regular file."""
 
