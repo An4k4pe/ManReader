@@ -484,7 +484,9 @@ Restano esclusi ulteriori CLI o producer, modifiche a `PageAnalysis`, nuovi cand
 
 La milestone definisce un contenitore immutabile, puro e versionato per una singola generazione documentale coerente, con riferimenti logici a un massimo di una `PageAnalysis` disponibile per pagina, in ordine sorgente e con pagine mancanti ammesse. Non identifica pattern documentali né introduce semantica, Resolution o decisioni sulle candidate.
 
-Il primo micro-step, non ancora implementato, è limitato a `document_analysis_model.py` e `tests/test_document_analysis_model.py`: modello puro e test sintetici per `DOCUMENT_ANALYSIS_SCHEMA_VERSION = "1.0"`, `PageAnalysisReference`, `DocumentAnalysisProvenance` e `DocumentAnalysis`. Nessun comportamento funzionale, serializzazione, store, filesystem, CLI, diagnostica, relazioni multipagina, detector, modifiche a `PageAnalysis`, schema `1.3`, IR, Markdown, EPUB o pipeline legacy è autorizzato oltre tale micro-step; dettagli e vincoli completi sono in `State.md`.
+Micro-step completati: il modello puro `DocumentAnalysis`, schema `1.0`, con `PageAnalysisReference` e `DocumentAnalysisProvenance`; e la factory validata di un singolo `PageAnalysisReference`, `build_validated_page_analysis_reference(...)`.
+
+Quando sono disponibili una `NormalizedPrimitivePage` e la relativa `PageAnalysis`, il percorso canonico deve usare `build_validated_page_analysis_reference(...)`: riusa la validazione cross-model e deriva il `page_index` dalla pagina normalizzata, senza riceverlo nuovamente dal chiamante. Nessun terzo micro-step è ancora autorizzato. Restano esclusi builder documentale, serializzazione, store, filesystem, artifact resolution, manifest, workspace, CLI, diagnostica, relazioni multipagina, detector, Resolution, modifiche a `PageAnalysis`, schema `1.3`, IR, Markdown, EPUB e pipeline legacy; dettagli e vincoli completi sono in `State.md`.
 
 ## Migrazione e shadow mode
 
