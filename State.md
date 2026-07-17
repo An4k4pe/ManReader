@@ -8,7 +8,9 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–10 sono completate. La Milestone 10 è la più recente completata; nessuna nuova milestone è aperta o autorizzata.
+Le Milestone 1–10 sono completate. La milestone corrente è:
+
+> **Milestone 11 — binding in memoria delle analisi pagina documentali**
 
 La pipeline legacy resta autorevole. I nuovi contratti lavorano in shadow mode e non producono ancora decisioni editoriali, IR o output finale.
 
@@ -220,7 +222,7 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-La Milestone 10 è completata. Prima di aprire una milestone successiva serve una nuova decisione architetturale esplicita; nessun ulteriore codice o comportamento è autorizzato. Non si deve assumere automaticamente come prossimo passo una factory end-to-end o batch, caricamento o selezione di `PageAnalysis`, integrazione con `JobManifest`, filesystem o PDF, persistenza o audit trail, adozione nel capture runner, osservazioni o relazioni document-local, né la correzione dei debiti del capture runner. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
+Il primo e unico micro-step della Milestone 11 è autorizzato ma non ancora implementato: `document_analysis_binding.py` e `tests/test_document_analysis_binding.py`. Nessun ulteriore comportamento è autorizzato. La milestone non sarà dichiarata completata automaticamente dopo l'implementazione: servirà una revisione architetturale separata. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
 
 ## Ultima baseline funzionale verificata
 
@@ -451,3 +453,37 @@ La milestone non garantisce che un `DocumentAnalysis` isolato dimostri di essere
 Non è stato necessario un secondo micro-step: la factory introduce già la garanzia cross-model prevista, la firma impedisce override di source ID, page count, schema e provenance completa, non inferisce il conteggio dalle pagine e delega gli invarianti ai modelli. Un eventuale test di composizione con `build_validated_page_analysis_reference(...)` sarebbe una copertura ridondante e non bloccante, perché documenterebbe un uso già possibile senza introdurre un nuovo invariante; una factory end-to-end o batch, l'incorporazione o persistenza dell'attestazione, manifest, capture, filesystem e osservazioni document-local richiederebbero politiche o contratti distinti. Queste motivazioni non costituiscono una roadmap implicita.
 
 Restano fuori scope: modifiche a `DocumentAnalysis`, `DocumentAnalysisProvenance`, `PageAnalysis`, `DocumentSourceAttestation` o relativi schema; factory batch o end-to-end; costruzione dei singoli `PageAnalysisReference`; caricamento e selezione di `PageAnalysis`; ordinamento automatico; filesystem e PDF; manifest, workspace e capture runner; persistenza, serializer, store e artifact resolution; CLI e diagnostica; osservazioni o relazioni multipagina; pattern ricorrenti; detector, classificazioni, score e confidence; Resolution; pipeline legacy, IR, Markdown ed EPUB.
+
+## Milestone 11 — binding in memoria delle analisi pagina documentali
+
+Obiettivo: definire un contratto pubblico, puro, immutabile e validato che associ posizionalmente un `DocumentAnalysis` a tutte e sole le `PageAnalysis` indicate dai suoi riferimenti. Il binding è completo rispetto a `DocumentAnalysis.pages`: il documento può essere parziale rispetto al PDF, ma il binding non può esserlo ulteriormente.
+
+Il primo e unico micro-step della Milestone 11 è autorizzato ma non ancora implementato: `document_analysis_binding.py` e `tests/test_document_analysis_binding.py`.
+
+Tipi e factory ratificati:
+
+```python
+BoundPageAnalysis(
+    reference: PageAnalysisReference,
+    analysis: PageAnalysis,
+)
+
+BoundDocumentAnalysis(
+    document_analysis: DocumentAnalysis,
+    pages: tuple[BoundPageAnalysis, ...],
+)
+
+bind_document_analysis(
+    document_analysis: DocumentAnalysis,
+    *,
+    analyses: tuple[PageAnalysis, ...],
+) -> BoundDocumentAnalysis
+```
+
+Le dataclass saranno pubbliche, `frozen=True`, `slots=True`, pure e non versionate; la costruzione diretta sarà validata tramite `__post_init__`. La factory accetterà esclusivamente una `tuple` in `analyses`, con lunghezza esattamente uguale a `document_analysis.pages`; `DocumentAnalysis.pages == ()` richiederà e ammetterà `analyses == ()`. L'associazione sarà esclusivamente posizionale: non converte, ordina, cerca, deduplica, filtra o seleziona.
+
+Ogni coppia dovrà verificare `page_id`, schema `PageAnalysis`, generation ID e uguaglianza completa della provenance. Il contenitore verificherà inoltre che ciascun riferimento coincida logicamente con quello nella stessa posizione di `DocumentAnalysis.pages`. Gli invarianti useranno uguaglianza logica, non identità Python; factory e contenitori riuseranno senza copiarli documento, riferimenti e analisi ricevuti. Gli errori resteranno `ValueError` con token identificativi stabili, senza rendere stabile l'intera frase.
+
+Il binding garantirà la corrispondenza riferimento–`PageAnalysis`, ma non attesterà che il riferimento sia stato costruito tramite la factory page-local e non rivaliderà contro `NormalizedPrimitivePage`.
+
+Restano fuori scope: modifiche ai modelli o agli schemi esistenti; `NormalizedPrimitivePage`; loader, mapping, lookup e artifact resolution; serializer, store e filesystem; selezione o fusione di analisi concorrenti; osservazioni o relazioni multipagina; pattern ricorrenti e continuation; candidate↔candidate; detector, classificazioni, score, confidence, ranking ed evidence; Resolution; manifest, workspace e capture runner; pipeline legacy, IR, Markdown ed EPUB.

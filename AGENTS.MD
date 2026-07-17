@@ -239,7 +239,9 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–10 sono completate. La Milestone 10 è la più recente completata; nessuna nuova milestone è aperta o autorizzata.
+Le Milestone 1–10 sono completate. La milestone corrente è:
+
+> **Milestone 11 — binding in memoria delle analisi pagina documentali**
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti restano in shadow mode.
 
@@ -507,6 +509,14 @@ Restano fuori scope persistenza e serializzazione; provenance del producer nel c
 La milestone ha definito un bridge puro e validato per un solo `DocumentAnalysis`: quando è disponibile una `DocumentSourceAttestation`, il percorso canonico ne deriva sia `page_count` sia `DocumentAnalysisProvenance.source_id`, delegando gli invarianti document-local ai modelli esistenti. La garanzia riguarda il percorso costruttivo, non aggiunge campi o prova persistita a `DocumentAnalysis`, che resta un contratto dati di basso livello utilizzabile direttamente.
 
 Il micro-step completato (`20b240b` — `Add attested document analysis factory`) espone `build_attested_document_analysis(...)`: controlla direttamente solo il tipo di `DocumentSourceAttestation`, deriva da essa `page_count` e source ID della provenance, fissa lo schema corrente e delega a `DocumentAnalysisProvenance` e `DocumentAnalysis` tutti gli altri invarianti. Non offre override per source ID, page count, schema o provenance completa; non converte, ordina, seleziona o muta le pagine e non inferisce il conteggio. Il risultato non conserva attestazione, riferimento verificato, digest, path, prova costruttiva o audit trail; un `DocumentAnalysis` isolato non prova il passaggio dalla factory e il costruttore diretto resta disponibile. Restano esclusi modifiche ai modelli esistenti o agli schemi, factory batch/end-to-end, riferimenti pagina, caricamento/selezione/ordinamento automatico di `PageAnalysis`, filesystem/PDF, manifest, workspace, capture runner, persistenza, serializer, store, artifact resolution, CLI, diagnostica, osservazioni o relazioni multipagina, pattern ricorrenti, detector, classificazioni, score, confidence, Resolution, pipeline legacy, IR, Markdown ed EPUB. Nessun ulteriore codice o comportamento è autorizzato prima di una nuova decisione architetturale esplicita.
+
+### Milestone 11 — binding in memoria delle analisi pagina documentali
+
+La milestone corrente definisce un contratto pubblico, puro, immutabile e validato per associare posizionalmente un `DocumentAnalysis` a tutte e sole le `PageAnalysis` indicate da `DocumentAnalysis.pages`. Il documento può essere parziale rispetto al PDF, ma il binding non può essere ulteriormente parziale.
+
+L'unico micro-step attualmente autorizzato, non ancora implementato, è limitato a `document_analysis_binding.py` e `tests/test_document_analysis_binding.py`, con `BoundPageAnalysis`, `BoundDocumentAnalysis` e `bind_document_analysis(...)`. Le dataclass saranno pubbliche, `frozen=True`, `slots=True`, pure e non versionate, con validazione diretta. `analyses` sarà esclusivamente una tuple della medesima lunghezza dei riferimenti e l'associazione sarà esclusivamente posizionale: nessuna conversione, ordinamento, ricerca, deduplicazione, filtro o selezione. Ogni coppia verificherà page ID, schema, generation ID e provenance; il contenitore verificherà i riferimenti nella stessa posizione usando uguaglianza logica, senza copiare gli oggetti ricevuti. Il binding non rivaliderà contro `NormalizedPrimitivePage` né attesterà il percorso di costruzione page-local.
+
+Restano esclusi modifiche ai modelli o schemi esistenti, `NormalizedPrimitivePage`, loader/mapping/lookup/artifact resolution, serializer/store/filesystem, analisi concorrenti, osservazioni o relazioni multipagina, pattern e continuation, candidate↔candidate, detector, classificazioni, score, confidence, ranking, evidence, Resolution, manifest, workspace, capture runner, pipeline legacy, IR, Markdown ed EPUB. Nessun ulteriore comportamento è autorizzato e la Milestone 11 richiederà una revisione architetturale separata prima di essere dichiarata completata.
 
 ## Migrazione e shadow mode
 
