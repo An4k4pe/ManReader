@@ -239,9 +239,9 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–9 sono completate. La milestone corrente è:
+Le Milestone 1–10 sono completate. La Milestone 10 è la più recente completata; nessuna nuova milestone è aperta o autorizzata.
 
-> **Milestone 10 — costruzione attestata di `DocumentAnalysis`**
+La pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti restano in shadow mode.
 
 La Milestone 8 resta completata; la Milestone 6 resta completata e congelata come baseline diagnostica. Singleton e local-fragment non sono detector affidabili.
 
@@ -502,11 +502,11 @@ Restano debiti operativi separati e non bloccanti: il capture runner verifica il
 
 Restano fuori scope persistenza e serializzazione; provenance del producer nel contratto; audit trail; password per PDF cifrati; producer alternativi; ottimizzazione della memoria per PDF grandi; builder di `DocumentAnalysis`; caricamento o selezione di `PageAnalysis`; manifest e capture integration; artifact resolution; CLI e diagnostica; detector, relazioni multipagina e Resolution; modifiche a `PageAnalysis`; pipeline legacy, IR, Markdown ed EPUB. La Milestone 9 non autorizza ulteriori lavori oltre al proprio contratto e producer completati.
 
-### Milestone 10 — costruzione attestata di `DocumentAnalysis`
+### Milestone 10 — costruzione attestata di DocumentAnalysis — completata
 
-La milestone corrente definisce un bridge puro e validato per un solo `DocumentAnalysis`: quando è disponibile una `DocumentSourceAttestation`, il percorso canonico ne deriva sia `page_count` sia `DocumentAnalysisProvenance.source_id`, delegando gli invarianti document-local ai modelli esistenti. La garanzia riguarda il percorso costruttivo, non aggiunge campi o prova persistita a `DocumentAnalysis`, che resta un contratto dati di basso livello utilizzabile direttamente.
+La milestone ha definito un bridge puro e validato per un solo `DocumentAnalysis`: quando è disponibile una `DocumentSourceAttestation`, il percorso canonico ne deriva sia `page_count` sia `DocumentAnalysisProvenance.source_id`, delegando gli invarianti document-local ai modelli esistenti. La garanzia riguarda il percorso costruttivo, non aggiunge campi o prova persistita a `DocumentAnalysis`, che resta un contratto dati di basso livello utilizzabile direttamente.
 
-Il primo micro-step è completato (`20b240b` — `Add attested document analysis factory`): `document_analysis_from_attestation.py` e `tests/test_document_analysis_from_attestation.py` espongono `build_attested_document_analysis(...)`. La factory controlla direttamente solo il tipo di `DocumentSourceAttestation`, deriva da essa `page_count` e source ID della provenance, fissa lo schema corrente e delega a `DocumentAnalysisProvenance` e `DocumentAnalysis` tutti gli altri invarianti. Riceve soltanto attestazione, metadati producer, generation ID e una tuple già selezionata di `PageAnalysisReference`; non offre override per source ID, page count, schema o provenance completa e non converte, ordina, seleziona o muta le pagine. Nessun secondo micro-step è autorizzato: qualsiasi lavoro successivo richiede una nuova decisione architetturale. Restano esclusi modifiche ai modelli esistenti, costruzione di riferimenti pagina, caricamento o selezione di `PageAnalysis`, filesystem/PDF, `JobManifest`, workspace, capture runner, persistenza, serializer, store, artifact resolution, CLI, diagnostica, osservazioni e relazioni multipagina, pattern ricorrenti, detector, classificazioni, score, confidence, Resolution, pipeline legacy, IR, Markdown ed EPUB.
+Il micro-step completato (`20b240b` — `Add attested document analysis factory`) espone `build_attested_document_analysis(...)`: controlla direttamente solo il tipo di `DocumentSourceAttestation`, deriva da essa `page_count` e source ID della provenance, fissa lo schema corrente e delega a `DocumentAnalysisProvenance` e `DocumentAnalysis` tutti gli altri invarianti. Non offre override per source ID, page count, schema o provenance completa; non converte, ordina, seleziona o muta le pagine e non inferisce il conteggio. Il risultato non conserva attestazione, riferimento verificato, digest, path, prova costruttiva o audit trail; un `DocumentAnalysis` isolato non prova il passaggio dalla factory e il costruttore diretto resta disponibile. Restano esclusi modifiche ai modelli esistenti o agli schemi, factory batch/end-to-end, riferimenti pagina, caricamento/selezione/ordinamento automatico di `PageAnalysis`, filesystem/PDF, manifest, workspace, capture runner, persistenza, serializer, store, artifact resolution, CLI, diagnostica, osservazioni o relazioni multipagina, pattern ricorrenti, detector, classificazioni, score, confidence, Resolution, pipeline legacy, IR, Markdown ed EPUB. Nessun ulteriore codice o comportamento è autorizzato prima di una nuova decisione architetturale esplicita.
 
 ## Migrazione e shadow mode
 
