@@ -222,11 +222,11 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-Il primo e unico micro-step della Milestone 11 è autorizzato ma non ancora implementato: `document_analysis_binding.py` e `tests/test_document_analysis_binding.py`. Nessun ulteriore comportamento è autorizzato. La milestone non sarà dichiarata completata automaticamente dopo l'implementazione: servirà una revisione architetturale separata. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
+Il primo e unico micro-step della Milestone 11 è completato (`5bd634a`). La milestone resta aperta: il prossimo passo è una revisione architetturale indipendente sulla possibile chiusura. Nessun ulteriore codice o comportamento è autorizzato. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
 
 ## Ultima baseline funzionale verificata
 
-Commit `20b240b` — `Add attested document analysis factory`: 1020 test OK, 7 skipped; Ruff verde; BasedPyright: 0 errori, 0 warning, 0 note; `git diff --check` verde.
+Commit `5bd634a` — `Add document analysis binding`: 1031 test OK, 7 skipped; Ruff verde; BasedPyright: 0 errori, 0 warning, 0 note; `git diff --check` verde.
 
 ## Milestone 7 — contesto strutturale page-level — completata
 
@@ -458,7 +458,12 @@ Restano fuori scope: modifiche a `DocumentAnalysis`, `DocumentAnalysisProvenance
 
 Obiettivo: definire un contratto pubblico, puro, immutabile e validato che associ posizionalmente un `DocumentAnalysis` a tutte e sole le `PageAnalysis` indicate dai suoi riferimenti. Il binding è completo rispetto a `DocumentAnalysis.pages`: il documento può essere parziale rispetto al PDF, ma il binding non può esserlo ulteriormente.
 
-Il primo e unico micro-step della Milestone 11 è autorizzato ma non ancora implementato: `document_analysis_binding.py` e `tests/test_document_analysis_binding.py`.
+Primo e unico micro-step completato: `5bd634a` — `Add document analysis binding`.
+
+```text
+document_analysis_binding.py
+tests/test_document_analysis_binding.py
+```
 
 Tipi e factory ratificati:
 
@@ -480,9 +485,9 @@ bind_document_analysis(
 ) -> BoundDocumentAnalysis
 ```
 
-Le dataclass saranno pubbliche, `frozen=True`, `slots=True`, pure e non versionate; la costruzione diretta sarà validata tramite `__post_init__`. La factory accetterà esclusivamente una `tuple` in `analyses`, con lunghezza esattamente uguale a `document_analysis.pages`; `DocumentAnalysis.pages == ()` richiederà e ammetterà `analyses == ()`. L'associazione sarà esclusivamente posizionale: non converte, ordina, cerca, deduplica, filtra o seleziona.
+I contratti implementati sono `BoundPageAnalysis`, `BoundDocumentAnalysis` e `bind_document_analysis(...)`: pubblici, puri, immutabili, non versionati e validati anche nella costruzione diretta. Il binding è completo rispetto a `DocumentAnalysis.pages`; accetta esclusivamente una `tuple` in `analyses`, della stessa lunghezza dei riferimenti, e `DocumentAnalysis.pages == ()` richiede e ammette `analyses == ()`. L'associazione è esclusivamente posizionale: non carica, cerca, converte, ordina, seleziona, deduplica, filtra o risolve artifact.
 
-Ogni coppia dovrà verificare `page_id`, schema `PageAnalysis`, generation ID e uguaglianza completa della provenance. Il contenitore verificherà inoltre che ciascun riferimento coincida logicamente con quello nella stessa posizione di `DocumentAnalysis.pages`. Gli invarianti useranno uguaglianza logica, non identità Python; factory e contenitori riuseranno senza copiarli documento, riferimenti e analisi ricevuti. Gli errori resteranno `ValueError` con token identificativi stabili, senza rendere stabile l'intera frase.
+Ogni coppia verifica `page_id`, schema `PageAnalysis`, generation ID e uguaglianza completa della provenance. Il contenitore verifica inoltre che ciascun riferimento coincida logicamente con quello nella stessa posizione di `DocumentAnalysis.pages`. Gli invarianti usano uguaglianza logica, non identità Python; factory e contenitori conservano l'identità di documento, riferimenti e analisi ricevuti senza copiarli. Gli errori restano `ValueError` con token identificativi stabili, senza rendere stabile l'intera frase. Documenti vuoti e documenti parziali rispetto al PDF con gap sono ammessi quando tutte e sole le analisi riferite sono fornite.
 
 Il binding garantirà la corrispondenza riferimento–`PageAnalysis`, ma non attesterà che il riferimento sia stato costruito tramite la factory page-local e non rivaliderà contro `NormalizedPrimitivePage`.
 
