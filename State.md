@@ -222,11 +222,11 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-Il primo micro-step della Milestone 10 è autorizzato ma non ancora implementato. Nessun ulteriore comportamento è autorizzato; il codice potrà iniziare solo dopo il consolidamento documentale. I debiti del capture runner restano separati e non autorizzati. I debiti dell'audit restano da valutare separatamente e JSON/PNG diagnostici reali non vanno committati.
+Il primo micro-step della Milestone 10 è completato (`20b240b`). Nessun secondo micro-step è autorizzato: qualsiasi passo successivo richiede una nuova decisione architetturale. Non si deve assumere automaticamente che servano integrazione end-to-end, `JobManifest`, filesystem o PDF, persistenza, osservazioni document-local, relazioni multipagina o modifiche al capture runner. I debiti del capture runner e dell'audit restano separati; JSON/PNG diagnostici reali non vanno committati.
 
 ## Ultima baseline funzionale verificata
 
-Commit `65d4b2c` — `Add document source attestation`: 1012 test OK, 7 skipped; Ruff verde; BasedPyright: 0 errori, 0 warning, 0 note; `git diff --check` verde.
+Commit `20b240b` — `Add attested document analysis factory`: 1020 test OK, 7 skipped; Ruff verde; BasedPyright: 0 errori, 0 warning, 0 note; `git diff --check` verde.
 
 ## Milestone 7 — contesto strutturale page-level — completata
 
@@ -417,9 +417,9 @@ Obiettivo: definire un bridge puro e validato che costruisca un solo `DocumentAn
 
 Nel percorso canonico da una sorgente reale attestata, `DocumentAnalysis.page_count` e `DocumentAnalysisProvenance.source_id` derivano dalla stessa `DocumentSourceAttestation`.
 
-Il costruttore diretto di `DocumentAnalysis` resta disponibile come contratto dati di basso livello; la factory diventerà il percorso canonico quando è disponibile una `DocumentSourceAttestation`. `DocumentAnalysis` non incorpora né conserva l'attestazione, `VerifiedFileReference`, digest, path o prova del percorso costruttivo: un oggetto isolato non può dimostrare da solo di essere stato costruito tramite factory. La garanzia riguarda il percorso canonico e non è una nuova proprietà persistita nello schema; nessuno schema viene modificato.
+Il costruttore diretto di `DocumentAnalysis` resta disponibile come contratto dati di basso livello; la factory è il percorso canonico quando è disponibile una `DocumentSourceAttestation`. `DocumentAnalysis` non incorpora né conserva l'attestazione, `VerifiedFileReference`, digest, path o prova del percorso costruttivo: un oggetto isolato non può dimostrare da solo di essere stato costruito tramite factory. La garanzia riguarda il percorso canonico e non è una nuova proprietà persistita nello schema; nessuno schema viene modificato.
 
-Primo micro-step autorizzato, non ancora implementato:
+Primo micro-step completato: `20b240b` — `Add attested document analysis factory`.
 
 ```text
 document_analysis_from_attestation.py
@@ -438,12 +438,12 @@ build_attested_document_analysis(
 ) -> DocumentAnalysis
 ```
 
-La factory verificherà preliminarmente soltanto che `attestation` sia una `DocumentSourceAttestation`, altrimenti solleverà `ValueError` con `attestation must be a DocumentSourceAttestation`. Fisserà `DocumentAnalysis.schema_version` a `DOCUMENT_ANALYSIS_SCHEMA_VERSION`, deriverà esclusivamente dall'attestazione `page_count` e `DocumentAnalysisProvenance.source_id`, costruirà la provenance con i tre metadati producer forniti e userà il `generation_id` del chiamante. Passerà `pages` al costruttore di `DocumentAnalysis` senza modificarla e restituirà un solo oggetto; non riceverà `source_id`, `page_count`, `schema_version` o una `DocumentAnalysisProvenance` completa.
+La factory verifica direttamente soltanto che `attestation` sia una `DocumentSourceAttestation`, altrimenti solleva `ValueError("attestation must be a DocumentSourceAttestation")`. Fissa `DocumentAnalysis.schema_version` a `DOCUMENT_ANALYSIS_SCHEMA_VERSION`, deriva esclusivamente dalla stessa attestazione `page_count` e `DocumentAnalysisProvenance.source_id`, costruisce la provenance con i tre metadati producer forniti e usa il `generation_id` del chiamante. Passa `pages` direttamente al costruttore di `DocumentAnalysis` e restituisce un solo oggetto; la firma non permette di fornire `source_id`, `page_count`, `schema_version` o una `DocumentAnalysisProvenance` completa. Restano responsabilità del chiamante `generation_id`, i tre metadati producer e la tuple già selezionata e ordinata dei riferimenti.
 
-La factory non duplicherà i controlli di `DocumentAnalysisProvenance` e `DocumentAnalysis`: tipi e validità dei metadati producer, validità di `generation_id`, tipo e ordinamento di `pages`, unicità, limiti rispetto a `page_count`, coerenza dei `source_id`, omogeneità delle provenance page-level, documenti parziali, gap e i casi `pages == ()` restano delegati ai modelli. I loro errori dovranno propagare senza wrapping.
+La factory non duplica i controlli di `DocumentAnalysisProvenance` e `DocumentAnalysis`: metadati producer, `generation_id`, tipo e contenuto di `pages`, ordine, unicità, limiti rispetto a `page_count`, coerenza dei `source_id`, omogeneità page-level, documenti parziali, gap, tuple vuota e `page_count == 0` restano delegati ai modelli. Le loro eccezioni propagano senza wrapping.
 
-`pages` accetterà esclusivamente una `tuple[PageAnalysisReference, ...]`, con default `()`, già selezionata e ordinata: la factory non convertirà iterable generici, non ordinerà, deduplicherà, filtrerà, selezionerà, muterà o costruirà riferimenti pagina. Non inferirà `page_count` da `len(pages)`, `max(page_index) + 1` o dalla presenza/assenza delle pagine finali.
+`pages` accetta esclusivamente una `tuple[PageAnalysisReference, ...]`, con default `()`, già selezionata e ordinata: la factory non converte iterable generici, non ordina, deduplica, filtra, seleziona, muta o costruisce riferimenti pagina. Non inferisce `page_count` da `len(pages)`, `max(page_index) + 1` o dalla presenza/assenza delle pagine finali.
 
-I test del futuro micro-step dovranno dimostrare derivazione di `page_count` e source ID dall'attestazione, assenza di parametri di override, provenance documentale corretta e schema corrente; documenti parziali, `pages == ()` e attestazione con `page_count == 0` e tuple vuota; propagazione dei rifiuti per riferimenti fuori intervallo, source ID incoerente, pagine non ordinate, tipo `pages` errato e metadata producer o generation ID invalidi; determinismo, assenza di mutazione e nessun ordinamento implicito.
+I test verificano derivazione di `page_count` e source ID dall'attestazione, assenza di parametri di override, provenance documentale corretta e schema corrente; documenti parziali con gap, `pages == ()` con `page_count > 0` e attestazione con `page_count == 0` e tuple vuota; rifiuto di riferimenti fuori intervallo, source ID incoerente, pagine non ordinate e `pages` non tuple; determinismo, assenza di mutazione e nessun ordinamento implicito.
 
-Restano fuori scope: modifiche a `DocumentAnalysis`, `DocumentAnalysisProvenance`, `PageAnalysis`, relativi schema o `DocumentSourceAttestation`; costruzione dei singoli `PageAnalysisReference`; caricamento o selezione di `PageAnalysis`; filesystem o riapertura PDF; `JobManifest`, workspace, capture runner, persistenza, serializer, store, artifact resolution, CLI, diagnostica, osservazioni o relazioni multipagina, pattern ricorrenti, detector, classificazioni, score, confidence, Resolution, pipeline legacy, IR, Markdown ed EPUB. La Milestone 10 non è integrazione end-to-end: il primo micro-step si ferma alla costruzione pura di un solo `DocumentAnalysis`.
+Restano fuori scope: modifiche a `DocumentAnalysis`, `DocumentAnalysisProvenance`, `PageAnalysis`, relativi schema o `DocumentSourceAttestation`; costruzione dei singoli `PageAnalysisReference`; caricamento o selezione di `PageAnalysis`; filesystem e PDF; `JobManifest`, workspace, capture runner, persistenza, serializer, store, artifact resolution, CLI, diagnostica, osservazioni o relazioni multipagina, pattern ricorrenti, detector, classificazioni, score, confidence, Resolution, pipeline legacy, IR, Markdown ed EPUB. La Milestone 10 non è integrazione end-to-end. Nessun secondo micro-step è autorizzato.
