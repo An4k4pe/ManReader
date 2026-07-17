@@ -239,9 +239,7 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–10 sono completate. La milestone corrente è:
-
-> **Milestone 11 — binding in memoria delle analisi pagina documentali**
+Le Milestone 1–11 sono completate. La Milestone 11 è la più recente completata; nessuna nuova milestone è aperta o autorizzata.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti restano in shadow mode.
 
@@ -510,13 +508,15 @@ La milestone ha definito un bridge puro e validato per un solo `DocumentAnalysis
 
 Il micro-step completato (`20b240b` — `Add attested document analysis factory`) espone `build_attested_document_analysis(...)`: controlla direttamente solo il tipo di `DocumentSourceAttestation`, deriva da essa `page_count` e source ID della provenance, fissa lo schema corrente e delega a `DocumentAnalysisProvenance` e `DocumentAnalysis` tutti gli altri invarianti. Non offre override per source ID, page count, schema o provenance completa; non converte, ordina, seleziona o muta le pagine e non inferisce il conteggio. Il risultato non conserva attestazione, riferimento verificato, digest, path, prova costruttiva o audit trail; un `DocumentAnalysis` isolato non prova il passaggio dalla factory e il costruttore diretto resta disponibile. Restano esclusi modifiche ai modelli esistenti o agli schemi, factory batch/end-to-end, riferimenti pagina, caricamento/selezione/ordinamento automatico di `PageAnalysis`, filesystem/PDF, manifest, workspace, capture runner, persistenza, serializer, store, artifact resolution, CLI, diagnostica, osservazioni o relazioni multipagina, pattern ricorrenti, detector, classificazioni, score, confidence, Resolution, pipeline legacy, IR, Markdown ed EPUB. Nessun ulteriore codice o comportamento è autorizzato prima di una nuova decisione architetturale esplicita.
 
-### Milestone 11 — binding in memoria delle analisi pagina documentali
+### Milestone 11 — binding in memoria delle analisi pagina documentali — completata
 
-La milestone corrente definisce un contratto pubblico, puro, immutabile e validato per associare posizionalmente un `DocumentAnalysis` a tutte e sole le `PageAnalysis` indicate da `DocumentAnalysis.pages`. Il documento può essere parziale rispetto al PDF, ma il binding non può essere ulteriormente parziale.
+La milestone ha definito un contratto pubblico, puro, immutabile e validato per associare posizionalmente un `DocumentAnalysis` a tutte e sole le `PageAnalysis` indicate da `DocumentAnalysis.pages`. Il documento può essere parziale rispetto al PDF, ma il binding non può essere ulteriormente parziale.
 
 Il primo e unico micro-step è completato (`5bd634a` — `Add document analysis binding`) in `document_analysis_binding.py` e `tests/test_document_analysis_binding.py`, con `BoundPageAnalysis`, `BoundDocumentAnalysis` e `bind_document_analysis(...)`. I contratti sono pubblici, puri, immutabili, non versionati e validati; il binding è completo rispetto a `DocumentAnalysis.pages`, accetta solo una tuple della medesima lunghezza e associa esclusivamente per posizione. Verifica page ID, schema, generation ID e provenance completa; usa uguaglianza logica per i riferimenti e conserva l'identità degli oggetti ricevuti. Ammette documenti vuoti e documenti parziali rispetto al PDF con gap, ma non carica, cerca, ordina, seleziona o risolve artifact. Non rivalida contro `NormalizedPrimitivePage` né attesta il percorso di costruzione page-local.
 
-Restano esclusi modifiche ai modelli o schemi esistenti, `NormalizedPrimitivePage`, loader/mapping/lookup/artifact resolution, serializer/store/filesystem, analisi concorrenti, osservazioni o relazioni multipagina, pattern e continuation, candidate↔candidate, detector, classificazioni, score, confidence, ranking, evidence, Resolution, manifest, workspace, capture runner, pipeline legacy, IR, Markdown ed EPUB. La Milestone 11 resta aperta: una revisione architetturale indipendente valuterà la possibile chiusura. Nessun ulteriore codice o comportamento è autorizzato.
+La revisione indipendente ha dato verdetto **CHIUDIBILE** senza rilevare difetti bloccanti, controlli identitari mancanti o allargamenti di scope. Non serve un secondo micro-step: l'obiettivo è soddisfatto e i limiti residui sono fuori scope dichiarati, non lacune del binding.
+
+Restano esclusi modifiche ai modelli o schemi esistenti, `NormalizedPrimitivePage`, loader/mapping/lookup/artifact resolution, serializer/store/filesystem, analisi concorrenti, osservazioni o relazioni multipagina, pattern e continuation, candidate↔candidate, detector, classificazioni, score, confidence, ranking, evidence, Resolution, manifest, workspace, capture runner, pipeline legacy, IR, Markdown ed EPUB. Nessuna nuova milestone è aperta o autorizzata; nessun ulteriore codice o comportamento è autorizzato.
 
 ## Migrazione e shadow mode
 

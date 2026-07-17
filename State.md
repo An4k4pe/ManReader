@@ -8,9 +8,7 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–10 sono completate. La milestone corrente è:
-
-> **Milestone 11 — binding in memoria delle analisi pagina documentali**
+Le Milestone 1–11 sono completate. La Milestone 11 è la più recente completata; nessuna nuova milestone è aperta o autorizzata.
 
 La pipeline legacy resta autorevole. I nuovi contratti lavorano in shadow mode e non producono ancora decisioni editoriali, IR o output finale.
 
@@ -222,7 +220,7 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-Il primo e unico micro-step della Milestone 11 è completato (`5bd634a`). La milestone resta aperta: il prossimo passo è una revisione architetturale indipendente sulla possibile chiusura. Nessun ulteriore codice o comportamento è autorizzato. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
+La Milestone 11 è completata. Il prossimo passo è una revisione architetturale read-only per identificare il prossimo problema; nessuna Milestone 12 è aperta e nessun nuovo codice o comportamento è autorizzato. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
 
 ## Ultima baseline funzionale verificata
 
@@ -454,9 +452,9 @@ Non è stato necessario un secondo micro-step: la factory introduce già la gara
 
 Restano fuori scope: modifiche a `DocumentAnalysis`, `DocumentAnalysisProvenance`, `PageAnalysis`, `DocumentSourceAttestation` o relativi schema; factory batch o end-to-end; costruzione dei singoli `PageAnalysisReference`; caricamento e selezione di `PageAnalysis`; ordinamento automatico; filesystem e PDF; manifest, workspace e capture runner; persistenza, serializer, store e artifact resolution; CLI e diagnostica; osservazioni o relazioni multipagina; pattern ricorrenti; detector, classificazioni, score e confidence; Resolution; pipeline legacy, IR, Markdown ed EPUB.
 
-## Milestone 11 — binding in memoria delle analisi pagina documentali
+## Milestone 11 — binding in memoria delle analisi pagina documentali — completata
 
-Obiettivo: definire un contratto pubblico, puro, immutabile e validato che associ posizionalmente un `DocumentAnalysis` a tutte e sole le `PageAnalysis` indicate dai suoi riferimenti. Il binding è completo rispetto a `DocumentAnalysis.pages`: il documento può essere parziale rispetto al PDF, ma il binding non può esserlo ulteriormente.
+La milestone ha definito un contratto pubblico, puro, immutabile e validato che associa posizionalmente un `DocumentAnalysis` a tutte e sole le `PageAnalysis` indicate dai suoi riferimenti. Il binding è completo rispetto a `DocumentAnalysis.pages`: il documento può essere parziale rispetto al PDF, ma il binding non può esserlo ulteriormente.
 
 Primo e unico micro-step completato: `5bd634a` — `Add document analysis binding`.
 
@@ -489,6 +487,10 @@ I contratti implementati sono `BoundPageAnalysis`, `BoundDocumentAnalysis` e `bi
 
 Ogni coppia verifica `page_id`, schema `PageAnalysis`, generation ID e uguaglianza completa della provenance. Il contenitore verifica inoltre che ciascun riferimento coincida logicamente con quello nella stessa posizione di `DocumentAnalysis.pages`. Gli invarianti usano uguaglianza logica, non identità Python; factory e contenitori conservano l'identità di documento, riferimenti e analisi ricevuti senza copiarli. Gli errori restano `ValueError` con token identificativi stabili, senza rendere stabile l'intera frase. Documenti vuoti e documenti parziali rispetto al PDF con gap sono ammessi quando tutte e sole le analisi riferite sono fornite.
 
-Il binding garantirà la corrispondenza riferimento–`PageAnalysis`, ma non attesterà che il riferimento sia stato costruito tramite la factory page-local e non rivaliderà contro `NormalizedPrimitivePage`.
+Conclusione di chiusura: il binding associa posizionalmente un `DocumentAnalysis` a tutte e sole le `PageAnalysis` indicate; costruzione diretta e factory sono validate, l'uguaglianza logica e l'identità degli input sono preservate secondo il contratto. Non sono stati introdotti loader, lookup, ordinamento, selezione, persistenza o Resolution.
+
+La revisione indipendente ha dato verdetto **CHIUDIBILE**: non ha rilevato difetti bloccanti, controlli identitari mancanti o allargamenti di scope. Non serve un secondo micro-step perché l'obiettivo della milestone è interamente soddisfatto; i limiti residui sono fuori scope dichiarati, non lacune del binding.
+
+Il binding garantisce la corrispondenza riferimento–`PageAnalysis`, ma non attesta che il riferimento sia stato costruito tramite la factory page-local e non rivalida contro `NormalizedPrimitivePage`.
 
 Restano fuori scope: modifiche ai modelli o agli schemi esistenti; `NormalizedPrimitivePage`; loader, mapping, lookup e artifact resolution; serializer, store e filesystem; selezione o fusione di analisi concorrenti; osservazioni o relazioni multipagina; pattern ricorrenti e continuation; candidate↔candidate; detector, classificazioni, score, confidence, ranking ed evidence; Resolution; manifest, workspace e capture runner; pipeline legacy, IR, Markdown ed EPUB.
