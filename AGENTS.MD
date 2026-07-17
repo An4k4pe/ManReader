@@ -239,7 +239,9 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–11 sono completate. La Milestone 11 è la più recente completata; nessuna nuova milestone è aperta o autorizzata.
+Le Milestone 1–11 sono completate. La milestone corrente è:
+
+> **Milestone 12 — inventario document-local delle candidate per structural kind**
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti restano in shadow mode.
 
@@ -516,7 +518,21 @@ Il primo e unico micro-step è completato (`5bd634a` — `Add document analysis 
 
 La revisione indipendente ha dato verdetto **CHIUDIBILE** senza rilevare difetti bloccanti, controlli identitari mancanti o allargamenti di scope. Non serve un secondo micro-step: l'obiettivo è soddisfatto e i limiti residui sono fuori scope dichiarati, non lacune del binding.
 
-Restano esclusi modifiche ai modelli o schemi esistenti, `NormalizedPrimitivePage`, loader/mapping/lookup/artifact resolution, serializer/store/filesystem, analisi concorrenti, osservazioni o relazioni multipagina, pattern e continuation, candidate↔candidate, detector, classificazioni, score, confidence, ranking, evidence, Resolution, manifest, workspace, capture runner, pipeline legacy, IR, Markdown ed EPUB. Nessuna nuova milestone è aperta o autorizzata; nessun ulteriore codice o comportamento è autorizzato.
+Restano esclusi modifiche ai modelli o schemi esistenti, `NormalizedPrimitivePage`, loader/mapping/lookup/artifact resolution, serializer/store/filesystem, analisi concorrenti, osservazioni o relazioni multipagina, pattern e continuation, candidate↔candidate, detector, classificazioni, score, confidence, ranking, evidence, Resolution, manifest, workspace, capture runner, pipeline legacy, IR, Markdown ed EPUB. Alla chiusura della Milestone 11 non era aperta né autorizzata alcuna milestone successiva.
+
+### Milestone 12 — inventario document-local delle candidate per structural kind
+
+La milestone definisce il primo consumer puro di `BoundDocumentAnalysis`: descrive la distribuzione osservata dei `RegionCandidate.proposed_structural_kind` in tutte e sole le pagine incluse nel binding, senza interpretare i conteggi come frequenza, ricorrenza, importanza o copertura dell'intero PDF.
+
+Sono ratificati i tipi pubblici, puri, `frozen=True`, `slots=True`, non versionati e validati nella costruzione diretta: `CandidateKindPageCount(page_index, candidate_count)`, `CandidateKindOccurrenceMeasurements(proposed_structural_kind, total_candidate_count, page_counts)` e `DocumentCandidateKindOccurrenceMeasurements(document_page_count, included_page_indices, candidate_kind_occurrences)`. La factory sarà `measure_document_candidate_kind_occurrences(bound_document_analysis: BoundDocumentAnalysis) -> DocumentCandidateKindOccurrenceMeasurements`.
+
+Tutti gli interi rifiutano `bool`; `page_index >= 0`, `candidate_count > 0`, `total_candidate_count > 0` e `document_page_count >= 0`. Il kind è una stringa non vuota; `page_counts` è una tuple non vuota di elementi corretti, strettamente ordinata per `page_index`, e il totale è la somma dei conteggi page-local. Gli indici inclusi sono interi non negativi, strettamente crescenti e inferiori a `document_page_count`; le occurrence sono del tipo corretto, con kind unici e ordinati lessicograficamente per valore esatto, e ogni indice nei page count è incluso. Pagine incluse senza candidate sono valide, selezioni senza candidate producono aggregazione vuota e kind assenti sono omessi. `included_page_count` è escluso perché derivabile da `len(included_page_indices)`.
+
+La factory accetterà esclusivamente `BoundDocumentAnalysis`, deriverà conteggio documentale e indici inclusi esattamente dal `DocumentAnalysis` e dai riferimenti del binding, conterà tutte e sole le candidate legate una volta per voce, raggruppate per kind esatto e `page_index`, e produrrà kind lessicografici e distribuzioni in ordine sorgente. Non dipenderà dall'ordine rappresentativo di `PageAnalysis.candidates`, non muterà input e non conserverà candidate, bbox, primitive ID o provenance. La costruzione diretta valida forma minima e coerenza interna, inclusa soltanto la non-vuotezza del kind; la factory garantisce inoltre che il kind provenga da una `RegionCandidate` già valida, senza importare il validator privato di `page_analysis_model` né duplicarne la regex.
+
+Una occurrence è esclusivamente una singola voce `RegionCandidate` osservata in una `PageAnalysis` inclusa, contata sotto il valore esatto del suo `proposed_structural_kind`; non implica identità cross-page, stesso elemento editoriale, ricorrenza, conferma del kind, indipendenza fra candidate o validità semantica.
+
+È autorizzato soltanto il primo micro-step, non ancora implementato: `document_analysis_candidate_kind_measurements.py` e `tests/test_document_analysis_candidate_kind_measurements.py`. Nessun secondo micro-step, altro codice o comportamento è autorizzato. Restano fuori scope `LayoutRegion`; candidate ID, bbox e primitive ID nel risultato; candidate↔candidate; adiacenza/gap; ratio, percentuali, medie, densità, frequenza, prevalenza, kind dominante e ordinamento per conteggio; pattern, ricorrenza e continuation; classificazione, semantica, score, confidence, ranking, coverage, ownership, Resolution, persistenza, serializer, store, filesystem, manifest, CLI, modifiche a modelli o schemi, pipeline legacy, IR, Markdown ed EPUB.
 
 ## Migrazione e shadow mode
 

@@ -8,9 +8,11 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–11 sono completate. La Milestone 11 è la più recente completata; nessuna nuova milestone è aperta o autorizzata.
+Le Milestone 1–11 sono completate. La milestone corrente è:
 
-La pipeline legacy resta autorevole. I nuovi contratti lavorano in shadow mode e non producono ancora decisioni editoriali, IR o output finale.
+> **Milestone 12 — inventario document-local delle candidate per structural kind**
+
+La pipeline legacy, IR, Markdown ed EPUB restano autorevoli. I nuovi contratti lavorano in shadow mode e non producono ancora decisioni editoriali, IR o output finale.
 
 ## Pipeline legacy e baseline da preservare
 
@@ -220,7 +222,7 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-La Milestone 11 è completata. Il prossimo passo è una revisione architetturale read-only per identificare il prossimo problema; nessuna Milestone 12 è aperta e nessun nuovo codice o comportamento è autorizzato. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
+È autorizzato soltanto il primo micro-step della Milestone 12: implementare il contratto puro ratificato per l'inventario document-local delle candidate per structural kind. Nessun altro codice o comportamento, incluso un secondo micro-step, è autorizzato. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
 
 ## Ultima baseline funzionale verificata
 
@@ -494,3 +496,50 @@ La revisione indipendente ha dato verdetto **CHIUDIBILE**: non ha rilevato difet
 Il binding garantisce la corrispondenza riferimento–`PageAnalysis`, ma non attesta che il riferimento sia stato costruito tramite la factory page-local e non rivalida contro `NormalizedPrimitivePage`.
 
 Restano fuori scope: modifiche ai modelli o agli schemi esistenti; `NormalizedPrimitivePage`; loader, mapping, lookup e artifact resolution; serializer, store e filesystem; selezione o fusione di analisi concorrenti; osservazioni o relazioni multipagina; pattern ricorrenti e continuation; candidate↔candidate; detector, classificazioni, score, confidence, ranking ed evidence; Resolution; manifest, workspace e capture runner; pipeline legacy, IR, Markdown ed EPUB.
+
+## Milestone 12 — inventario document-local delle candidate per structural kind
+
+Obiettivo: definire il primo consumer puro di `BoundDocumentAnalysis`, capace di descrivere la distribuzione osservata dei `RegionCandidate.proposed_structural_kind` in tutte e sole le pagine incluse nel binding, senza interpretare i conteggi come frequenza, ricorrenza, importanza o copertura dell'intero PDF.
+
+Tipi ratificati:
+
+```text
+CandidateKindPageCount
+  page_index: int
+  candidate_count: int
+
+CandidateKindOccurrenceMeasurements
+  proposed_structural_kind: str
+  total_candidate_count: int
+  page_counts: tuple[CandidateKindPageCount, ...]
+
+DocumentCandidateKindOccurrenceMeasurements
+  document_page_count: int
+  included_page_indices: tuple[int, ...]
+  candidate_kind_occurrences: tuple[CandidateKindOccurrenceMeasurements, ...]
+```
+
+Factory ratificata:
+
+```python
+measure_document_candidate_kind_occurrences(
+    bound_document_analysis: BoundDocumentAnalysis,
+) -> DocumentCandidateKindOccurrenceMeasurements
+```
+
+I tipi saranno pubblici, puri, `frozen=True`, `slots=True`, non versionati e validati nella costruzione diretta. Tutti gli interi rifiutano `bool`; `page_index >= 0`, `candidate_count > 0`, `total_candidate_count > 0` e `document_page_count >= 0`. `proposed_structural_kind` è una stringa non vuota; `page_counts` è una tuple non vuota di `CandidateKindPageCount`, strettamente ordinata per `page_index`, e il totale coincide con la somma dei conteggi page-local. `included_page_indices` è una tuple di interi non negativi, strettamente crescente e con ogni indice inferiore a `document_page_count`. `candidate_kind_occurrences` è una tuple di elementi del tipo corretto, con kind unici e ordinati lessicograficamente per valore esatto; ogni indice presente in `page_counts` appartiene agli indici inclusi. Pagine incluse senza candidate sono valide, selezioni senza candidate producono aggregazione vuota e kind assenti sono omessi. `included_page_count` non fa parte del contratto perché è interamente derivabile da `len(included_page_indices)`.
+
+La factory canonica accetta esclusivamente `BoundDocumentAnalysis`; deriva `document_page_count` esattamente da `DocumentAnalysis.page_count` e `included_page_indices` esattamente e nello stesso ordine dai riferimenti del binding. Conta tutte e sole le candidate delle analisi legate, ciascuna voce `RegionCandidate` esattamente una volta, raggruppandola per valore esatto di `proposed_structural_kind` e `page_index`. Produce kind in ordine lessicografico e distribuzioni in ordine sorgente, non dipende dall'ordine rappresentativo di `PageAnalysis.candidates`, non muta gli input e non conserva candidate, bbox, primitive ID o provenance.
+
+La costruzione diretta valida forma minima e coerenza interna e valida il kind soltanto come stringa non vuota. La factory canonica garantisce inoltre che il kind provenga da una `RegionCandidate` già valida; non deve importare il validator privato di `page_analysis_model` né duplicarne la regex.
+
+Per questa milestone, una occurrence è esclusivamente una singola voce `RegionCandidate` osservata in una `PageAnalysis` inclusa, contata sotto il valore esatto del suo `proposed_structural_kind`. Non implica identità cross-page, stesso elemento editoriale, ricorrenza, conferma del kind, indipendenza fra candidate o validità semantica.
+
+Primo micro-step autorizzato ma non ancora implementato:
+
+```text
+document_analysis_candidate_kind_measurements.py
+tests/test_document_analysis_candidate_kind_measurements.py
+```
+
+Nessun altro codice o comportamento è autorizzato, incluso un secondo micro-step. Restano fuori scope `LayoutRegion`; candidate ID, bbox e primitive ID nel risultato; candidate↔candidate; adiacenza e gap espliciti; ratio, percentuali, medie e densità; frequenza, prevalenza, kind dominante e ordinamento per conteggio; pattern, ricorrenza e continuation; classificazione e semantica; score, confidence e ranking; coverage e ownership finali; Resolution; persistenza, serializer, store, filesystem, manifest e CLI; modifiche a modelli o schemi esistenti; pipeline legacy, IR, Markdown ed EPUB.
