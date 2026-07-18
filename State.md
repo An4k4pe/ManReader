@@ -8,7 +8,9 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–12 sono completate. La Milestone 12 è la più recente completata; nessuna nuova milestone è aperta o autorizzata.
+Le Milestone 1–12 sono completate. La milestone corrente è:
+
+> **Milestone 13 — collezione page-local di analisi co-riferite**
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli. I nuovi contratti lavorano in shadow mode e non producono ancora decisioni editoriali, IR o output finale.
 
@@ -220,7 +222,7 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-La Milestone 12 è completata. Nessuna nuova milestone è aperta o autorizzata e nessun codice, test, diagnostica, persistenza o nuovo consumer è autorizzato. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
+È autorizzato soltanto il primo micro-step della Milestone 13, non ancora implementato: `page_analysis_co_reference.py` e `tests/test_page_analysis_co_reference.py`. Nessun altro codice o comportamento è autorizzato. Dopo l'implementazione serviranno verifica tecnica, baseline documentale e revisione indipendente: la milestone non sarà chiusa automaticamente. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
 
 ## Ultima baseline funzionale verificata
 
@@ -543,3 +545,40 @@ tests/test_document_analysis_candidate_kind_measurements.py
 La revisione indipendente ha dato verdetto **BASELINE ARCHITETTURALE ACCETTABILE**: nessuna criticità bloccante e nessuna correzione funzionale richiesta. L'obiettivo è soddisfatto dal primo e unico micro-step; l'osservazione non bloccante della revisione non è un debito obbligatorio né una correzione richiesta.
 
 Restano invariati v0.22, schema `PageAnalysis` 1.2, schema `DocumentAnalysis` 1.0, schema `DocumentSourceAttestation` 1.0, pipeline legacy autorevole e shadow mode. Restano fuori scope `LayoutRegion`; candidate ID, bbox e primitive ID nel risultato; candidate↔candidate; adiacenza e gap espliciti; ratio, percentuali, medie e densità; frequenza, prevalenza, kind dominante e ordinamento per conteggio; pattern, ricorrenza e continuation; classificazione e semantica; score, confidence e ranking; coverage e ownership finali; Resolution; persistenza, serializer, store, filesystem, manifest e CLI; modifiche a modelli o schemi esistenti; pipeline legacy, IR, Markdown ed EPUB.
+
+## Milestone 13 — collezione page-local di analisi co-riferite
+
+HEAD di partenza: `91898d6`. Problema: producer diversi generano `PageAnalysis` separate per la stessa pagina, mentre `DocumentAnalysis` e il relativo binding espongono una sola corrente per pagina. Manca un confine page-local osservativo che renda disponibili più analisi co-riferite mantenendole integre e tracciabili.
+
+Primo e unico micro-step autorizzato, non ancora implementato:
+
+```text
+page_analysis_co_reference.py
+tests/test_page_analysis_co_reference.py
+```
+
+Contratto ratificato:
+
+```python
+CoReferencedPageAnalyses(
+    source_id: str,
+    source_capture_id: str,
+    page_id: str,
+    source_primitive_schema_version: str,
+    analyses: tuple[PageAnalysis, ...],
+)
+
+build_co_referenced_page_analyses(
+    analyses: tuple[PageAnalysis, ...],
+) -> CoReferencedPageAnalyses
+```
+
+Il tipo sarà pubblico, puro, non versionato, `frozen=True`, `slots=True`. I quattro campi espliciti saranno stringhe non vuote; `analyses` sarà una tuple non vuota di `PageAnalysis` e anche una sola analisi sarà valida. Tutte le analisi dovranno dichiarare gli stessi `source_id`, `source_capture_id`, `page_id` e `source_primitive_schema_version`, coincidenti con i campi del contenitore, e lo stesso `PageAnalysis.schema_version` (oggi 1.2).
+
+L'identità canonica interna della corrente è la tupla esatta `(producer_name, producer_version, configuration_id, generation_id)`. La costruzione diretta richiederà ordine strettamente crescente per questa chiave; la factory accetterà ordine arbitrario e canonicalizzerà. La comparazione userà stringhe esatte, senza case folding, normalizzazione Unicode, parsing delle versioni, ordine naturale o semantica temporale. Una chiave duplicata sarà sempre rifiutata, sia per analisi uguali sia per collisione identitaria fra analisi differenti.
+
+Generazioni, versioni, configurazioni e producer differenti potranno coesistere: singleton e local-fragment sono correnti concorrenti. Structural kind, candidate ID, region ID, relation ID, primitive ID e bbox potranno coincidere fra analisi diverse; gli ID restano scoped alla `PageAnalysis` originaria e le relazioni interne alla propria analisi. La factory conserverà l'identità degli oggetti `PageAnalysis`, senza copiarli, fonderli, filtrarli o deduplicare regioni, relazioni o candidate.
+
+Il confine garantirà esclusivamente stesso soggetto page-local dichiarato, stessa capture dichiarata, stesso schema primitive dichiarato e compatibilità rappresentativa dello schema `PageAnalysis`. Non garantirà validazione contro la stessa `NormalizedPrimitivePage`, componibilità, compatibilità semantica, completezza rispetto ai producer, preferenza fra correnti, deduplicazione dei contenuti o Resolution. Non includerà `page_index`, `NormalizedPrimitivePage`, lookup, conteggi derivati, famiglie di producer o relazioni cross-analysis.
+
+Restano fuori scope binding document-local delle collezioni; modifiche a `DocumentAnalysis` o `BoundDocumentAnalysis`; validazione cross-model; merge di `PageAnalysis`; provenance per singolo elemento; candidate↔candidate; selezione fra producer o generazioni; score, confidence, ranking, coverage e ownership; Resolution; persistenza, serializer, store e filesystem; manifest, workspace, CLI e diagnostica; nuovi producer o modifiche a quelli esistenti; pipeline legacy, IR, Markdown ed EPUB. Restano invariati v0.22, schema `PageAnalysis` 1.2, schema `DocumentAnalysis` 1.0, schema `DocumentSourceAttestation` 1.0, pipeline legacy autorevole e shadow mode.

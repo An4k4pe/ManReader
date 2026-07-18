@@ -239,7 +239,9 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–12 sono completate. La Milestone 12 è la più recente completata; nessuna nuova milestone è aperta o autorizzata.
+Le Milestone 1–12 sono completate. La milestone corrente è:
+
+> **Milestone 13 — collezione page-local di analisi co-riferite**
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti restano in shadow mode.
 
@@ -532,7 +534,15 @@ Una occurrence è esclusivamente una singola voce `RegionCandidate` osservata in
 
 La revisione indipendente ha dato verdetto **BASELINE ARCHITETTURALE ACCETTABILE**, senza criticità bloccanti né correzioni funzionali richieste. Il primo e unico micro-step soddisfa l'obiettivo; l'osservazione non bloccante non costituisce un debito obbligatorio o una correzione richiesta.
 
-Restano fuori scope `LayoutRegion`; candidate ID, bbox e primitive ID nel risultato; candidate↔candidate; adiacenza/gap; ratio, percentuali, medie, densità, frequenza, prevalenza, kind dominante e ordinamento per conteggio; pattern, ricorrenza e continuation; classificazione, semantica, score, confidence, ranking, coverage, ownership, Resolution, modifiche a modelli o schemi, pipeline legacy, IR, Markdown ed EPUB. Nessuna nuova milestone è aperta o autorizzata; nessun codice, test, diagnostica, persistenza o nuovo consumer è autorizzato.
+Restano fuori scope `LayoutRegion`; candidate ID, bbox e primitive ID nel risultato; candidate↔candidate; adiacenza/gap; ratio, percentuali, medie, densità, frequenza, prevalenza, kind dominante e ordinamento per conteggio; pattern, ricorrenza e continuation; classificazione, semantica, score, confidence, ranking, coverage, ownership, Resolution, modifiche a modelli o schemi, pipeline legacy, IR, Markdown ed EPUB. Alla chiusura della Milestone 12 non era aperta né autorizzata alcuna nuova milestone e non era autorizzato nuovo codice, test, diagnostica, persistenza o consumer.
+
+### Milestone 13 — collezione page-local di analisi co-riferite
+
+La milestone corrente affronta la disponibilità osservativa di più `PageAnalysis` co-riferite alla stessa pagina, senza fondere o preferire le correnti. L'unico micro-step autorizzato, non ancora implementato, è `page_analysis_co_reference.py` con `tests/test_page_analysis_co_reference.py`, `CoReferencedPageAnalyses` e `build_co_referenced_page_analyses(...)`.
+
+Il contenitore sarà pubblico, puro, non versionato, `frozen=True`, `slots=True`, con quattro identità page-local esplicite e una tuple non vuota di `PageAnalysis`. Garantirà solo uguaglianza dichiarata di source, capture, pagina, schema primitive e compatibilità rappresentativa dello schema `PageAnalysis`; la chiave interna canonica è `(producer_name, producer_version, configuration_id, generation_id)`. La costruzione diretta richiederà ordine strettamente crescente, la factory canonicalizzerà un input arbitrario e ogni chiave duplicata sarà rifiutata. Il confronto usa stringhe esatte; correnti di producer, versione, configurazione o generazione differenti possono coesistere. Gli oggetti `PageAnalysis` sono conservati per identità, senza copia, merge, filtro o deduplicazione.
+
+Non garantisce validazione contro una stessa `NormalizedPrimitivePage`, componibilità, semantica, completezza, preferenza, deduplicazione dei contenuti o Resolution; non introduce `page_index`, lookup, conteggi derivati, famiglie di producer o relazioni cross-analysis. Restano fuori scope binding document-local delle collezioni, modifiche a `DocumentAnalysis`/`BoundDocumentAnalysis`, validazione cross-model, merge, selezione fra producer o generazioni, score/confidence/ranking, coverage/ownership, persistenza, serializer/store/filesystem, manifest/workspace/CLI/diagnostica, nuovi producer, pipeline legacy, IR, Markdown ed EPUB. Nessun ulteriore comportamento è autorizzato; la milestone richiederà verifica tecnica, baseline documentale e revisione indipendente prima di ogni possibile chiusura.
 
 ## Migrazione e shadow mode
 
