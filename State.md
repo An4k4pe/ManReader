@@ -222,11 +222,11 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-È autorizzato soltanto il primo micro-step della Milestone 13, non ancora implementato: `page_analysis_co_reference.py` e `tests/test_page_analysis_co_reference.py`. Nessun altro codice o comportamento è autorizzato. Dopo l'implementazione serviranno verifica tecnica, baseline documentale e revisione indipendente: la milestone non sarà chiusa automaticamente. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
+Il primo micro-step della Milestone 13 è completato. Il prossimo passaggio è soltanto la revisione architetturale indipendente della baseline; nessun secondo micro-step, codice o altro comportamento è autorizzato. La milestone non sarà chiusa automaticamente. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
 
 ## Ultima baseline funzionale verificata
 
-Commit `bbe3ea0` — `Add document candidate kind occurrence measurements`: 1043 test OK, 7 skipped; Ruff verde; BasedPyright: 0 errori, 0 warning, 0 note; `git diff --check` verde.
+Commit `c5bc2f2` — `Add co-referenced page analyses`: 1056 test OK, 7 skipped; Ruff verde; BasedPyright: 0 errori, 0 warning, 0 note; `git diff --check` verde.
 
 ## Milestone 7 — contesto strutturale page-level — completata
 
@@ -548,16 +548,9 @@ Restano invariati v0.22, schema `PageAnalysis` 1.2, schema `DocumentAnalysis` 1.
 
 ## Milestone 13 — collezione page-local di analisi co-riferite
 
-HEAD di partenza: `91898d6`. Problema: producer diversi generano `PageAnalysis` separate per la stessa pagina, mentre `DocumentAnalysis` e il relativo binding espongono una sola corrente per pagina. Manca un confine page-local osservativo che renda disponibili più analisi co-riferite mantenendole integre e tracciabili.
+HEAD di partenza: `91898d6`. Producer diversi generano `PageAnalysis` separate per la stessa pagina, mentre `DocumentAnalysis` e il relativo binding espongono una sola corrente per pagina. Il primo micro-step completato (`c5bc2f2` — `Add co-referenced page analyses`) introduce in `page_analysis_co_reference.py`, con test sintetici in `tests/test_page_analysis_co_reference.py`, il confine page-local osservativo che rende disponibili più analisi co-riferite mantenendole integre e tracciabili.
 
-Primo e unico micro-step autorizzato, non ancora implementato:
-
-```text
-page_analysis_co_reference.py
-tests/test_page_analysis_co_reference.py
-```
-
-Contratto ratificato:
+Contratto implementato:
 
 ```python
 CoReferencedPageAnalyses(
@@ -573,12 +566,12 @@ build_co_referenced_page_analyses(
 ) -> CoReferencedPageAnalyses
 ```
 
-Il tipo sarà pubblico, puro, non versionato, `frozen=True`, `slots=True`. I quattro campi espliciti saranno stringhe non vuote; `analyses` sarà una tuple non vuota di `PageAnalysis` e anche una sola analisi sarà valida. Tutte le analisi dovranno dichiarare gli stessi `source_id`, `source_capture_id`, `page_id` e `source_primitive_schema_version`, coincidenti con i campi del contenitore, e lo stesso `PageAnalysis.schema_version` (oggi 1.2).
+Il tipo è pubblico, puro, non versionato, `frozen=True`, `slots=True`. I quattro campi espliciti sono stringhe non vuote; `analyses` è una tuple non vuota di `PageAnalysis` e anche una sola analisi è valida. Tutte le analisi dichiarano gli stessi `source_id`, `source_capture_id`, `page_id` e `source_primitive_schema_version`, coincidenti con i campi del contenitore, e lo stesso `PageAnalysis.schema_version` (oggi 1.2).
 
-L'identità canonica interna della corrente è la tupla esatta `(producer_name, producer_version, configuration_id, generation_id)`. La costruzione diretta richiederà ordine strettamente crescente per questa chiave; la factory accetterà ordine arbitrario e canonicalizzerà. La comparazione userà stringhe esatte, senza case folding, normalizzazione Unicode, parsing delle versioni, ordine naturale o semantica temporale. Una chiave duplicata sarà sempre rifiutata, sia per analisi uguali sia per collisione identitaria fra analisi differenti.
+L'identità canonica interna della corrente è la tupla esatta `(producer_name, producer_version, configuration_id, generation_id)`. La costruzione diretta richiede ordine strettamente crescente per questa chiave; la factory accetta ordine arbitrario e canonicalizza. La comparazione usa stringhe esatte, senza case folding, normalizzazione Unicode, parsing delle versioni, ordine naturale o semantica temporale. Una chiave duplicata è sempre rifiutata, sia per analisi uguali sia per collisione identitaria fra analisi differenti.
 
-Generazioni, versioni, configurazioni e producer differenti potranno coesistere: singleton e local-fragment sono correnti concorrenti. Structural kind, candidate ID, region ID, relation ID, primitive ID e bbox potranno coincidere fra analisi diverse; gli ID restano scoped alla `PageAnalysis` originaria e le relazioni interne alla propria analisi. La factory conserverà l'identità degli oggetti `PageAnalysis`, senza copiarli, fonderli, filtrarli o deduplicare regioni, relazioni o candidate.
+Generazioni, versioni, configurazioni e producer differenti possono coesistere: singleton e local-fragment sono correnti concorrenti. Structural kind, candidate ID, region ID, relation ID, primitive ID e bbox possono coincidere fra analisi diverse; gli ID restano scoped alla `PageAnalysis` originaria e le relazioni interne alla propria analisi. La factory conserva l'identità degli oggetti `PageAnalysis`, senza copiarli, fonderli, filtrarli o deduplicare regioni, relazioni o candidate.
 
-Il confine garantirà esclusivamente stesso soggetto page-local dichiarato, stessa capture dichiarata, stesso schema primitive dichiarato e compatibilità rappresentativa dello schema `PageAnalysis`. Non garantirà validazione contro la stessa `NormalizedPrimitivePage`, componibilità, compatibilità semantica, completezza rispetto ai producer, preferenza fra correnti, deduplicazione dei contenuti o Resolution. Non includerà `page_index`, `NormalizedPrimitivePage`, lookup, conteggi derivati, famiglie di producer o relazioni cross-analysis.
+Il confine garantisce esclusivamente stesso soggetto page-local dichiarato, stessa capture dichiarata, stesso schema primitive dichiarato e compatibilità rappresentativa dello schema `PageAnalysis`. Non garantisce validazione contro la stessa `NormalizedPrimitivePage`, componibilità, compatibilità semantica, completezza rispetto ai producer, preferenza fra correnti, deduplicazione dei contenuti o Resolution. Non include `page_index`, `NormalizedPrimitivePage`, lookup, conteggi derivati, famiglie di producer o relazioni cross-analysis.
 
-Restano fuori scope binding document-local delle collezioni; modifiche a `DocumentAnalysis` o `BoundDocumentAnalysis`; validazione cross-model; merge di `PageAnalysis`; provenance per singolo elemento; candidate↔candidate; selezione fra producer o generazioni; score, confidence, ranking, coverage e ownership; Resolution; persistenza, serializer, store e filesystem; manifest, workspace, CLI e diagnostica; nuovi producer o modifiche a quelli esistenti; pipeline legacy, IR, Markdown ed EPUB. Restano invariati v0.22, schema `PageAnalysis` 1.2, schema `DocumentAnalysis` 1.0, schema `DocumentSourceAttestation` 1.0, pipeline legacy autorevole e shadow mode.
+Restano fuori scope binding document-local delle collezioni; modifiche a `DocumentAnalysis` o `BoundDocumentAnalysis`; validazione cross-model; merge di `PageAnalysis`; provenance per singolo elemento; candidate↔candidate; selezione fra producer o generazioni; score, confidence, ranking, coverage e ownership; Resolution; persistenza, serializer, store e filesystem; manifest, workspace, CLI e diagnostica; nuovi producer o modifiche a quelli esistenti; pipeline legacy, IR, Markdown ed EPUB. Restano invariati v0.22, schema `PageAnalysis` 1.2, schema `DocumentAnalysis` 1.0, schema `DocumentSourceAttestation` 1.0, pipeline legacy autorevole e shadow mode. La Milestone 13 resta aperta: il prossimo passaggio è una revisione architetturale indipendente della baseline, senza autorizzare un secondo micro-step o altro comportamento.
