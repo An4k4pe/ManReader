@@ -8,9 +8,7 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–12 sono completate. La milestone corrente è:
-
-> **Milestone 13 — collezione page-local di analisi co-riferite**
+Le Milestone 1–13 sono completate. Nessuna nuova milestone è aperta o autorizzata.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli. I nuovi contratti lavorano in shadow mode e non producono ancora decisioni editoriali, IR o output finale.
 
@@ -222,7 +220,7 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-Il primo micro-step della Milestone 13 è completato. Il prossimo passaggio è soltanto la revisione architetturale indipendente della baseline; nessun secondo micro-step, codice o altro comportamento è autorizzato. La milestone non sarà chiusa automaticamente. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
+La Milestone 13 è completata. Prima di qualunque nuova milestone serve una decisione architetturale esplicita; nessun nuovo codice, test o comportamento è autorizzato. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
 
 ## Ultima baseline funzionale verificata
 
@@ -546,7 +544,7 @@ La revisione indipendente ha dato verdetto **BASELINE ARCHITETTURALE ACCETTABILE
 
 Restano invariati v0.22, schema `PageAnalysis` 1.2, schema `DocumentAnalysis` 1.0, schema `DocumentSourceAttestation` 1.0, pipeline legacy autorevole e shadow mode. Restano fuori scope `LayoutRegion`; candidate ID, bbox e primitive ID nel risultato; candidate↔candidate; adiacenza e gap espliciti; ratio, percentuali, medie e densità; frequenza, prevalenza, kind dominante e ordinamento per conteggio; pattern, ricorrenza e continuation; classificazione e semantica; score, confidence e ranking; coverage e ownership finali; Resolution; persistenza, serializer, store, filesystem, manifest e CLI; modifiche a modelli o schemi esistenti; pipeline legacy, IR, Markdown ed EPUB.
 
-## Milestone 13 — collezione page-local di analisi co-riferite
+## Milestone 13 — collezione page-local di analisi co-riferite — completata
 
 HEAD di partenza: `91898d6`. Producer diversi generano `PageAnalysis` separate per la stessa pagina, mentre `DocumentAnalysis` e il relativo binding espongono una sola corrente per pagina. Il primo micro-step completato (`c5bc2f2` — `Add co-referenced page analyses`) introduce in `page_analysis_co_reference.py`, con test sintetici in `tests/test_page_analysis_co_reference.py`, il confine page-local osservativo che rende disponibili più analisi co-riferite mantenendole integre e tracciabili.
 
@@ -574,4 +572,6 @@ Generazioni, versioni, configurazioni e producer differenti possono coesistere: 
 
 Il confine garantisce esclusivamente stesso soggetto page-local dichiarato, stessa capture dichiarata, stesso schema primitive dichiarato e compatibilità rappresentativa dello schema `PageAnalysis`. Non garantisce validazione contro la stessa `NormalizedPrimitivePage`, componibilità, compatibilità semantica, completezza rispetto ai producer, preferenza fra correnti, deduplicazione dei contenuti o Resolution. Non include `page_index`, `NormalizedPrimitivePage`, lookup, conteggi derivati, famiglie di producer o relazioni cross-analysis.
 
-Restano fuori scope binding document-local delle collezioni; modifiche a `DocumentAnalysis` o `BoundDocumentAnalysis`; validazione cross-model; merge di `PageAnalysis`; provenance per singolo elemento; candidate↔candidate; selezione fra producer o generazioni; score, confidence, ranking, coverage e ownership; Resolution; persistenza, serializer, store e filesystem; manifest, workspace, CLI e diagnostica; nuovi producer o modifiche a quelli esistenti; pipeline legacy, IR, Markdown ed EPUB. Restano invariati v0.22, schema `PageAnalysis` 1.2, schema `DocumentAnalysis` 1.0, schema `DocumentSourceAttestation` 1.0, pipeline legacy autorevole e shadow mode. La Milestone 13 resta aperta: il prossimo passaggio è una revisione architetturale indipendente della baseline, senza autorizzare un secondo micro-step o altro comportamento.
+Il primo e unico micro-step soddisfa l'obiettivo della milestone. La revisione indipendente ha dato verdetto **BASELINE ARCHITETTURALE ACCETTABILE**, senza criticità bloccanti o non bloccanti e senza correzioni funzionali o documentali richieste. La baseline documentale revisionata è `9f10dab` — `Record co-referenced page analyses baseline`; la baseline funzionale resta `c5bc2f2`.
+
+Restano fuori scope binding document-local delle collezioni; modifiche a `DocumentAnalysis` o `BoundDocumentAnalysis`; `NormalizedPrimitivePage`; validazione cross-model; lookup o riferimenti cross-analysis; candidate↔candidate; merge o selezione di `PageAnalysis`; score, confidence, ranking, coverage e ownership; Resolution; persistenza, serializer, store, filesystem, CLI e diagnostica; nuovi producer, codice o test; pipeline legacy, IR, Markdown ed EPUB. Restano invariati v0.22, schema `PageAnalysis` 1.2, schema `DocumentAnalysis` 1.0, schema `DocumentSourceAttestation` 1.0, pipeline legacy autorevole e shadow mode. La chiusura non apre né autorizza alcuna milestone successiva.

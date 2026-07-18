@@ -239,9 +239,7 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–12 sono completate. La milestone corrente è:
-
-> **Milestone 13 — collezione page-local di analisi co-riferite**
+Le Milestone 1–13 sono completate. Nessuna nuova milestone è aperta o autorizzata.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti restano in shadow mode.
 
@@ -536,13 +534,13 @@ La revisione indipendente ha dato verdetto **BASELINE ARCHITETTURALE ACCETTABILE
 
 Restano fuori scope `LayoutRegion`; candidate ID, bbox e primitive ID nel risultato; candidate↔candidate; adiacenza/gap; ratio, percentuali, medie, densità, frequenza, prevalenza, kind dominante e ordinamento per conteggio; pattern, ricorrenza e continuation; classificazione, semantica, score, confidence, ranking, coverage, ownership, Resolution, modifiche a modelli o schemi, pipeline legacy, IR, Markdown ed EPUB. Alla chiusura della Milestone 12 non era aperta né autorizzata alcuna nuova milestone e non era autorizzato nuovo codice, test, diagnostica, persistenza o consumer.
 
-### Milestone 13 — collezione page-local di analisi co-riferite
+### Milestone 13 — collezione page-local di analisi co-riferite — completata
 
-La milestone corrente affronta la disponibilità osservativa di più `PageAnalysis` co-riferite alla stessa pagina, senza fondere o preferire le correnti. Il primo micro-step è implementato e verificato nel commit `c5bc2f2` — `Add co-referenced page analyses`: `page_analysis_co_reference.py` e `tests/test_page_analysis_co_reference.py` espongono `CoReferencedPageAnalyses` e `build_co_referenced_page_analyses(...)`.
+La milestone ha affrontato la disponibilità osservativa di più `PageAnalysis` co-riferite alla stessa pagina, senza fondere o preferire le correnti. Il primo micro-step è implementato e verificato nel commit `c5bc2f2` — `Add co-referenced page analyses`: `page_analysis_co_reference.py` e `tests/test_page_analysis_co_reference.py` espongono `CoReferencedPageAnalyses` e `build_co_referenced_page_analyses(...)`.
 
 Il contenitore è pubblico, puro, non versionato, `frozen=True`, `slots=True`, con quattro identità page-local esplicite e una tuple non vuota di `PageAnalysis`. Garantisce solo uguaglianza dichiarata di source, capture, pagina, schema primitive e compatibilità rappresentativa dello schema `PageAnalysis`; la chiave interna canonica è `(producer_name, producer_version, configuration_id, generation_id)`. La costruzione diretta richiede ordine strettamente crescente, la factory canonicalizza un input arbitrario e ogni chiave duplicata è rifiutata. Il confronto usa stringhe esatte; correnti di producer, versione, configurazione o generazione differenti possono coesistere. Gli oggetti `PageAnalysis` sono conservati per identità, senza copia, merge, filtro o deduplicazione.
 
-Non garantisce validazione contro una stessa `NormalizedPrimitivePage`, componibilità, semantica, completezza, preferenza, deduplicazione dei contenuti o Resolution; non introduce `page_index`, lookup, conteggi derivati, famiglie di producer o relazioni cross-analysis. Restano fuori scope binding document-local delle collezioni, modifiche a `DocumentAnalysis`/`BoundDocumentAnalysis`, validazione cross-model, merge, selezione fra producer o generazioni, score/confidence/ranking, coverage/ownership, persistenza, serializer/store/filesystem, manifest/workspace/CLI/diagnostica, nuovi producer, pipeline legacy, IR, Markdown ed EPUB. La Milestone 13 resta aperta: il prossimo passaggio è la revisione architetturale indipendente della baseline; nessun secondo micro-step o altro comportamento è autorizzato.
+Non garantisce validazione contro una stessa `NormalizedPrimitivePage`, componibilità, semantica, completezza, preferenza, deduplicazione dei contenuti o Resolution; non introduce `page_index`, lookup, conteggi derivati, famiglie di producer o relazioni cross-analysis. Il primo e unico micro-step soddisfa l'obiettivo; la revisione indipendente ha dato verdetto **BASELINE ARCHITETTURALE ACCETTABILE**, senza criticità e senza correzioni richieste. Restano fuori scope binding document-local delle collezioni, modifiche a `DocumentAnalysis`/`BoundDocumentAnalysis`, `NormalizedPrimitivePage`, validazione cross-model, lookup o riferimenti cross-analysis, candidate↔candidate, merge, selezione, score/confidence/ranking, coverage/ownership, persistenza, serializer/store/filesystem, manifest/workspace/CLI/diagnostica, nuovi producer, codice o test, pipeline legacy, IR, Markdown ed EPUB. La chiusura non apre né autorizza una milestone successiva.
 
 ## Migrazione e shadow mode
 
