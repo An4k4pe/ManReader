@@ -239,9 +239,7 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–11 sono completate. La milestone corrente è:
-
-> **Milestone 12 — inventario document-local delle candidate per structural kind**
+Le Milestone 1–12 sono completate. La Milestone 12 è la più recente completata; nessuna nuova milestone è aperta o autorizzata.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti restano in shadow mode.
 
@@ -520,9 +518,9 @@ La revisione indipendente ha dato verdetto **CHIUDIBILE** senza rilevare difetti
 
 Restano esclusi modifiche ai modelli o schemi esistenti, `NormalizedPrimitivePage`, loader/mapping/lookup/artifact resolution, serializer/store/filesystem, analisi concorrenti, osservazioni o relazioni multipagina, pattern e continuation, candidate↔candidate, detector, classificazioni, score, confidence, ranking, evidence, Resolution, manifest, workspace, capture runner, pipeline legacy, IR, Markdown ed EPUB. Alla chiusura della Milestone 11 non era aperta né autorizzata alcuna milestone successiva.
 
-### Milestone 12 — inventario document-local delle candidate per structural kind
+### Milestone 12 — inventario document-local delle candidate per structural kind — completata
 
-La milestone definisce il primo consumer puro di `BoundDocumentAnalysis`: descrive la distribuzione osservata dei `RegionCandidate.proposed_structural_kind` in tutte e sole le pagine incluse nel binding, senza interpretare i conteggi come frequenza, ricorrenza, importanza o copertura dell'intero PDF.
+La milestone ha definito il primo consumer puro di `BoundDocumentAnalysis`: descrive la distribuzione osservata dei `RegionCandidate.proposed_structural_kind` in tutte e sole le pagine incluse nel binding, senza interpretare i conteggi come frequenza, ricorrenza, importanza o copertura dell'intero PDF.
 
 Il primo micro-step è completato (`bbe3ea0` — `Add document candidate kind occurrence measurements`): `document_analysis_candidate_kind_measurements.py` e `tests/test_document_analysis_candidate_kind_measurements.py` introducono i contratti pubblici, puri, `frozen=True`, `slots=True`, non versionati e validati `CandidateKindPageCount(page_index, candidate_count)`, `CandidateKindOccurrenceMeasurements(proposed_structural_kind, total_candidate_count, page_counts)` e `DocumentCandidateKindOccurrenceMeasurements(document_page_count, included_page_indices, candidate_kind_occurrences)`, oltre a `measure_document_candidate_kind_occurrences(bound_document_analysis: BoundDocumentAnalysis) -> DocumentCandidateKindOccurrenceMeasurements`.
 
@@ -532,7 +530,9 @@ La factory accetta esclusivamente `BoundDocumentAnalysis`, deriva conteggio docu
 
 Una occurrence è esclusivamente una singola voce `RegionCandidate` osservata in una `PageAnalysis` inclusa, contata sotto il valore esatto del suo `proposed_structural_kind`; non implica identità cross-page, stesso elemento editoriale, ricorrenza, conferma del kind, indipendenza fra candidate o validità semantica.
 
-Il prossimo passaggio è la revisione architetturale indipendente del micro-step e della baseline, non nuova implementazione. Nessun secondo micro-step, diagnostica, persistenza, serializer, store, filesystem, CLI o altro comportamento è autorizzato. Restano fuori scope `LayoutRegion`; candidate ID, bbox e primitive ID nel risultato; candidate↔candidate; adiacenza/gap; ratio, percentuali, medie, densità, frequenza, prevalenza, kind dominante e ordinamento per conteggio; pattern, ricorrenza e continuation; classificazione, semantica, score, confidence, ranking, coverage, ownership, Resolution, modifiche a modelli o schemi, pipeline legacy, IR, Markdown ed EPUB.
+La revisione indipendente ha dato verdetto **BASELINE ARCHITETTURALE ACCETTABILE**, senza criticità bloccanti né correzioni funzionali richieste. Il primo e unico micro-step soddisfa l'obiettivo; l'osservazione non bloccante non costituisce un debito obbligatorio o una correzione richiesta.
+
+Restano fuori scope `LayoutRegion`; candidate ID, bbox e primitive ID nel risultato; candidate↔candidate; adiacenza/gap; ratio, percentuali, medie, densità, frequenza, prevalenza, kind dominante e ordinamento per conteggio; pattern, ricorrenza e continuation; classificazione, semantica, score, confidence, ranking, coverage, ownership, Resolution, modifiche a modelli o schemi, pipeline legacy, IR, Markdown ed EPUB. Nessuna nuova milestone è aperta o autorizzata; nessun codice, test, diagnostica, persistenza o nuovo consumer è autorizzato.
 
 ## Migrazione e shadow mode
 

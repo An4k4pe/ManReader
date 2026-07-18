@@ -8,9 +8,7 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–11 sono completate. La milestone corrente è:
-
-> **Milestone 12 — inventario document-local delle candidate per structural kind**
+Le Milestone 1–12 sono completate. La Milestone 12 è la più recente completata; nessuna nuova milestone è aperta o autorizzata.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli. I nuovi contratti lavorano in shadow mode e non producono ancora decisioni editoriali, IR o output finale.
 
@@ -222,7 +220,7 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-Il primo micro-step della Milestone 12 è completato (`bbe3ea0`). Il prossimo passaggio è la revisione architetturale indipendente del micro-step e della baseline, non una nuova implementazione. Nessun secondo micro-step o altro comportamento è autorizzato. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
+La Milestone 12 è completata. Nessuna nuova milestone è aperta o autorizzata e nessun codice, test, diagnostica, persistenza o nuovo consumer è autorizzato. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
 
 ## Ultima baseline funzionale verificata
 
@@ -497,9 +495,9 @@ Il binding garantisce la corrispondenza riferimento–`PageAnalysis`, ma non att
 
 Restano fuori scope: modifiche ai modelli o agli schemi esistenti; `NormalizedPrimitivePage`; loader, mapping, lookup e artifact resolution; serializer, store e filesystem; selezione o fusione di analisi concorrenti; osservazioni o relazioni multipagina; pattern ricorrenti e continuation; candidate↔candidate; detector, classificazioni, score, confidence, ranking ed evidence; Resolution; manifest, workspace e capture runner; pipeline legacy, IR, Markdown ed EPUB.
 
-## Milestone 12 — inventario document-local delle candidate per structural kind
+## Milestone 12 — inventario document-local delle candidate per structural kind — completata
 
-Obiettivo: definire il primo consumer puro di `BoundDocumentAnalysis`, capace di descrivere la distribuzione osservata dei `RegionCandidate.proposed_structural_kind` in tutte e sole le pagine incluse nel binding, senza interpretare i conteggi come frequenza, ricorrenza, importanza o copertura dell'intero PDF.
+La milestone ha definito il primo consumer puro di `BoundDocumentAnalysis`, capace di descrivere la distribuzione osservata dei `RegionCandidate.proposed_structural_kind` in tutte e sole le pagine incluse nel binding, senza interpretare i conteggi come frequenza, ricorrenza, importanza o copertura dell'intero PDF.
 
 Tipi ratificati:
 
@@ -542,4 +540,6 @@ document_analysis_candidate_kind_measurements.py
 tests/test_document_analysis_candidate_kind_measurements.py
 ```
 
-Restano invariati v0.22, schema `PageAnalysis` 1.2, schema `DocumentAnalysis` 1.0, schema `DocumentSourceAttestation` 1.0, pipeline legacy autorevole e shadow mode. Nessun altro codice o comportamento è autorizzato, incluso un secondo micro-step. Restano fuori scope `LayoutRegion`; candidate ID, bbox e primitive ID nel risultato; candidate↔candidate; adiacenza e gap espliciti; ratio, percentuali, medie e densità; frequenza, prevalenza, kind dominante e ordinamento per conteggio; pattern, ricorrenza e continuation; classificazione e semantica; score, confidence e ranking; coverage e ownership finali; Resolution; persistenza, serializer, store, filesystem, manifest e CLI; modifiche a modelli o schemi esistenti; pipeline legacy, IR, Markdown ed EPUB.
+La revisione indipendente ha dato verdetto **BASELINE ARCHITETTURALE ACCETTABILE**: nessuna criticità bloccante e nessuna correzione funzionale richiesta. L'obiettivo è soddisfatto dal primo e unico micro-step; l'osservazione non bloccante della revisione non è un debito obbligatorio né una correzione richiesta.
+
+Restano invariati v0.22, schema `PageAnalysis` 1.2, schema `DocumentAnalysis` 1.0, schema `DocumentSourceAttestation` 1.0, pipeline legacy autorevole e shadow mode. Restano fuori scope `LayoutRegion`; candidate ID, bbox e primitive ID nel risultato; candidate↔candidate; adiacenza e gap espliciti; ratio, percentuali, medie e densità; frequenza, prevalenza, kind dominante e ordinamento per conteggio; pattern, ricorrenza e continuation; classificazione e semantica; score, confidence e ranking; coverage e ownership finali; Resolution; persistenza, serializer, store, filesystem, manifest e CLI; modifiche a modelli o schemi esistenti; pipeline legacy, IR, Markdown ed EPUB.
