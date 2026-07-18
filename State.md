@@ -8,7 +8,9 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–13 sono completate. Nessuna nuova milestone è aperta o autorizzata.
+Le Milestone 1–13 sono completate. La milestone corrente è:
+
+> **Milestone 14 — binding page-local delle analisi co-riferite alla pagina normalizzata**
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli. I nuovi contratti lavorano in shadow mode e non producono ancora decisioni editoriali, IR o output finale.
 
@@ -220,7 +222,7 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-La Milestone 13 è completata. Prima di qualunque nuova milestone serve una decisione architetturale esplicita; nessun nuovo codice, test o comportamento è autorizzato. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
+È autorizzato esclusivamente il primo micro-step della Milestone 14, non ancora implementato: `page_analysis_co_reference_binding.py` e `tests/test_page_analysis_co_reference_binding.py`. Nessun secondo micro-step o altro comportamento è autorizzato. Dopo l'implementazione serviranno verifica tecnica, baseline documentale e revisione architetturale indipendente: la milestone non sarà chiusa automaticamente. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
 
 ## Ultima baseline funzionale verificata
 
@@ -574,4 +576,40 @@ Il confine garantisce esclusivamente stesso soggetto page-local dichiarato, stes
 
 Il primo e unico micro-step soddisfa l'obiettivo della milestone. La revisione indipendente ha dato verdetto **BASELINE ARCHITETTURALE ACCETTABILE**, senza criticità bloccanti o non bloccanti e senza correzioni funzionali o documentali richieste. La baseline documentale revisionata è `9f10dab` — `Record co-referenced page analyses baseline`; la baseline funzionale resta `c5bc2f2`.
 
-Restano fuori scope binding document-local delle collezioni; modifiche a `DocumentAnalysis` o `BoundDocumentAnalysis`; `NormalizedPrimitivePage`; validazione cross-model; lookup o riferimenti cross-analysis; candidate↔candidate; merge o selezione di `PageAnalysis`; score, confidence, ranking, coverage e ownership; Resolution; persistenza, serializer, store, filesystem, CLI e diagnostica; nuovi producer, codice o test; pipeline legacy, IR, Markdown ed EPUB. Restano invariati v0.22, schema `PageAnalysis` 1.2, schema `DocumentAnalysis` 1.0, schema `DocumentSourceAttestation` 1.0, pipeline legacy autorevole e shadow mode. La chiusura non apre né autorizza alcuna milestone successiva.
+Restano fuori scope binding document-local delle collezioni; modifiche a `DocumentAnalysis` o `BoundDocumentAnalysis`; `NormalizedPrimitivePage`; validazione cross-model; lookup o riferimenti cross-analysis; candidate↔candidate; merge o selezione di `PageAnalysis`; score, confidence, ranking, coverage e ownership; Resolution; persistenza, serializer, store, filesystem, CLI e diagnostica; nuovi producer, codice o test; pipeline legacy, IR, Markdown ed EPUB. Restano invariati v0.22, schema `PageAnalysis` 1.2, schema `DocumentAnalysis` 1.0, schema `DocumentSourceAttestation` 1.0, pipeline legacy autorevole e shadow mode. Alla chiusura della Milestone 13 non era aperta né autorizzata alcuna milestone successiva.
+
+## Milestone 14 — binding page-local delle analisi co-riferite alla pagina normalizzata
+
+HEAD di partenza: `bd93878`. Il confronto architetturale indipendente ha identificato il problema successivo e giudicato ratificabile il contratto: i consumer primitive-dependent della Milestone 7 usano namespace delle primitive e geometria di `NormalizedPrimitivePage`, mentre la Milestone 13 garantisce soltanto co-riferimento dichiarato. Il nuovo binding renderà verificabile la composizione fra questi contratti pubblici senza cambiare i consumer, fondere correnti o introdurre decisioni semantiche. Non è una correzione di bug delle diagnostiche esistenti: i percorsi live attuali producono e validano già le analisi contro la pagina ricevuta.
+
+Primo e unico micro-step autorizzato, non ancora implementato:
+
+```text
+page_analysis_co_reference_binding.py
+tests/test_page_analysis_co_reference_binding.py
+```
+
+Contratto ratificato:
+
+```python
+BoundCoReferencedPageAnalyses(
+    primitive_page: NormalizedPrimitivePage,
+    co_referenced_page_analyses: CoReferencedPageAnalyses,
+)
+
+bind_co_referenced_page_analyses(
+    primitive_page: NormalizedPrimitivePage,
+    *,
+    co_referenced_page_analyses: CoReferencedPageAnalyses,
+) -> BoundCoReferencedPageAnalyses
+```
+
+Il tipo sarà pubblico, puro, non versionato, `@dataclass(frozen=True, slots=True)`, senza property o campi derivati e composto esattamente dai due campi ratificati. Costruzione diretta e factory saranno completamente validate e offriranno le stesse garanzie sostanziali: accetteranno esclusivamente `NormalizedPrimitivePage` e `CoReferencedPageAnalyses`; ogni `PageAnalysis` della collezione sarà rivalidata individualmente contro la stessa pagina mediante `validate_page_analysis_against_primitive_page(...)`, riusando il validatore pubblico esistente senza copiarne funzioni private o grammatica. L'incompatibilità di una sola analisi farà fallire il binding.
+
+Pagina, collezione e analisi saranno conservate per identità; l'ordine canonico sarà preservato esattamente e la collezione non sarà ricostruita, riordinata, filtrata o deduplicata. La factory non accetterà tuple grezze o iterable di `PageAnalysis`, renderà esplicita l'operazione e delegherà la validazione al costruttore. `page_index` resterà autorevole esclusivamente in `NormalizedPrimitivePage`: il binding non lo conterrà né esporrà come property, e non duplicherà alcuna identità già presente negli input. Il co-riferimento dichiarativo della Milestone 13 resterà autonomamente utilizzabile senza pagina normalizzata.
+
+Il binding garantirà esclusivamente che, al momento della costruzione, ogni analisi della collezione supera il validatore esistente rispetto alla stessa pagina normalizzata fornita. Questo permetterà di interpretare i `primitive_id` delle diverse correnti nel medesimo namespace page-local effettivo, ma non implicherà equivalenza fra primitive, candidate o regioni; identità editoriale o stessa origine storica; componibilità semantica o conflitto fra correnti; preferenza, selezione o completezza rispetto ai producer; corrispondenza della bbox con l'estensione delle primitive referenziate; né attestazione persistente.
+
+La copertura sintetica prevista include costruzione diretta e factory valide, uguaglianza/immutabilità/slots, singleton e più correnti, tipi runtime errati, mismatch di source/capture/pagina/schema primitive, primitive ID inesistenti in regioni o candidate, bbox incompatibili, rivalidazione di tutte le correnti, conservazione per identità e dell'ordine canonico, determinismo e assenza di mutazione. Verificherà la struttura esatta dei campi, l'assenza di `page_index`, nessuna selezione/fusione/filtro/deduplicazione e l'accettazione di contenuti o riferimenti locali coincidenti fra correnti; non richiederà corruzioni con `object.__setattr__`, duplicazioni integrali dei test dei modelli o controlli su nomi arbitrari.
+
+Restano fuori scope binding document-local delle collezioni; modifiche a `DocumentAnalysis`, `BoundDocumentAnalysis`, `CoReferencedPageAnalyses` o schemi esistenti; estensione o modifica dei consumer della Milestone 7; lookup o riferimenti cross-analysis; candidate↔candidate; equivalenza, conflitto o voto fra candidate; merge, selezione, filtro o deduplicazione; score, confidence, ranking, coverage, ownership, completezza dei producer o Resolution; persistenza, serializer, store, filesystem, manifest, workspace, CLI e diagnostica; nuovi producer o modifiche ai producer; pipeline legacy, IR, Markdown ed EPUB; qualsiasi secondo micro-step.
