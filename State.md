@@ -8,9 +8,7 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–13 sono completate. La milestone corrente è:
-
-> **Milestone 14 — binding page-local delle analisi co-riferite alla pagina normalizzata**
+Le Milestone 1–14 sono completate. Nessuna nuova milestone è aperta o autorizzata.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli. I nuovi contratti lavorano in shadow mode e non producono ancora decisioni editoriali, IR o output finale.
 
@@ -222,7 +220,7 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-Il primo e unico micro-step della Milestone 14 è completato in `ca2d631` — `Add co-referenced page analysis binding`. Il prossimo passaggio è soltanto la revisione architetturale indipendente del micro-step e della baseline; non è autorizzata nuova implementazione né un secondo micro-step. La Milestone 14 resta aperta e non sarà chiusa automaticamente. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
+La Milestone 14 è completata. Prima di qualunque nuova milestone serve una decisione architetturale esplicita; nessun nuovo file, codice, test o comportamento è autorizzato. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
 
 ## Ultima baseline funzionale verificata
 
@@ -578,7 +576,7 @@ Il primo e unico micro-step soddisfa l'obiettivo della milestone. La revisione i
 
 Restano fuori scope binding document-local delle collezioni; modifiche a `DocumentAnalysis` o `BoundDocumentAnalysis`; `NormalizedPrimitivePage`; validazione cross-model; lookup o riferimenti cross-analysis; candidate↔candidate; merge o selezione di `PageAnalysis`; score, confidence, ranking, coverage e ownership; Resolution; persistenza, serializer, store, filesystem, CLI e diagnostica; nuovi producer, codice o test; pipeline legacy, IR, Markdown ed EPUB. Restano invariati v0.22, schema `PageAnalysis` 1.2, schema `DocumentAnalysis` 1.0, schema `DocumentSourceAttestation` 1.0, pipeline legacy autorevole e shadow mode. Alla chiusura della Milestone 13 non era aperta né autorizzata alcuna milestone successiva.
 
-## Milestone 14 — binding page-local delle analisi co-riferite alla pagina normalizzata
+## Milestone 14 — binding page-local delle analisi co-riferite alla pagina normalizzata — completata
 
 HEAD di partenza: `bd93878`. Il confronto architetturale indipendente ha identificato il problema successivo e giudicato ratificabile il contratto: i consumer primitive-dependent della Milestone 7 usano namespace delle primitive e geometria di `NormalizedPrimitivePage`, mentre la Milestone 13 garantisce soltanto co-riferimento dichiarato. Il primo e unico micro-step è implementato nel commit `ca2d631` — `Add co-referenced page analysis binding`, in `page_analysis_co_reference_binding.py` e `tests/test_page_analysis_co_reference_binding.py`; rende verificabile la composizione fra questi contratti pubblici senza cambiare i consumer, fondere correnti o introdurre decisioni semantiche. Non è una correzione di bug delle diagnostiche esistenti: i percorsi live attuali producono e validano già le analisi contro la pagina ricevuta.
 
@@ -605,4 +603,6 @@ Il binding garantisce esclusivamente la validità in memoria al momento della co
 
 La copertura dedicata verifica costruzione diretta e factory valide, uguaglianza/immutabilità/slots, singleton e più correnti, tipi runtime errati, mismatch di source/capture/pagina/schema primitive, primitive ID inesistenti in regioni o candidate, bbox incompatibili, rivalidazione di tutte le correnti, conservazione per identità e dell’ordine canonico, determinismo e assenza di mutazione. Verifica la struttura esatta dei campi, l’assenza di `page_index`, nessuna selezione/fusione/filtro/deduplicazione e l’accettazione di contenuti o riferimenti locali coincidenti fra correnti; non usa corruzioni con `object.__setattr__`, duplicazioni integrali dei test dei modelli o controlli su nomi arbitrari.
 
-Restano fuori scope binding document-local delle collezioni; modifiche a `DocumentAnalysis`, `BoundDocumentAnalysis`, `CoReferencedPageAnalyses` o schemi esistenti; estensione o modifica dei consumer della Milestone 7; lookup o riferimenti cross-analysis; candidate↔candidate; equivalenza, conflitto o voto fra candidate; merge, selezione, filtro o deduplicazione; score, confidence, ranking, coverage, ownership, completezza dei producer o Resolution; persistenza, serializer, store, filesystem, manifest, workspace, CLI e diagnostica; nuovi producer o modifiche ai producer; pipeline legacy, IR, Markdown ed EPUB; qualsiasi secondo micro-step. La Milestone 14 resta aperta in attesa della sola revisione architetturale indipendente della baseline.
+Il primo e unico micro-step soddisfa l'obiettivo della milestone. La revisione indipendente ha dato verdetto **BASELINE ARCHITETTURALE ACCETTABILE**, senza criticità bloccanti o non bloccanti e senza correzioni funzionali o documentali richieste. La baseline documentale revisionata è `32248ac` — `Record co-referenced page analysis binding baseline`; la baseline funzionale resta `ca2d631`.
+
+Restano fuori scope binding document-local delle collezioni; modifiche a `DocumentAnalysis`, `BoundDocumentAnalysis`, `CoReferencedPageAnalyses` o schemi esistenti; estensione o modifica dei consumer della Milestone 7; lookup o riferimenti cross-analysis; candidate↔candidate; equivalenza, conflitto o voto fra candidate; merge, selezione, filtro o deduplicazione; score, confidence, ranking, coverage, ownership, completezza dei producer o Resolution; persistenza, serializer, store, filesystem, manifest, workspace, CLI e diagnostica; nuovi producer o modifiche ai producer; pipeline legacy, IR, Markdown ed EPUB; qualsiasi secondo micro-step. La chiusura non introduce attestazione persistente, Resolution o alcuna milestone successiva.

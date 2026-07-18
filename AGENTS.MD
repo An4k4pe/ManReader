@@ -239,9 +239,7 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–13 sono completate. La milestone corrente è:
-
-> **Milestone 14 — binding page-local delle analisi co-riferite alla pagina normalizzata**
+Le Milestone 1–14 sono completate. Nessuna nuova milestone è aperta o autorizzata.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti restano in shadow mode.
 
@@ -544,13 +542,13 @@ Il contenitore è pubblico, puro, non versionato, `frozen=True`, `slots=True`, c
 
 Non garantisce validazione contro una stessa `NormalizedPrimitivePage`, componibilità, semantica, completezza, preferenza, deduplicazione dei contenuti o Resolution; non introduce `page_index`, lookup, conteggi derivati, famiglie di producer o relazioni cross-analysis. Il primo e unico micro-step soddisfa l'obiettivo; la revisione indipendente ha dato verdetto **BASELINE ARCHITETTURALE ACCETTABILE**, senza criticità e senza correzioni richieste. Restano fuori scope binding document-local delle collezioni, modifiche a `DocumentAnalysis`/`BoundDocumentAnalysis`, `NormalizedPrimitivePage`, validazione cross-model, lookup o riferimenti cross-analysis, candidate↔candidate, merge, selezione, score/confidence/ranking, coverage/ownership, persistenza, serializer/store/filesystem, manifest/workspace/CLI/diagnostica, nuovi producer, codice o test, pipeline legacy, IR, Markdown ed EPUB. Alla chiusura della Milestone 13 non era aperta né autorizzata alcuna milestone successiva.
 
-### Milestone 14 — binding page-local delle analisi co-riferite alla pagina normalizzata
+### Milestone 14 — binding page-local delle analisi co-riferite alla pagina normalizzata — completata
 
 Il primo micro-step è implementato e verificato nel commit `ca2d631` — `Add co-referenced page analysis binding`: `page_analysis_co_reference_binding.py` e `tests/test_page_analysis_co_reference_binding.py` espongono `BoundCoReferencedPageAnalyses` e `bind_co_referenced_page_analyses(...)`.
 
 Il contratto è pubblico, puro, non versionato, `frozen=True`, `slots=True`, con esattamente `primitive_page: NormalizedPrimitivePage` e `co_referenced_page_analyses: CoReferencedPageAnalyses`. Costruzione diretta e factory riusano `validate_page_analysis_against_primitive_page(...)` per rivalidare individualmente tutte le analisi contro la stessa pagina normalizzata; pagina e collezione sono conservate per identità, mentre identità e ordine canonico delle analisi restano preservati, senza ricostruzione, riordino, filtro, fusione o deduplicazione. Il binding non espone `page_index`; il co-riferimento dichiarativo resta utilizzabile senza pagina normalizzata.
 
-Garantisce soltanto la validità in memoria di ogni corrente rispetto alla stessa pagina e quindi il medesimo namespace page-local effettivo per i `primitive_id`; non prova l'origine storica delle analisi e non è un'attestazione persistente. Restano esclusi equivalenza o conflitto fra correnti, semantica, preferenza, selezione, completezza, bbox rispetto alle primitive, binding document-local, modifiche a modelli/schemi/consumer, lookup o riferimenti cross-analysis, candidate↔candidate, merge, score/confidence/ranking, coverage/ownership, Resolution, persistenza, filesystem, manifest, workspace, CLI, diagnostica, producer, pipeline legacy, IR, Markdown ed EPUB. Nessun secondo micro-step o nuova implementazione è autorizzato; la Milestone 14 resta aperta per la sola revisione architetturale indipendente della baseline.
+Garantisce soltanto la validità in memoria di ogni corrente rispetto alla stessa pagina e quindi il medesimo namespace page-local effettivo per i `primitive_id`; non prova l'origine storica delle analisi e non è un'attestazione persistente. Il primo e unico micro-step soddisfa l'obiettivo; la revisione indipendente ha dato verdetto **BASELINE ARCHITETTURALE ACCETTABILE**, senza criticità e senza correzioni richieste. Restano esclusi equivalenza o conflitto fra correnti, semantica, preferenza, selezione, completezza, bbox rispetto alle primitive, binding document-local, modifiche a modelli/schemi/consumer, lookup o riferimenti cross-analysis, candidate↔candidate, merge, score/confidence/ranking, coverage/ownership, Resolution, persistenza, filesystem, manifest, workspace, CLI, diagnostica, producer, pipeline legacy, IR, Markdown ed EPUB. La chiusura non introduce nuovi file, codice, test, attestazione persistente o una milestone successiva.
 
 ## Migrazione e shadow mode
 
