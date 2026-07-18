@@ -239,7 +239,9 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–14 sono completate. Nessuna nuova milestone è aperta o autorizzata.
+Le Milestone 1–14 sono completate. La milestone corrente è:
+
+> **Milestone 15 — riferimento page-scoped a una candidate di una corrente co-riferita**
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti restano in shadow mode.
 
@@ -548,7 +550,15 @@ Il primo micro-step è implementato e verificato nel commit `ca2d631` — `Add c
 
 Il contratto è pubblico, puro, non versionato, `frozen=True`, `slots=True`, con esattamente `primitive_page: NormalizedPrimitivePage` e `co_referenced_page_analyses: CoReferencedPageAnalyses`. Costruzione diretta e factory riusano `validate_page_analysis_against_primitive_page(...)` per rivalidare individualmente tutte le analisi contro la stessa pagina normalizzata; pagina e collezione sono conservate per identità, mentre identità e ordine canonico delle analisi restano preservati, senza ricostruzione, riordino, filtro, fusione o deduplicazione. Il binding non espone `page_index`; il co-riferimento dichiarativo resta utilizzabile senza pagina normalizzata.
 
-Garantisce soltanto la validità in memoria di ogni corrente rispetto alla stessa pagina e quindi il medesimo namespace page-local effettivo per i `primitive_id`; non prova l'origine storica delle analisi e non è un'attestazione persistente. Il primo e unico micro-step soddisfa l'obiettivo; la revisione indipendente ha dato verdetto **BASELINE ARCHITETTURALE ACCETTABILE**, senza criticità e senza correzioni richieste. Restano esclusi equivalenza o conflitto fra correnti, semantica, preferenza, selezione, completezza, bbox rispetto alle primitive, binding document-local, modifiche a modelli/schemi/consumer, lookup o riferimenti cross-analysis, candidate↔candidate, merge, score/confidence/ranking, coverage/ownership, Resolution, persistenza, filesystem, manifest, workspace, CLI, diagnostica, producer, pipeline legacy, IR, Markdown ed EPUB. La chiusura non introduce nuovi file, codice, test, attestazione persistente o una milestone successiva.
+Garantisce soltanto la validità in memoria di ogni corrente rispetto alla stessa pagina e quindi il medesimo namespace page-local effettivo per i `primitive_id`; non prova l'origine storica delle analisi e non è un'attestazione persistente. Il primo e unico micro-step soddisfa l'obiettivo; la revisione indipendente ha dato verdetto **BASELINE ARCHITETTURALE ACCETTABILE**, senza criticità e senza correzioni richieste. Restano esclusi equivalenza o conflitto fra correnti, semantica, preferenza, selezione, completezza, bbox rispetto alle primitive, binding document-local, modifiche a modelli/schemi/consumer, lookup o riferimenti cross-analysis, candidate↔candidate, merge, score/confidence/ranking, coverage/ownership, Resolution, persistenza, filesystem, manifest, workspace, CLI, diagnostica, producer, pipeline legacy, IR, Markdown ed EPUB. Alla chiusura della Milestone 14 non era aperta né autorizzata alcuna milestone successiva.
+
+### Milestone 15 — riferimento page-scoped a una candidate di una corrente co-riferita
+
+La decisione ratificata riguarda un riferimento puro e contestuale a una `RegionCandidate` di una specifica corrente in `BoundCoReferencedPageAnalyses`, senza identità globale, selezione o decisione. Il solo scope futuro pianificato, non ancora autorizzato, è `page_analysis_co_reference_candidate_reference.py` con `tests/test_page_analysis_co_reference_candidate_reference.py`.
+
+I nomi ratificati sono `CoReferencedPageCandidateReference`, `build_co_referenced_page_candidate_reference(...)` e `resolve_co_referenced_page_candidate_reference(...)`. Il tipo futuro avrà i cinque token esatti `producer_name`, `producer_version`, `configuration_id`, `generation_id`, `candidate_id`, validati come stringhe non vuote; la factory verificherà per identità Python l'appartenenza di analisi e candidate al binding, mentre il resolver cercherà esattamente la corrente e poi il candidate ID, restituendo l'oggetto conservato per identità. Non avrà fallback, dipendenza dalla posizione canonica, identità di pagina o binding, schema persistente né identità globale; cross-binding aliasing resta possibile.
+
+Restano fuori scope candidate↔candidate, equivalenza, conflitto, merge, selezione, deduplicazione, score/confidence/ranking, coverage/ownership, Resolution, modelli/schemi, producer, consumer, diagnostica, filesystem, manifest, workspace, CLI, persistenza, pipeline legacy, IR, Markdown ed EPUB. Nessun codice funzionale, test o secondo micro-step è autorizzato in questa apertura.
 
 ## Migrazione e shadow mode
 

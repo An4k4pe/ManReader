@@ -8,7 +8,9 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–14 sono completate. Nessuna nuova milestone è aperta o autorizzata.
+Le Milestone 1–14 sono completate. La milestone corrente è:
+
+> **Milestone 15 — riferimento page-scoped a una candidate di una corrente co-riferita**
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli. I nuovi contratti lavorano in shadow mode e non producono ancora decisioni editoriali, IR o output finale.
 
@@ -220,7 +222,7 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-La Milestone 14 è completata. Prima di qualunque nuova milestone serve una decisione architetturale esplicita; nessun nuovo file, codice, test o comportamento è autorizzato. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
+Il prossimo passaggio è soltanto la revisione del diff documentale, seguita dal commit eseguito dall'utente e dalla preparazione separata del primo micro-step implementativo della Milestone 15. Nessun codice funzionale è ancora autorizzato. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
 
 ## Ultima baseline funzionale verificata
 
@@ -605,4 +607,16 @@ La copertura dedicata verifica costruzione diretta e factory valide, uguaglianza
 
 Il primo e unico micro-step soddisfa l'obiettivo della milestone. La revisione indipendente ha dato verdetto **BASELINE ARCHITETTURALE ACCETTABILE**, senza criticità bloccanti o non bloccanti e senza correzioni funzionali o documentali richieste. La baseline documentale revisionata è `32248ac` — `Record co-referenced page analysis binding baseline`; la baseline funzionale resta `ca2d631`.
 
-Restano fuori scope binding document-local delle collezioni; modifiche a `DocumentAnalysis`, `BoundDocumentAnalysis`, `CoReferencedPageAnalyses` o schemi esistenti; estensione o modifica dei consumer della Milestone 7; lookup o riferimenti cross-analysis; candidate↔candidate; equivalenza, conflitto o voto fra candidate; merge, selezione, filtro o deduplicazione; score, confidence, ranking, coverage, ownership, completezza dei producer o Resolution; persistenza, serializer, store, filesystem, manifest, workspace, CLI e diagnostica; nuovi producer o modifiche ai producer; pipeline legacy, IR, Markdown ed EPUB; qualsiasi secondo micro-step. La chiusura non introduce attestazione persistente, Resolution o alcuna milestone successiva.
+Restano fuori scope binding document-local delle collezioni; modifiche a `DocumentAnalysis`, `BoundDocumentAnalysis`, `CoReferencedPageAnalyses` o schemi esistenti; estensione o modifica dei consumer della Milestone 7; lookup o riferimenti cross-analysis; candidate↔candidate; equivalenza, conflitto o voto fra candidate; merge, selezione, filtro o deduplicazione; score, confidence, ranking, coverage, ownership, completezza dei producer o Resolution; persistenza, serializer, store, filesystem, manifest, workspace, CLI e diagnostica; nuovi producer o modifiche ai producer; pipeline legacy, IR, Markdown ed EPUB; qualsiasi secondo micro-step. Alla chiusura della Milestone 14 non era aperta né autorizzata alcuna milestone successiva.
+
+## Milestone 15 — riferimento page-scoped a una candidate di una corrente co-riferita
+
+Problema ratificato: serve riferire senza ambiguità una `RegionCandidate` appartenente a una specifica corrente di un `BoundCoReferencedPageAnalyses`, senza trasformare il riferimento in identità globale, selezione o decisione. Il solo scope futuro pianificato, non ancora autorizzato, è `page_analysis_co_reference_candidate_reference.py` con `tests/test_page_analysis_co_reference_candidate_reference.py`.
+
+Nomi ratificati: `CoReferencedPageCandidateReference`, `build_co_referenced_page_candidate_reference(...)` e `resolve_co_referenced_page_candidate_reference(...)`.
+
+Il contratto futuro sarà pubblico, puro, non versionato, `frozen=True`, `slots=True`, con esattamente `producer_name`, `producer_version`, `configuration_id`, `generation_id` e `candidate_id`. La costruzione diretta validerà soltanto che i cinque campi siano stringhe non vuote, senza normalizzazioni, e non verificherà l’esistenza della corrente o della candidate. La factory contestuale riceverà esplicitamente un `BoundCoReferencedPageAnalyses`, una `PageAnalysis` e una `RegionCandidate`; verificherà per identità Python che l’analisi appartenga al binding e che la candidate appartenga all’analisi indicata. L’analisi esplicita è necessaria perché lo stesso oggetto candidate può appartenere a correnti differenti. Il resolver contestuale cercherà prima la corrente mediante confronto esatto dei quattro token e poi il `candidate_id` soltanto nella corrente individuata, restituendo per identità l’oggetto conservato. Accetterà anche riferimenti costruiti direttamente, purché i cinque valori trovino una corrispondenza esatta nel binding fornito. Nessun fallback è previsto e non vi sarà dipendenza dalla posizione canonica. ValueError è sufficiente; i messaggi degli errori saranno diagnostici e non costituiranno protocollo pubblico per i consumer.
+
+Il riferimento sarà relativo al `BoundCoReferencedPageAnalyses` fornito: non conterrà identità di pagina o binding, non avrà identità globale e potrà subire cross-binding aliasing quando un altro binding presenta gli stessi cinque token. Sarà materialmente serializzabile, ma non disporrà di serializer, store, schema ufficiale di persistenza o garanzia contro l’uso con un binding differente.
+
+Restano fuori scope candidate↔candidate ed enumerazione di coppie; equivalenza, conflitto, merge, selezione o deduplicazione; score, confidence, ranking, coverage e ownership; Resolution; modifiche a modelli o schemi; producer, consumer e diagnostica; filesystem, manifest, workspace, CLI e persistenza; pipeline legacy, IR, Markdown ed EPUB. Questa apertura non autorizza la creazione di nuovi file, codice, test o un secondo micro-step.
