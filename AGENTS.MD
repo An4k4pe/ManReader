@@ -239,9 +239,7 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–14 sono completate. La milestone corrente è:
-
-> **Milestone 15 — riferimento page-scoped a una candidate di una corrente co-riferita**
+Le Milestone 1–15 sono completate. Nessuna nuova milestone è aperta o autorizzata.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti restano in shadow mode.
 
@@ -552,13 +550,15 @@ Il contratto è pubblico, puro, non versionato, `frozen=True`, `slots=True`, con
 
 Garantisce soltanto la validità in memoria di ogni corrente rispetto alla stessa pagina e quindi il medesimo namespace page-local effettivo per i `primitive_id`; non prova l'origine storica delle analisi e non è un'attestazione persistente. Il primo e unico micro-step soddisfa l'obiettivo; la revisione indipendente ha dato verdetto **BASELINE ARCHITETTURALE ACCETTABILE**, senza criticità e senza correzioni richieste. Restano esclusi equivalenza o conflitto fra correnti, semantica, preferenza, selezione, completezza, bbox rispetto alle primitive, binding document-local, modifiche a modelli/schemi/consumer, lookup o riferimenti cross-analysis, candidate↔candidate, merge, score/confidence/ranking, coverage/ownership, Resolution, persistenza, filesystem, manifest, workspace, CLI, diagnostica, producer, pipeline legacy, IR, Markdown ed EPUB. Alla chiusura della Milestone 14 non era aperta né autorizzata alcuna milestone successiva.
 
-### Milestone 15 — riferimento page-scoped a una candidate di una corrente co-riferita
+### Milestone 15 — riferimento page-scoped a una candidate di una corrente co-riferita — completata
 
-La decisione ratificata riguarda un riferimento puro e contestuale a una `RegionCandidate` di una specifica corrente in `BoundCoReferencedPageAnalyses`, senza identità globale, selezione o decisione. Il solo scope futuro pianificato, non ancora autorizzato, è `page_analysis_co_reference_candidate_reference.py` con `tests/test_page_analysis_co_reference_candidate_reference.py`.
+Il primo e unico micro-step è implementato nel commit `9a4538f` — `Add co-referenced page candidate reference`, in `page_analysis_co_reference_candidate_reference.py` e `tests/test_page_analysis_co_reference_candidate_reference.py`. Baseline funzionale verificata: 1074 test OK, 7 skipped; Ruff canonico sui due file coinvolti verde; BasedPyright canonico: 0 errori, 0 warning, 0 note; `git diff --check` verde; worktree pulito dopo il commit.
 
-I nomi ratificati sono `CoReferencedPageCandidateReference`, `build_co_referenced_page_candidate_reference(...)` e `resolve_co_referenced_page_candidate_reference(...)`. Il tipo futuro avrà i cinque token esatti `producer_name`, `producer_version`, `configuration_id`, `generation_id`, `candidate_id`, validati come stringhe non vuote; la factory verificherà per identità Python l'appartenenza di analisi e candidate al binding, mentre il resolver cercherà esattamente la corrente e poi il candidate ID, restituendo l'oggetto conservato per identità. Non avrà fallback, dipendenza dalla posizione canonica, identità di pagina o binding, schema persistente né identità globale; cross-binding aliasing resta possibile.
+`CoReferencedPageCandidateReference` è un valore pubblico, puro, non versionato, `frozen=True`, `slots=True`, con i cinque token esatti `producer_name`, `producer_version`, `configuration_id`, `generation_id`, `candidate_id`, validati come stringhe non vuote senza normalizzazioni. `build_co_referenced_page_candidate_reference(...)` verifica per identità Python che l’analisi appartenga alla collezione conservata nel `BoundCoReferencedPageAnalyses` e che la candidate appartenga all’analisi esplicitamente indicata; `resolve_co_referenced_page_candidate_reference(...)` cerca esattamente la corrente e poi il candidate ID, restituendo l'oggetto conservato per identità. L’analisi è esplicita perché lo stesso oggetto `RegionCandidate` può appartenere a correnti differenti. Non hanno fallback né dipendenza dalla posizione canonica; i riferimenti diretti sono ammessi quando i cinque token corrispondono. Il riferimento non ha identità globale, di pagina o binding, schema persistente né protezione dal cross-binding aliasing; serializer, store e persistenza non sono introdotti.
 
-Restano fuori scope candidate↔candidate, equivalenza, conflitto, merge, selezione, deduplicazione, score/confidence/ranking, coverage/ownership, Resolution, modelli/schemi, producer, consumer, diagnostica, filesystem, manifest, workspace, CLI, persistenza, pipeline legacy, IR, Markdown ed EPUB. Nessun codice funzionale, test o secondo micro-step è autorizzato in questa apertura.
+La revisione indipendente ha dato verdetto **BASELINE ARCHITETTURALE ACCETTABILE**, senza criticità bloccanti, correzioni richieste, scope creep o coupling improprio. Possibili rafforzamenti mutation-oriented non giustificano modifiche; non esiste una ragione concreta per un secondo micro-step.
+
+Restano fuori scope candidate↔candidate, equivalenza, conflitto, merge, selezione, deduplicazione, score/confidence/ranking, coverage/ownership, Resolution, modelli/schemi, producer, consumer, diagnostica, filesystem, manifest, workspace, CLI, persistenza, pipeline legacy, IR, Markdown ed EPUB. La chiusura non autorizza nuovi file, codice, test o una milestone successiva.
 
 ## Migrazione e shadow mode
 
