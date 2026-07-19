@@ -239,9 +239,7 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–16 sono completate. La milestone corrente è:
-
-> **Milestone 17 — flusso diagnostico page-local delle candidate co-riferite**
+Le Milestone 1–17 sono completate. Nessuna nuova milestone è aperta o autorizzata.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti restano in shadow mode.
 
@@ -572,17 +570,13 @@ Sono ammessi stessa corrente o correnti differenti, self-relation, riferimenti i
 
 La revisione indipendente ha dato verdetto **BASELINE ARCHITETTURALE ACCETTABILE**, senza criticità bloccanti, correzioni funzionali richieste, scope creep o coupling improprio. Non esiste una giustificazione concreta per un secondo micro-step. Restano fuori scope equivalenza, matching, conflitto, deduplicazione, selezione, score/confidence/ranking, Resolution, enumerazione, area/unione/IoU/ratio, centri e distanze, booleane e tolleranze geometriche, primitive condivise e relativi dati, diagnostica, consumer, producer, modelli/schemi, serializer/store/filesystem/persistenza, relazioni document-local/cross-page e promozione di helper geometrici privati. La chiusura non apre né nomina una milestone successiva.
 
-### Milestone 17 — flusso diagnostico page-local delle candidate co-riferite
+### Milestone 17 — flusso diagnostico page-local delle candidate co-riferite — completata
 
-L'apertura parte dall'HEAD documentale `3c2351f`; la baseline funzionale resta `89dfb8e` — `Add co-referenced page candidate pair measurements` (1084 test OK, 7 skipped; Ruff, BasedPyright e `git diff --check` verdi). Le Milestone 13–16 hanno già consegnato collezione, binding, riferimento e misura, ma nessun consumer operativo percorre ancora l'intera catena. La milestone non introduce un nuovo modello o contratto architetturale di dominio; le due funzioni dump sono esclusivamente adapter diagnostici read-only per osservare riferimenti candidate e poi misurare una coppia esplicita.
+La milestone è completata da `2f80335` (inventario) ed `e817084` (misura di coppia): Ruff verde, BasedPyright 0 errori/0 warning/0 note, 79 test mirati OK, suite completa 1102 OK e 7 skipped, `git diff --check` verde. Entrambe le revisioni indipendenti hanno dato verdetto **BASELINE ARCHITETTURALE ACCETTABILE**.
 
-Lo scope pianificato, non ancora autorizzato, comprende `page_analysis_co_reference_candidate_diagnostics.py`, `tests/test_page_analysis_co_reference_candidate_diagnostics.py`, `pymupdf_capture_dump.py` e `tests/test_pymupdf_capture_dump.py`. I nomi ratificati sono `dump_co_referenced_page_candidate_inventory(...)`, `dump_co_referenced_page_candidate_pair_measurements(...)`, gli stage `co-referenced-candidate-inventory` e `co-referenced-candidate-pair-measurements`, `--candidate-producer`, `--first-candidate-reference` e `--second-candidate-reference`.
+I due adapter read-only, senza nuovi modelli o contratti di dominio, sono `dump_co_referenced_page_candidate_inventory(...)` e `dump_co_referenced_page_candidate_pair_measurements(...)`, con stage `co-referenced-candidate-inventory` e `co-referenced-candidate-pair-measurements`. L'inventario usa `--candidate-producer` e la lista chiusa `singleton-side-band`, `local-fragment-side-band`, `page-edge-visual`, `page-covering-visual`; la misura usa due riferimenti JSON rigorosamente validati tramite `--first-candidate-reference` e `--second-candidate-reference`, esegue solo le correnti implicate, verifica esattamente producer/version/configuration/generation e delega binding, risoluzione e geometria alle API pubbliche delle Milestone 14–16. I dump restano JSON-compatible, effimeri e senza `schema_version`; i riferimenti inclusi rendono il risultato auditabile.
 
-Il primo micro-step pianificato eseguirà esclusivamente producer richiesti esplicitamente da una lista chiusa: `singleton-side-band`, `local-fragment-side-band`, `page-edge-visual`, `page-covering-visual`. Rifiuterà chiavi sconosciute o duplicate; `primitive-extent` è escluso perché non produce `RegionCandidate`. Almeno un producer è sufficiente. Costruirà la collezione co-riferita, il binding sulla stessa `NormalizedPrimitivePage` e un inventario effimero con correnti nell'ordine canonico e candidate nell'ordine conservato, ciascuna con riferimento piatto a cinque token, bbox, kind e primitive ID. Non conterrà `schema_version`, non sarà persistenza e non sceglierà né misurerà coppie.
-
-Il secondo micro-step, ancora non autorizzato, riceverà due oggetti JSON effimeri con esattamente i cinque campi del riferimento. I riferimenti individueranno soltanto le correnti distinte necessarie, usando i rispettivi generation ID e verificando version/configurazione realmente prodotte; saranno risolti nello stesso binding e verrà misurata solo la coppia richiesta. Stessa corrente: una sola esecuzione; generazioni differenti dello stesso producer: due correnti. Un riferimento con `producer_name` non riconducibile a `singleton-side-band`, `local-fragment-side-band`, `page-edge-visual` o `page-covering-visual` sarà rifiutato; non è previsto autodiscovery né fallback verso altri producer. Nessuna posizione canonica è identità. Il riuso è valido solo con stesso PDF/pagina, stessa produzione di primitive, candidate ancora prodotte e token risolvibili; non c'è attestazione storica e il cross-binding aliasing della Milestone 15 resta intenzionale.
-
-L'apertura non autorizza ancora alcun micro-step: dopo revisione e commit del diff documentale sarà preparato separatamente soltanto il primo. Restano fuori scope registry generale/autodiscovery, modifiche ai producer, scelta automatica della candidate o prima candidate, enumerazione di coppie, matching/equivalenza/conflitto/deduplicazione, selezione/score/confidence/ranking, Resolution, nuove metriche geometriche, schema persistente/serializer/store/manifest, artifact diagnostici salvati, modelli o schemi, pipeline legacy, IR, Markdown ed EPUB.
+Restano fuori scope persistenza o contratti diagnostici versionati, serializer/store/filesystem/manifest/workspace, autodiscovery o producer fuori lista chiusa, `primitive-extent` come operando candidate, selezione o enumerazione automatica, matching/equivalenza/conflitto/deduplicazione, merge/scelta/preferenza/ranking/score/confidence, Resolution, nuove metriche, modifiche a modelli/schemi/producer/consumer e pipeline legacy, IR, Markdown ed EPUB. La chiusura non autorizza nuovi file, codice, test o una milestone successiva.
 
 ## Migrazione e shadow mode
 
