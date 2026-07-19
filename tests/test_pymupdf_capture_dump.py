@@ -22,6 +22,7 @@ from primitive_model import NormalizedPrimitivePage
 from pymupdf_capture_dump import (
     build_argument_parser,
     dump_capture,
+    dump_co_referenced_page_candidate_inventory,
     dump_local_fragment_side_band_candidate_extent_relations,
     dump_local_fragment_side_band_candidate_page_context,
     dump_local_fragment_side_band_diagnostics,
@@ -122,6 +123,27 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
 
         self.assertEqual(args.stage, "primitive-neighborhood")
         self.assertEqual(args.primitive_id, "text-1")
+
+    def test_parser_accepts_co_referenced_candidate_inventory_stage_and_producers(
+        self,
+    ) -> None:
+        args = build_argument_parser().parse_args(
+            (
+                "sample.pdf",
+                "--stage",
+                "co-referenced-candidate-inventory",
+                "--candidate-producer",
+                "singleton-side-band",
+                "--candidate-producer",
+                "page-edge-visual",
+            )
+        )
+
+        self.assertEqual(args.stage, "co-referenced-candidate-inventory")
+        self.assertEqual(
+            args.candidate_producer,
+            ["singleton-side-band", "page-edge-visual"],
+        )
 
     def test_parser_accepts_render_page_image(self) -> None:
         args = build_argument_parser().parse_args(
@@ -404,6 +426,30 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
                 payload["candidates"][0]["proposed_structural_kind"],
                 "layout.page_edge_visual",
             )
+
+    def test_co_referenced_candidate_inventory_helper_returns_plain_json(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            pdf_path = root / "page-edge-visual.pdf"
+            output_path = root / "diagnostics" / "inventory.json"
+            _create_pdf_with_page_edge_visual(pdf_path)
+
+            returned = dump_co_referenced_page_candidate_inventory(
+                pdf_path,
+                candidate_producers=("page-edge-visual",),
+                output_path=output_path,
+                compact=True,
+            )
+            payload = json.loads(returned)
+
+            self.assertEqual(payload["diagnostic_kind"], "co-referenced-candidate-inventory")
+            self.assertEqual(payload["page_id"], "diagnostic-page:0")
+            self.assertEqual(payload["candidate_producers"], ["page-edge-visual"])
+            self.assertNotIn("schema_version", payload)
+            self.assertNotIn("regions", payload)
+            self.assertNotIn("relations", payload)
+            self.assertTrue(output_path.is_file())
+            self.assertEqual(output_path.read_text(encoding="utf-8"), returned)
 
     def test_local_fragment_helper_writes_compact_requested_output(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -1097,6 +1143,71 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             self.assertEqual(return_code, 0)
             self.assertEqual(image_path.read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
             self.assertEqual(len(json.loads(stdout.getvalue())["candidates"]), 1)
+
+    def test_main_requires_and_restricts_candidate_producer_option(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            pdf_path = Path(temporary_directory) / "page-edge-visual.pdf"
+            _create_pdf_with_page_edge_visual(pdf_path)
+
+            with redirect_stderr(StringIO()), self.assertRaises(SystemExit):
+                main((str(pdf_path), "--stage", "co-referenced-candidate-inventory"))
+            with redirect_stderr(StringIO()), self.assertRaises(SystemExit):
+                main(
+                    (
+                        str(pdf_path),
+                        "--stage",
+                        "capture",
+                        "--candidate-producer",
+                        "page-edge-visual",
+                    )
+                )
+            with redirect_stderr(StringIO()), self.assertRaises(SystemExit):
+                main(
+                    (
+                        str(pdf_path),
+                        "--stage",
+                        "co-referenced-candidate-inventory",
+                        "--candidate-producer",
+                        "unknown",
+                    )
+                )
+            with redirect_stderr(StringIO()), self.assertRaises(SystemExit):
+                main(
+                    (
+                        str(pdf_path),
+                        "--stage",
+                        "co-referenced-candidate-inventory",
+                        "--candidate-producer",
+                        "page-edge-visual",
+                        "--candidate-producer",
+                        "page-edge-visual",
+                    )
+                )
+
+    def test_main_inventory_stage_accepts_repeated_producers(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            pdf_path = Path(temporary_directory) / "page-edge-visual.pdf"
+            _create_pdf_with_page_edge_visual(pdf_path)
+            stdout = StringIO()
+
+            with redirect_stdout(stdout):
+                return_code = main(
+                    (
+                        str(pdf_path),
+                        "--stage",
+                        "co-referenced-candidate-inventory",
+                        "--candidate-producer",
+                        "page-edge-visual",
+                        "--candidate-producer",
+                        "page-covering-visual",
+                    )
+                )
+
+            self.assertEqual(return_code, 0)
+            self.assertEqual(
+                json.loads(stdout.getvalue())["candidate_producers"],
+                ["page-edge-visual", "page-covering-visual"],
+            )
 
     def test_main_uses_dedicated_generation_id_for_candidate_extent_relations_stage(
         self,

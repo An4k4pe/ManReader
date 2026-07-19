@@ -30,6 +30,9 @@ from page_analysis_candidate_extent_relation_diagnostics import (
 from page_analysis_candidate_page_context_diagnostics import (
     dump_local_fragment_side_band_candidate_page_context as dump_candidate_page_context_diagnostics,
 )
+from page_analysis_co_reference_candidate_diagnostics import (
+    dump_co_referenced_page_candidate_inventory as dump_co_referenced_page_candidate_inventory_data,
+)
 from page_analysis_page_covering_visual import build_page_covering_visual_page_analysis
 from page_analysis_page_edge_visual import build_page_edge_visual_page_analysis
 from page_analysis_primitive_extent import build_primitive_extent_page_analysis
@@ -63,6 +66,7 @@ type DiagnosticStage = Literal[
     "analysis-page-covering-visual",
     "primitive-pair",
     "primitive-neighborhood",
+    "co-referenced-candidate-inventory",
 ]
 
 
@@ -96,6 +100,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
             "analysis-page-covering-visual",
             "primitive-pair",
             "primitive-neighborhood",
+            "co-referenced-candidate-inventory",
         ),
         default="capture",
         help="Diagnostic stage to serialize. Default: capture.",
@@ -126,6 +131,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--primitive-id",
         help="Primitive ID; required for stage primitive-neighborhood.",
+    )
+    parser.add_argument(
+        "--candidate-producer",
+        action="append",
+        help="Requested candidate producer; only for co-referenced-candidate-inventory.",
     )
     return parser
 
@@ -352,6 +362,26 @@ def dump_primitive_neighborhood_measurements(
     )
 
 
+def dump_co_referenced_page_candidate_inventory(
+    pdf_path: Path,
+    *,
+    candidate_producers: tuple[str, ...],
+    page_number: int = 1,
+    output_path: Path | None = None,
+    compact: bool = False,
+) -> str:
+    """Capture, normalize, and return co-referenced candidate inventory JSON."""
+
+    return _dump_page(
+        pdf_path,
+        page_number=page_number,
+        stage="co-referenced-candidate-inventory",
+        output_path=output_path,
+        compact=compact,
+        candidate_producers=candidate_producers,
+    )
+
+
 def _dump_page(
     pdf_path: Path,
     *,
@@ -362,6 +392,7 @@ def _dump_page(
     first_primitive_id: str | None = None,
     second_primitive_id: str | None = None,
     primitive_id: str | None = None,
+    candidate_producers: tuple[str, ...] | None = None,
     render_page_image_path: Path | None = None,
 ) -> str:
     """Serialize one diagnostic stage for a one-based PDF page number."""
@@ -450,6 +481,16 @@ def _dump_page(
             generation_id=f"diagnostic-page-edge-visual-analysis:{page_index}",
         )
         artifact_data = page_analysis_to_dict(analysis)
+    elif stage == "co-referenced-candidate-inventory":
+        if candidate_producers is None:
+            raise ValueError(
+                "candidate_producers is required for stage co-referenced-candidate-inventory"
+            )
+        primitive_page = normalize_backend_page_capture(capture)
+        artifact_data = dump_co_referenced_page_candidate_inventory_data(
+            primitive_page,
+            candidate_producers=candidate_producers,
+        )
     elif stage == "primitive-pair":
         if first_primitive_id is None:
             raise ValueError("first_primitive_id is required for stage primitive-pair")
@@ -602,6 +643,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.error("--second-primitive-id is required for stage primitive-pair")
     if args.stage == "primitive-neighborhood" and args.primitive_id is None:
         parser.error("--primitive-id is required for stage primitive-neighborhood")
+    if args.stage == "co-referenced-candidate-inventory":
+        if not args.candidate_producer:
+            parser.error(
+                "--candidate-producer is required for stage "
+                "co-referenced-candidate-inventory"
+            )
+    elif args.candidate_producer:
+        parser.error(
+            "--candidate-producer is only valid for stage "
+            "co-referenced-candidate-inventory"
+        )
 
     try:
         json_text = _dump_page(
@@ -613,6 +665,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             first_primitive_id=args.first_primitive_id,
             second_primitive_id=args.second_primitive_id,
             primitive_id=args.primitive_id,
+            candidate_producers=(
+                None
+                if args.candidate_producer is None
+                else tuple(args.candidate_producer)
+            ),
             render_page_image_path=args.render_page_image,
         )
     except (FileNotFoundError, OSError, ValueError, fitz.FileDataError) as exc:
