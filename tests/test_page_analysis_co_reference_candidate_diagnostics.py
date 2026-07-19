@@ -11,6 +11,10 @@ from unittest.mock import patch
 from geometry_model import PageGeometry
 from page_analysis_co_reference_candidate_diagnostics import (
     dump_co_referenced_page_candidate_inventory,
+    dump_co_referenced_page_candidate_pair_measurements,
+)
+from page_analysis_co_reference_candidate_reference import (
+    CoReferencedPageCandidateReference,
 )
 from page_analysis_model import (
     PAGE_ANALYSIS_SCHEMA_VERSION,
@@ -327,6 +331,284 @@ class CoReferencedPageCandidateDiagnosticsTests(unittest.TestCase):
         ]
         self.assertEqual([reference["candidate_id"] for reference in references], ["shared", "shared"])
         self.assertNotEqual(references[0]["producer_name"], references[1]["producer_name"])
+
+    def test_pair_signature_same_stream_self_relation_and_exact_measurements(self) -> None:
+        signature = inspect.signature(dump_co_referenced_page_candidate_pair_measurements)
+        self.assertEqual(
+            tuple(signature.parameters),
+            (
+                "primitive_page",
+                "first_candidate_reference",
+                "second_candidate_reference",
+            ),
+        )
+        self.assertIs(
+            signature.parameters["first_candidate_reference"].kind,
+            inspect.Parameter.KEYWORD_ONLY,
+        )
+        self.assertIs(
+            signature.parameters["second_candidate_reference"].kind,
+            inspect.Parameter.KEYWORD_ONLY,
+        )
+
+        page = _page()
+        inventory = dump_co_referenced_page_candidate_inventory(
+            page,
+            candidate_producers=("singleton-side-band",),
+        )
+        references = _inventory_references(inventory)
+        first, second = references
+        measurements = dump_co_referenced_page_candidate_pair_measurements(
+            page,
+            first_candidate_reference=first,
+            second_candidate_reference=second,
+        )
+        self.assertEqual(measurements["horizontal_gap"], 60.0)
+        self.assertEqual(measurements["vertical_gap"], 10.0)
+        self.assertEqual(measurements["horizontal_overlap"], 0.0)
+        self.assertEqual(measurements["vertical_overlap"], 0.0)
+        self.assertEqual(measurements["x0_delta"], 80.0)
+        self.assertEqual(measurements["y0_delta"], 20.0)
+        self.assertEqual(measurements["x1_delta"], 80.0)
+        self.assertEqual(measurements["y1_delta"], 20.0)
+        self.assertEqual(
+            set(measurements),
+            {
+                "diagnostic_kind",
+                "page_id",
+                "page_index",
+                "source_capture_id",
+                "first_candidate_reference",
+                "second_candidate_reference",
+                "first_candidate_bbox",
+                "second_candidate_bbox",
+                "horizontal_gap",
+                "vertical_gap",
+                "horizontal_overlap",
+                "vertical_overlap",
+                "x0_delta",
+                "y0_delta",
+                "x1_delta",
+                "y1_delta",
+            },
+        )
+        self.assertFalse(_contains_key(measurements, "schema_version"))
+        self.assertEqual(json.loads(json.dumps(measurements)), measurements)
+
+        self_relation = dump_co_referenced_page_candidate_pair_measurements(
+            page,
+            first_candidate_reference=first,
+            second_candidate_reference=first,
+        )
+        self.assertEqual(self_relation["horizontal_gap"], 0.0)
+        self.assertEqual(self_relation["vertical_gap"], 0.0)
+        self.assertEqual(self_relation["horizontal_overlap"], 20.0)
+        self.assertEqual(self_relation["vertical_overlap"], 10.0)
+        self.assertEqual(self_relation["x0_delta"], 0.0)
+        self.assertEqual(self_relation["y0_delta"], 0.0)
+        self.assertEqual(self_relation["x1_delta"], 0.0)
+        self.assertEqual(self_relation["y1_delta"], 0.0)
+
+    def test_pair_executes_only_required_streams_and_uses_public_measurement(self) -> None:
+        page = _page()
+        inventory = dump_co_referenced_page_candidate_inventory(
+            page,
+            candidate_producers=("singleton-side-band", "page-edge-visual"),
+        )
+        singleton_reference = _reference_for_producer(
+            inventory,
+            "page_analysis.singleton_side_band",
+        )
+        edge_reference = _reference_for_producer(
+            inventory,
+            "page_analysis.page_edge_visual",
+        )
+        import page_analysis_co_reference_candidate_diagnostics as diagnostics
+
+        original_builders = diagnostics._BUILDERS.copy()
+        calls: list[tuple[str, str]] = []
+
+        def tracked(name: str):
+            def build(
+                primitive_page: NormalizedPrimitivePage,
+                *,
+                generation_id: str,
+            ) -> PageAnalysis:
+                calls.append((name, generation_id))
+                return original_builders[name](
+                    primitive_page,
+                    generation_id=generation_id,
+                )
+
+            return build
+
+        with (
+            patch.dict(
+                diagnostics._BUILDERS,
+                {name: tracked(name) for name in original_builders},
+                clear=True,
+            ),
+            patch.object(
+                diagnostics,
+                "measure_co_referenced_page_candidate_pair",
+                wraps=diagnostics.measure_co_referenced_page_candidate_pair,
+            ) as measure,
+        ):
+            result = dump_co_referenced_page_candidate_pair_measurements(
+                page,
+                first_candidate_reference=singleton_reference,
+                second_candidate_reference=edge_reference,
+            )
+
+        self.assertEqual(
+            {name for name, _generation_id in calls},
+            {"singleton-side-band", "page-edge-visual"},
+        )
+        self.assertEqual(len(calls), 2)
+        measure.assert_called_once()
+        self.assertEqual(result["diagnostic_kind"], "co-referenced-candidate-pair-measurements")
+
+    def test_pair_same_producer_with_different_generations_executes_twice(self) -> None:
+        page = _page()
+        inventory = dump_co_referenced_page_candidate_inventory(
+            page,
+            candidate_producers=("singleton-side-band",),
+        )
+        reference = _inventory_references(inventory)[0]
+        first = CoReferencedPageCandidateReference(
+            reference.producer_name,
+            reference.producer_version,
+            reference.configuration_id,
+            "generation-a",
+            reference.candidate_id,
+        )
+        second = CoReferencedPageCandidateReference(
+            reference.producer_name,
+            reference.producer_version,
+            reference.configuration_id,
+            "generation-b",
+            reference.candidate_id,
+        )
+        import page_analysis_co_reference_candidate_diagnostics as diagnostics
+
+        original = diagnostics._BUILDERS["singleton-side-band"]
+        calls: list[str] = []
+
+        def tracked(
+            primitive_page: NormalizedPrimitivePage,
+            *,
+            generation_id: str,
+        ) -> PageAnalysis:
+            calls.append(generation_id)
+            return original(primitive_page, generation_id=generation_id)
+
+        with patch.dict(
+            diagnostics._BUILDERS,
+            {"singleton-side-band": tracked},
+        ):
+            dump_co_referenced_page_candidate_pair_measurements(
+                page,
+                first_candidate_reference=first,
+                second_candidate_reference=second,
+            )
+
+        self.assertEqual(calls, ["generation-a", "generation-b"])
+
+    def test_pair_rejects_invalid_references_without_fallback(self) -> None:
+        page = _page()
+        inventory = dump_co_referenced_page_candidate_inventory(
+            page,
+            candidate_producers=("singleton-side-band", "local-fragment-side-band"),
+        )
+        singleton_reference = _reference_for_producer(
+            inventory,
+            "page_analysis.singleton_side_band",
+        )
+        local_reference = _reference_for_producer(
+            inventory,
+            "page_analysis.local_fragment_side_band",
+        )
+        invalid_references = (
+            (
+                CoReferencedPageCandidateReference(
+                    "unknown", "0.1", "config", "generation", "candidate"
+                ),
+                "producer_name",
+            ),
+            (
+                CoReferencedPageCandidateReference(
+                    singleton_reference.producer_name,
+                    "wrong",
+                    singleton_reference.configuration_id,
+                    singleton_reference.generation_id,
+                    singleton_reference.candidate_id,
+                ),
+                "producer_version",
+            ),
+            (
+                CoReferencedPageCandidateReference(
+                    singleton_reference.producer_name,
+                    singleton_reference.producer_version,
+                    "wrong",
+                    singleton_reference.generation_id,
+                    singleton_reference.candidate_id,
+                ),
+                "configuration_id",
+            ),
+            (
+                CoReferencedPageCandidateReference(
+                    local_reference.producer_name,
+                    local_reference.producer_version,
+                    local_reference.configuration_id,
+                    local_reference.generation_id,
+                    singleton_reference.candidate_id,
+                ),
+                "candidate_id",
+            ),
+        )
+        for invalid_reference, token in invalid_references:
+            with self.subTest(token=token), self.assertRaisesRegex(ValueError, token):
+                dump_co_referenced_page_candidate_pair_measurements(
+                    page,
+                    first_candidate_reference=invalid_reference,
+                    second_candidate_reference=singleton_reference,
+                )
+        with self.assertRaisesRegex(ValueError, "primitive_page"):
+            dump_co_referenced_page_candidate_pair_measurements(
+                cast(NormalizedPrimitivePage, object()),
+                first_candidate_reference=singleton_reference,
+                second_candidate_reference=singleton_reference,
+            )
+        with self.assertRaisesRegex(ValueError, "first_candidate_reference"):
+            dump_co_referenced_page_candidate_pair_measurements(
+                page,
+                first_candidate_reference=cast(CoReferencedPageCandidateReference, object()),
+                second_candidate_reference=singleton_reference,
+            )
+
+
+def _inventory_references(
+    inventory: dict[str, object],
+) -> list[CoReferencedPageCandidateReference]:
+    streams = cast(list[dict[str, object]], inventory["analysis_streams"])
+    return [
+        CoReferencedPageCandidateReference(
+            **cast(dict[str, str], candidate["candidate_reference"])
+        )
+        for stream in streams
+        for candidate in cast(list[dict[str, object]], stream["candidates"])
+    ]
+
+
+def _reference_for_producer(
+    inventory: dict[str, object],
+    producer_name: str,
+) -> CoReferencedPageCandidateReference:
+    return next(
+        reference
+        for reference in _inventory_references(inventory)
+        if reference.producer_name == producer_name
+    )
 
 
 def _contains_key(value: object, key: str) -> bool:

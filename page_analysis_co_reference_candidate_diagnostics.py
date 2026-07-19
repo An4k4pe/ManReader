@@ -9,7 +9,11 @@ from page_analysis_co_reference_binding import (
     BoundCoReferencedPageAnalyses,
     bind_co_referenced_page_analyses,
 )
+from page_analysis_co_reference_candidate_pair_measurements import (
+    measure_co_referenced_page_candidate_pair,
+)
 from page_analysis_co_reference_candidate_reference import (
+    CoReferencedPageCandidateReference,
     build_co_referenced_page_candidate_reference,
 )
 from page_analysis_model import PageAnalysis, PageAnalysisProvenance, RegionCandidate
@@ -44,6 +48,13 @@ _GENERATION_ID_PREFIXES = {
     "page-covering-visual": "diagnostic-page-covering-visual-analysis",
 }
 
+_CANDIDATE_PRODUCER_BY_NAME = {
+    "page_analysis.singleton_side_band": "singleton-side-band",
+    "page_analysis.local_fragment_side_band": "local-fragment-side-band",
+    "page_analysis.page_edge_visual": "page-edge-visual",
+    "page_analysis.page_covering_visual": "page-covering-visual",
+}
+
 
 def dump_co_referenced_page_candidate_inventory(
     primitive_page: NormalizedPrimitivePage,
@@ -75,7 +86,6 @@ def dump_co_referenced_page_candidate_inventory(
         id(analysis): candidate_producer
         for candidate_producer, analysis in zip(selected_producers, analyses, strict=True)
     }
-
     return {
         "diagnostic_kind": "co-referenced-candidate-inventory",
         "page_id": primitive_page.page_id,
@@ -92,6 +102,103 @@ def dump_co_referenced_page_candidate_inventory(
         ],
     }
 
+
+def dump_co_referenced_page_candidate_pair_measurements(
+    primitive_page: NormalizedPrimitivePage,
+    *,
+    first_candidate_reference: CoReferencedPageCandidateReference,
+    second_candidate_reference: CoReferencedPageCandidateReference,
+) -> dict[str, object]:
+    """Measure one explicit candidate pair as read-only JSON-compatible data."""
+
+    if not isinstance(primitive_page, NormalizedPrimitivePage):
+        raise ValueError("primitive_page must be a NormalizedPrimitivePage")
+    references = (first_candidate_reference, second_candidate_reference)
+    for field_name, reference in zip(
+        ("first_candidate_reference", "second_candidate_reference"),
+        references,
+        strict=True,
+    ):
+        if not isinstance(reference, CoReferencedPageCandidateReference):
+            raise ValueError(
+                f"{field_name} must be a CoReferencedPageCandidateReference"
+            )
+
+    analyses = _build_required_analyses(primitive_page, references=references)
+    collection = build_co_referenced_page_analyses(analyses)
+    binding = bind_co_referenced_page_analyses(
+        primitive_page,
+        co_referenced_page_analyses=collection,
+    )
+    measurements = measure_co_referenced_page_candidate_pair(
+        binding,
+        first_candidate_reference=first_candidate_reference,
+        second_candidate_reference=second_candidate_reference,
+    )
+    return {
+        "diagnostic_kind": "co-referenced-candidate-pair-measurements",
+        "page_id": primitive_page.page_id,
+        "page_index": primitive_page.page_index,
+        "source_capture_id": primitive_page.source_capture_id,
+        "first_candidate_reference": _reference_to_dict(first_candidate_reference),
+        "second_candidate_reference": _reference_to_dict(second_candidate_reference),
+        "first_candidate_bbox": list(measurements.first_candidate_bbox),
+        "second_candidate_bbox": list(measurements.second_candidate_bbox),
+        "horizontal_gap": measurements.horizontal_gap,
+        "vertical_gap": measurements.vertical_gap,
+        "horizontal_overlap": measurements.horizontal_overlap,
+        "vertical_overlap": measurements.vertical_overlap,
+        "x0_delta": measurements.x0_delta,
+        "y0_delta": measurements.y0_delta,
+        "x1_delta": measurements.x1_delta,
+        "y1_delta": measurements.y1_delta,
+    }
+
+
+def _build_required_analyses(
+    primitive_page: NormalizedPrimitivePage,
+    *,
+    references: tuple[
+        CoReferencedPageCandidateReference,
+        CoReferencedPageCandidateReference,
+    ],
+) -> tuple[PageAnalysis, ...]:
+    references_by_stream: dict[
+        tuple[str, str], list[CoReferencedPageCandidateReference]
+    ] = {}
+    for reference in references:
+        if reference.producer_name not in _CANDIDATE_PRODUCER_BY_NAME:
+            raise ValueError(f"unsupported producer_name: {reference.producer_name}")
+        stream_key = (reference.producer_name, reference.generation_id)
+        references_by_stream.setdefault(stream_key, []).append(reference)
+
+    analyses: list[PageAnalysis] = []
+    for (producer_name, generation_id), stream_references in references_by_stream.items():
+        candidate_producer = _CANDIDATE_PRODUCER_BY_NAME[producer_name]
+        analysis = _BUILDERS[candidate_producer](
+            primitive_page,
+            generation_id=generation_id,
+        )
+        for reference in stream_references:
+            _validate_produced_analysis_stream(analysis, reference=reference)
+        analyses.append(analysis)
+    return tuple(analyses)
+
+
+def _validate_produced_analysis_stream(
+    analysis: PageAnalysis,
+    *,
+    reference: CoReferencedPageCandidateReference,
+) -> None:
+    provenance = analysis.provenance
+    if provenance.producer_name != reference.producer_name:
+        raise ValueError("producer_name does not match the produced analysis")
+    if provenance.producer_version != reference.producer_version:
+        raise ValueError("producer_version does not match the produced analysis")
+    if provenance.configuration_id != reference.configuration_id:
+        raise ValueError("configuration_id does not match the produced analysis")
+    if analysis.generation_id != reference.generation_id:
+        raise ValueError("generation_id does not match the produced analysis")
 
 def _canonical_candidate_producers(
     candidate_producers: tuple[str, ...],
@@ -165,14 +272,20 @@ def _candidate_to_dict(
         candidate=candidate,
     )
     return {
-        "candidate_reference": {
-            "producer_name": reference.producer_name,
-            "producer_version": reference.producer_version,
-            "configuration_id": reference.configuration_id,
-            "generation_id": reference.generation_id,
-            "candidate_id": reference.candidate_id,
-        },
+        "candidate_reference": _reference_to_dict(reference),
         "bbox": list(candidate.bbox),
         "proposed_structural_kind": candidate.proposed_structural_kind,
         "primitive_ids": list(candidate.primitive_ids),
+    }
+
+
+def _reference_to_dict(
+    reference: CoReferencedPageCandidateReference,
+) -> dict[str, str]:
+    return {
+        "producer_name": reference.producer_name,
+        "producer_version": reference.producer_version,
+        "configuration_id": reference.configuration_id,
+        "generation_id": reference.generation_id,
+        "candidate_id": reference.candidate_id,
     }

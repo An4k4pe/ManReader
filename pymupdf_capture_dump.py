@@ -33,6 +33,12 @@ from page_analysis_candidate_page_context_diagnostics import (
 from page_analysis_co_reference_candidate_diagnostics import (
     dump_co_referenced_page_candidate_inventory as dump_co_referenced_page_candidate_inventory_data,
 )
+from page_analysis_co_reference_candidate_diagnostics import (
+    dump_co_referenced_page_candidate_pair_measurements as dump_co_referenced_page_candidate_pair_measurements_data,
+)
+from page_analysis_co_reference_candidate_reference import (
+    CoReferencedPageCandidateReference,
+)
 from page_analysis_page_covering_visual import build_page_covering_visual_page_analysis
 from page_analysis_page_edge_visual import build_page_edge_visual_page_analysis
 from page_analysis_primitive_extent import build_primitive_extent_page_analysis
@@ -67,6 +73,7 @@ type DiagnosticStage = Literal[
     "primitive-pair",
     "primitive-neighborhood",
     "co-referenced-candidate-inventory",
+    "co-referenced-candidate-pair-measurements",
 ]
 
 
@@ -101,6 +108,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
             "primitive-pair",
             "primitive-neighborhood",
             "co-referenced-candidate-inventory",
+            "co-referenced-candidate-pair-measurements",
         ),
         default="capture",
         help="Diagnostic stage to serialize. Default: capture.",
@@ -136,6 +144,14 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--candidate-producer",
         action="append",
         help="Requested candidate producer; only for co-referenced-candidate-inventory.",
+    )
+    parser.add_argument(
+        "--first-candidate-reference",
+        help="First candidate reference JSON; required for co-referenced-candidate-pair-measurements.",
+    )
+    parser.add_argument(
+        "--second-candidate-reference",
+        help="Second candidate reference JSON; required for co-referenced-candidate-pair-measurements.",
     )
     return parser
 
@@ -382,6 +398,28 @@ def dump_co_referenced_page_candidate_inventory(
     )
 
 
+def dump_co_referenced_page_candidate_pair_measurements(
+    pdf_path: Path,
+    *,
+    first_candidate_reference: CoReferencedPageCandidateReference,
+    second_candidate_reference: CoReferencedPageCandidateReference,
+    page_number: int = 1,
+    output_path: Path | None = None,
+    compact: bool = False,
+) -> str:
+    """Capture, normalize, and return explicit candidate-pair measurements JSON."""
+
+    return _dump_page(
+        pdf_path,
+        page_number=page_number,
+        stage="co-referenced-candidate-pair-measurements",
+        output_path=output_path,
+        compact=compact,
+        first_candidate_reference=first_candidate_reference,
+        second_candidate_reference=second_candidate_reference,
+    )
+
+
 def _dump_page(
     pdf_path: Path,
     *,
@@ -393,6 +431,8 @@ def _dump_page(
     second_primitive_id: str | None = None,
     primitive_id: str | None = None,
     candidate_producers: tuple[str, ...] | None = None,
+    first_candidate_reference: CoReferencedPageCandidateReference | None = None,
+    second_candidate_reference: CoReferencedPageCandidateReference | None = None,
     render_page_image_path: Path | None = None,
 ) -> str:
     """Serialize one diagnostic stage for a one-based PDF page number."""
@@ -490,6 +530,23 @@ def _dump_page(
         artifact_data = dump_co_referenced_page_candidate_inventory_data(
             primitive_page,
             candidate_producers=candidate_producers,
+        )
+    elif stage == "co-referenced-candidate-pair-measurements":
+        if first_candidate_reference is None:
+            raise ValueError(
+                "first_candidate_reference is required for stage "
+                "co-referenced-candidate-pair-measurements"
+            )
+        if second_candidate_reference is None:
+            raise ValueError(
+                "second_candidate_reference is required for stage "
+                "co-referenced-candidate-pair-measurements"
+            )
+        primitive_page = normalize_backend_page_capture(capture)
+        artifact_data = dump_co_referenced_page_candidate_pair_measurements_data(
+            primitive_page,
+            first_candidate_reference=first_candidate_reference,
+            second_candidate_reference=second_candidate_reference,
         )
     elif stage == "primitive-pair":
         if first_primitive_id is None:
@@ -654,8 +711,35 @@ def main(argv: Sequence[str] | None = None) -> int:
             "--candidate-producer is only valid for stage "
             "co-referenced-candidate-inventory"
         )
+    if args.stage == "co-referenced-candidate-pair-measurements":
+        if args.first_candidate_reference is None:
+            parser.error(
+                "--first-candidate-reference is required for stage "
+                "co-referenced-candidate-pair-measurements"
+            )
+        if args.second_candidate_reference is None:
+            parser.error(
+                "--second-candidate-reference is required for stage "
+                "co-referenced-candidate-pair-measurements"
+            )
+    elif (
+        args.first_candidate_reference is not None
+        or args.second_candidate_reference is not None
+    ):
+        parser.error(
+            "--first-candidate-reference and --second-candidate-reference are only "
+            "valid for stage co-referenced-candidate-pair-measurements"
+        )
 
     try:
+        first_candidate_reference = _parse_candidate_reference_json(
+            args.first_candidate_reference,
+            option_name="--first-candidate-reference",
+        )
+        second_candidate_reference = _parse_candidate_reference_json(
+            args.second_candidate_reference,
+            option_name="--second-candidate-reference",
+        )
         json_text = _dump_page(
             args.pdf,
             page_number=args.page,
@@ -670,6 +754,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 if args.candidate_producer is None
                 else tuple(args.candidate_producer)
             ),
+            first_candidate_reference=first_candidate_reference,
+            second_candidate_reference=second_candidate_reference,
             render_page_image_path=args.render_page_image,
         )
     except (FileNotFoundError, OSError, ValueError, fitz.FileDataError) as exc:
@@ -693,6 +779,46 @@ def _positive_page_number(value: str) -> int:
     if page_number < 1:
         raise argparse.ArgumentTypeError("page must be greater than or equal to 1")
     return page_number
+
+
+def _parse_candidate_reference_json(
+    value: str | None,
+    *,
+    option_name: str,
+) -> CoReferencedPageCandidateReference | None:
+    if value is None:
+        return None
+    try:
+        parsed = json.loads(value, object_pairs_hook=_json_object_without_duplicates)
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise ValueError(f"{option_name} must be a valid JSON object") from exc
+    if not isinstance(parsed, dict):
+        raise ValueError(f"{option_name} must be a JSON object")
+    expected_fields = {
+        "producer_name",
+        "producer_version",
+        "configuration_id",
+        "generation_id",
+        "candidate_id",
+    }
+    actual_fields = set(parsed)
+    if actual_fields != expected_fields:
+        raise ValueError(f"{option_name} must contain exactly the candidate reference fields")
+    try:
+        return CoReferencedPageCandidateReference(**parsed)
+    except ValueError as exc:
+        raise ValueError(f"{option_name} contains an invalid candidate reference") from exc
+
+
+def _json_object_without_duplicates(
+    pairs: list[tuple[str, object]],
+) -> dict[str, object]:
+    value: dict[str, object] = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError(f"duplicate JSON key: {key}")
+        value[key] = item
+    return value
 
 
 if __name__ == "__main__":

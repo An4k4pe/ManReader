@@ -12,6 +12,9 @@ from unittest.mock import patch
 
 import fitz
 
+from page_analysis_co_reference_candidate_reference import (
+    CoReferencedPageCandidateReference,
+)
 from page_analysis_model import PAGE_ANALYSIS_SCHEMA_VERSION
 from page_analysis_primitive_pair_measurements import (
     PrimitiveNotVisibleOnPageError,
@@ -23,6 +26,7 @@ from pymupdf_capture_dump import (
     build_argument_parser,
     dump_capture,
     dump_co_referenced_page_candidate_inventory,
+    dump_co_referenced_page_candidate_pair_measurements,
     dump_local_fragment_side_band_candidate_extent_relations,
     dump_local_fragment_side_band_candidate_page_context,
     dump_local_fragment_side_band_diagnostics,
@@ -144,6 +148,31 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             args.candidate_producer,
             ["singleton-side-band", "page-edge-visual"],
         )
+
+    def test_parser_accepts_co_referenced_candidate_pair_stage_and_references(self) -> None:
+        reference_json = json.dumps(
+            {
+                "producer_name": "page_analysis.singleton_side_band",
+                "producer_version": "0.1",
+                "configuration_id": "singleton-side-band-v1",
+                "generation_id": "generation",
+                "candidate_id": "candidate",
+            }
+        )
+        args = build_argument_parser().parse_args(
+            (
+                "sample.pdf",
+                "--stage",
+                "co-referenced-candidate-pair-measurements",
+                "--first-candidate-reference",
+                reference_json,
+                "--second-candidate-reference",
+                reference_json,
+            )
+        )
+
+        self.assertEqual(args.first_candidate_reference, reference_json)
+        self.assertEqual(args.second_candidate_reference, reference_json)
 
     def test_parser_accepts_render_page_image(self) -> None:
         args = build_argument_parser().parse_args(
@@ -448,6 +477,43 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             self.assertNotIn("schema_version", payload)
             self.assertNotIn("regions", payload)
             self.assertNotIn("relations", payload)
+            self.assertTrue(output_path.is_file())
+            self.assertEqual(output_path.read_text(encoding="utf-8"), returned)
+
+    def test_co_referenced_candidate_pair_helper_reuses_inventory_reference(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            pdf_path = root / "side-band.pdf"
+            output_path = root / "diagnostics" / "pair.json"
+            _create_pdf_with_side_band_text(pdf_path)
+            inventory = json.loads(
+                dump_co_referenced_page_candidate_inventory(
+                    pdf_path,
+                    candidate_producers=("singleton-side-band",),
+                )
+            )
+            reference_data = inventory["analysis_streams"][0]["candidates"][0][
+                "candidate_reference"
+            ]
+            reference = CoReferencedPageCandidateReference(**reference_data)
+
+            returned = dump_co_referenced_page_candidate_pair_measurements(
+                pdf_path,
+                first_candidate_reference=reference,
+                second_candidate_reference=reference,
+                output_path=output_path,
+                compact=True,
+            )
+            payload = json.loads(returned)
+
+            self.assertEqual(
+                payload["diagnostic_kind"],
+                "co-referenced-candidate-pair-measurements",
+            )
+            self.assertEqual(payload["first_candidate_reference"], reference_data)
+            self.assertEqual(payload["second_candidate_reference"], reference_data)
+            self.assertEqual(payload["horizontal_gap"], 0.0)
+            self.assertEqual(payload["vertical_gap"], 0.0)
             self.assertTrue(output_path.is_file())
             self.assertEqual(output_path.read_text(encoding="utf-8"), returned)
 
@@ -1208,6 +1274,118 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
                 json.loads(stdout.getvalue())["candidate_producers"],
                 ["page-edge-visual", "page-covering-visual"],
             )
+
+    def test_main_pair_stage_parses_inventory_references_and_rejects_invalid_inputs(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            pdf_path = Path(temporary_directory) / "side-band.pdf"
+            _create_pdf_with_side_band_text(pdf_path)
+            inventory_stdout = StringIO()
+            with redirect_stdout(inventory_stdout):
+                self.assertEqual(
+                    main(
+                        (
+                            str(pdf_path),
+                            "--stage",
+                            "co-referenced-candidate-inventory",
+                            "--candidate-producer",
+                            "singleton-side-band",
+                        )
+                    ),
+                    0,
+                )
+            reference = json.dumps(
+                json.loads(inventory_stdout.getvalue())["analysis_streams"][0][
+                    "candidates"
+                ][0]["candidate_reference"]
+            )
+            pair_stdout = StringIO()
+            with redirect_stdout(pair_stdout):
+                self.assertEqual(
+                    main(
+                        (
+                            str(pdf_path),
+                            "--stage",
+                            "co-referenced-candidate-pair-measurements",
+                            "--first-candidate-reference",
+                            reference,
+                            "--second-candidate-reference",
+                            reference,
+                        )
+                    ),
+                    0,
+                )
+            pair_payload = json.loads(pair_stdout.getvalue())
+            self.assertEqual(pair_payload["first_candidate_reference"], json.loads(reference))
+
+            invalid_values = (
+                "not-json",
+                "[]",
+                '{"producer_name":"x"}',
+                (
+                    '{"producer_name":"x","producer_version":"v",'
+                    '"configuration_id":"c","generation_id":"g",'
+                    '"candidate_id":"i","extra":"x"}'
+                ),
+                (
+                    '{"producer_name":"x","producer_name":"y",'
+                    '"producer_version":"v","configuration_id":"c",'
+                    '"generation_id":"g","candidate_id":"i"}'
+                ),
+                (
+                    '{"producer_name":1,"producer_version":"v",'
+                    '"configuration_id":"c","generation_id":"g",'
+                    '"candidate_id":"i"}'
+                ),
+                (
+                    '{"producer_name":"","producer_version":"v",'
+                    '"configuration_id":"c","generation_id":"g",'
+                    '"candidate_id":"i"}'
+                ),
+            )
+            for invalid_value in invalid_values:
+                with (
+                    self.subTest(invalid_value=invalid_value),
+                    redirect_stderr(StringIO()),
+                    self.assertRaises(SystemExit),
+                ):
+                    main(
+                        (
+                            str(pdf_path),
+                            "--stage",
+                            "co-referenced-candidate-pair-measurements",
+                            "--first-candidate-reference",
+                            invalid_value,
+                            "--second-candidate-reference",
+                            reference,
+                        )
+                    )
+
+            with redirect_stderr(StringIO()), self.assertRaises(SystemExit):
+                main(
+                    (
+                        str(pdf_path),
+                        "--stage",
+                        "co-referenced-candidate-pair-measurements",
+                        "--first-candidate-reference",
+                        reference,
+                        "--second-candidate-reference",
+                        reference,
+                        "--candidate-producer",
+                        "singleton-side-band",
+                    )
+                )
+            with redirect_stderr(StringIO()), self.assertRaises(SystemExit):
+                main(
+                    (
+                        str(pdf_path),
+                        "--stage",
+                        "capture",
+                        "--first-candidate-reference",
+                        reference,
+                    )
+                )
 
     def test_main_uses_dedicated_generation_id_for_candidate_extent_relations_stage(
         self,
