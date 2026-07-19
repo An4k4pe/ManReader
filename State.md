@@ -8,7 +8,9 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–16 sono completate. Nessuna nuova milestone è aperta o autorizzata.
+Le Milestone 1–16 sono completate. La milestone corrente è:
+
+> **Milestone 17 — flusso diagnostico page-local delle candidate co-riferite**
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli. I nuovi contratti lavorano in shadow mode e non producono ancora decisioni editoriali, IR o output finale.
 
@@ -220,7 +222,7 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-La Milestone 16 è completata. Prima di qualunque nuova milestone serve una decisione architetturale esplicita; nessun nuovo file, codice, test o comportamento è autorizzato. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
+Il prossimo passaggio è esclusivamente la revisione e il commit del diff documentale della Milestone 17, seguiti dalla preparazione separata del solo primo micro-step implementativo. Nessun codice o test è ancora autorizzato. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
 
 ## Ultima baseline funzionale verificata
 
@@ -654,3 +656,27 @@ Sono supportati candidate della stessa corrente o di correnti differenti, self-r
 La revisione indipendente ha dato verdetto **BASELINE ARCHITETTURALE ACCETTABILE**: non sono emerse criticità bloccanti, correzioni funzionali richieste, scope creep o coupling improprio. Il primo e unico micro-step soddisfa l'obiettivo e non esiste una giustificazione concreta per un secondo micro-step.
 
 Restano fuori scope equivalenza, matching, conflitto e deduplicazione; selezione, score, confidence e ranking; Resolution; enumerazione o generazione di coppie; area, unione, IoU e ratio; centri, distanze euclidee e dai bordi; booleane geometriche e tolleranze; primitive condivise, relativi ID, conteggi o ratio; diagnostica, consumer e producer; modifiche a modelli o schemi; serializer, store, filesystem e persistenza; relazioni document-local o cross-page; promozione o consolidamento degli helper geometrici privati. La chiusura non apre né nomina una milestone successiva.
+
+## Milestone 17 — flusso diagnostico page-local delle candidate co-riferite
+
+L'apertura documentale parte da `3c2351f` — `Close milestone 16 co-referenced page candidate pair measurements`; la baseline funzionale resta `89dfb8e` — `Add co-referenced page candidate pair measurements`: 1084 test OK e 7 skipped, Ruff, BasedPyright e `git diff --check` verdi. Pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti restano in shadow mode e non è introdotta Resolution.
+
+Le Milestone 13–16 forniscono già collezione, binding, riferimento e misura page-local, ma nessun consumer operativo usa ancora l'intera catena. Non manca un nuovo modello dati: manca un flusso diagnostico reale che renda prima osservabili i riferimenti e poi misuri due candidate esplicitamente scelte. La milestone non introduce un nuovo modello o contratto architetturale di dominio; le due funzioni dump sono esclusivamente adapter diagnostici read-only.
+
+Lo scope pianificato, non ancora autorizzato, comprende `page_analysis_co_reference_candidate_diagnostics.py`, `tests/test_page_analysis_co_reference_candidate_diagnostics.py`, `pymupdf_capture_dump.py` e `tests/test_pymupdf_capture_dump.py`. I nomi ratificati sono `dump_co_referenced_page_candidate_inventory(...)`, `dump_co_referenced_page_candidate_pair_measurements(...)`, gli stage CLI `co-referenced-candidate-inventory` e `co-referenced-candidate-pair-measurements`, l'opzione ripetibile `--candidate-producer` e le opzioni `--first-candidate-reference` e `--second-candidate-reference`.
+
+La milestone è divisa in due micro-step: inventario diagnostico delle correnti e dei riferimenti candidate; misura diagnostica di due riferimenti scelti esplicitamente. L'apertura non autorizza ancora nessuno dei due: dopo revisione e commit della documentazione sarà preparato separatamente soltanto il primo.
+
+### Primo micro-step pianificato — inventario diagnostico
+
+L'inventario accetterà uno o più producer scelti esplicitamente dal chiamante, da una lista chiusa; rifiuterà producer sconosciuti e duplicati ed eseguirà soltanto quelli richiesti. Costruirà `CoReferencedPageAnalyses`, lo legherà alla stessa `NormalizedPrimitivePage` ed esporrà ogni corrente e candidate con il relativo `CoReferencedPageCandidateReference`, senza scegliere né misurare coppie. Le producer key supportate saranno `singleton-side-band`, `local-fragment-side-band`, `page-edge-visual` e `page-covering-visual`; `primitive-extent` resta escluso perché non produce `RegionCandidate`. Il minimo è un producer, non due: stessa corrente, stessa candidate e self-relation restano casi validi dei contratti consolidati.
+
+L'output effimero conterrà concettualmente `diagnostic_kind`, `page_id`, `page_index`, `source_capture_id`, le producer key selezionate in ordine deterministico, le correnti nell'ordine canonico della collezione, provenance e `generation_id`, candidate nell'ordine conservato dalla `PageAnalysis` e, per ciascuna candidate, il riferimento piatto a cinque token, bbox, kind e primitive ID. Non conterrà `schema_version` e non costituirà serializer, store o formato ufficiale di persistenza.
+
+### Secondo micro-step pianificato — misura diagnostica di coppia
+
+Il secondo micro-step resta non autorizzato. Riceverà due riferimenti effimeri via JSON CLI: ogni JSON sarà un oggetto con esattamente i cinque campi del riferimento, senza campi mancanti o aggiuntivi, e sarà soltanto sintassi di input diagnostica, non schema persistente. I riferimenti determineranno le correnti necessarie: senza ripassare l'intero producer set dell'inventario, verranno eseguite soltanto le correnti distinte richieste, ciascuna con il `generation_id` del riferimento; producer version e configurazione dovranno coincidere con quelle realmente prodotte. Entrambi i riferimenti saranno risolti nello stesso binding e verrà misurata esclusivamente la coppia richiesta. Due riferimenti della stessa corrente eseguiranno il producer una sola volta; generazioni distinte dello stesso producer costruiranno due correnti distinte. Un riferimento con `producer_name` non riconducibile a `singleton-side-band`, `local-fragment-side-band`, `page-edge-visual` o `page-covering-visual` sarà rifiutato; non è previsto autodiscovery né fallback verso altri producer. La posizione canonica non sarà mai identità.
+
+Il riuso fra i due passaggi resta valido soltanto finché PDF e pagina restano gli stessi, il backend conserva la stessa produzione di primitive, le candidate continuano a essere prodotte e i token trovano ancora corrispondenza. Non è introdotta attestazione storica; il cross-binding aliasing della Milestone 15 resta intenzionale.
+
+Restano fuori scope autodiscovery o registry generale dei producer; modifiche ai producer; scelta automatica della candidate, prima candidate o posizione canonica; enumerazione di coppie; matching, equivalenza, conflitto o deduplicazione; selezione, score, confidence o ranking; Resolution; nuove metriche geometriche; schema persistente, serializer ufficiale, store o manifest; consumo di artifact diagnostici salvati; modifiche a modelli o schemi; pipeline legacy, IR, Markdown ed EPUB.
