@@ -239,9 +239,7 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–15 sono completate. La milestone corrente è:
-
-> **Milestone 16 — misure geometriche page-local fra due candidate co-riferite**
+Le Milestone 1–16 sono completate. Nessuna nuova milestone è aperta o autorizzata.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti restano in shadow mode.
 
@@ -562,13 +560,15 @@ La revisione indipendente ha dato verdetto **BASELINE ARCHITETTURALE ACCETTABILE
 
 Restano fuori scope candidate↔candidate, equivalenza, conflitto, merge, selezione, deduplicazione, score/confidence/ranking, coverage/ownership, Resolution, modelli/schemi, producer, consumer, diagnostica, filesystem, manifest, workspace, CLI, persistenza, pipeline legacy, IR, Markdown ed EPUB. La chiusura non autorizza nuovi file, codice, test o una milestone successiva.
 
-### Milestone 16 — misure geometriche page-local fra due candidate co-riferite
+### Milestone 16 — misure geometriche page-local fra due candidate co-riferite — completata
 
-La milestone osserva soltanto la relazione geometrica fra due candidate esplicitamente scelte e risolte nello stesso `BoundCoReferencedPageAnalyses`; non introduce equivalenza, matching, decisione o enumerazione. Il solo scope futuro pianificato, non ancora autorizzato, è `page_analysis_co_reference_candidate_pair_measurements.py` con `tests/test_page_analysis_co_reference_candidate_pair_measurements.py`.
+L'apertura documentale è `e20e1b2`; il primo e unico micro-step implementato è `89dfb8e` — `Add co-referenced page candidate pair measurements`, in `page_analysis_co_reference_candidate_pair_measurements.py` e `tests/test_page_analysis_co_reference_candidate_pair_measurements.py`. Baseline verificata: 10 test mirati OK, 1084 test complessivi OK e 7 skipped; Ruff verde; BasedPyright 0 errori, 0 warning, 0 note; `git diff --check` verde.
 
-I nomi ratificati sono `CoReferencedPageCandidatePairMeasurements` e `measure_co_referenced_page_candidate_pair(...)`, con riferimenti first/second, bbox first/second, gap e overlap sugli assi, e delta `x0`, `y0`, `x1`, `y1`. Entrambi i riferimenti saranno risolti nello stesso binding tramite il resolver della Milestone 15; le bbox saranno usate senza clipping o ricostruzione. Gap e overlap sono simmetrici allo scambio degli operandi, i delta cambiano segno; first/second non esprime priorità o ranking. Il risultato resterà contestuale al binding, senza conservarlo o aggiungere un campo unit.
+`CoReferencedPageCandidatePairMeasurements` è un valore pubblico, puro, non versionato, `frozen=True`, `slots=True`, con due riferimenti, due bbox, quattro gap/overlap e quattro delta. `measure_co_referenced_page_candidate_pair(...)` risolve entrambi i riferimenti nello stesso `BoundCoReferencedPageAnalyses`, conserva riferimenti e bbox per identità e non applica clipping, normalizzazione, ricostruzione o fallback. Gap e overlap sono simmetrici, i delta (seconda coordinata meno la prima) cambiano segno allo scambio; first/second non esprime priorità. Le misure usano l’unità della `PageGeometry`; il risultato non conserva unit o binding e resta contestuale al binding usato. Costruzione diretta e funzione contestuale restano rispettivamente validazione della forma e percorso canonico.
 
-Saranno ammessi self-relation, correnti differenti o uguali, riferimenti diretti risolvibili, candidate ID/bbox/kind uguali e primitive vuote, disgiunte o condivise. La costruzione diretta controllerà la forma ma non proverà la derivazione dal binding; la funzione contestuale sarà il percorso canonico. Restano fuori scope ratio, IoU, aree, distanze euclidee, centri, distanze pagina, booleane geometriche, tolleranze, enumerazione/generazione di coppie, diagnostica, consumer, persistenza, relazioni document-local/cross-page, equivalenza, matching, conflitto, deduplicazione, selezione, score/confidence/ranking e Resolution, oltre alla promozione di helper geometrici privati. Questa apertura non autorizza la creazione dei file futuri, codice, test, diagnostica o un secondo micro-step.
+Sono ammessi stessa corrente o correnti differenti, self-relation, riferimenti identici o logicamente uguali, candidate e ID coincidenti fra correnti, riferimenti diretti risolvibili, primitive vuote/disgiunte/condivise e cross-binding aliasing della Milestone 15. `NormalizedPrimitivePage` impone attualmente `top_left_y_down`; `x0`, `y0`, `x1`, `y1` restano nomi neutrali senza semantica top/bottom e non sono dichiarati binding validi `bottom_left_y_up`.
+
+La revisione indipendente ha dato verdetto **BASELINE ARCHITETTURALE ACCETTABILE**, senza criticità bloccanti, correzioni funzionali richieste, scope creep o coupling improprio. Non esiste una giustificazione concreta per un secondo micro-step. Restano fuori scope equivalenza, matching, conflitto, deduplicazione, selezione, score/confidence/ranking, Resolution, enumerazione, area/unione/IoU/ratio, centri e distanze, booleane e tolleranze geometriche, primitive condivise e relativi dati, diagnostica, consumer, producer, modelli/schemi, serializer/store/filesystem/persistenza, relazioni document-local/cross-page e promozione di helper geometrici privati. La chiusura non apre né nomina una milestone successiva.
 
 ## Migrazione e shadow mode
 
