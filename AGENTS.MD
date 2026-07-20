@@ -239,7 +239,9 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–17 sono completate. Nessuna nuova milestone è aperta o autorizzata.
+Le Milestone 1–17 sono completate. La milestone corrente è:
+
+> **Milestone 18 — misure page-local degli insiemi di primitive referenziate da candidate co-riferite**
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti restano in shadow mode.
 
@@ -577,6 +579,27 @@ La milestone è completata da `2f80335` (inventario) ed `e817084` (misura di cop
 I due adapter read-only, senza nuovi modelli o contratti di dominio, sono `dump_co_referenced_page_candidate_inventory(...)` e `dump_co_referenced_page_candidate_pair_measurements(...)`, con stage `co-referenced-candidate-inventory` e `co-referenced-candidate-pair-measurements`. L'inventario usa `--candidate-producer` e la lista chiusa `singleton-side-band`, `local-fragment-side-band`, `page-edge-visual`, `page-covering-visual`; la misura usa due riferimenti JSON rigorosamente validati tramite `--first-candidate-reference` e `--second-candidate-reference`, esegue solo le correnti implicate, verifica esattamente producer/version/configuration/generation e delega binding, risoluzione e geometria alle API pubbliche delle Milestone 14–16. I dump restano JSON-compatible, effimeri e senza `schema_version`; i riferimenti inclusi rendono il risultato auditabile.
 
 Restano fuori scope persistenza o contratti diagnostici versionati, serializer/store/filesystem/manifest/workspace, autodiscovery o producer fuori lista chiusa, `primitive-extent` come operando candidate, selezione o enumerazione automatica, matching/equivalenza/conflitto/deduplicazione, merge/scelta/preferenza/ranking/score/confidence, Resolution, nuove metriche, modifiche a modelli/schemi/producer/consumer e pipeline legacy, IR, Markdown ed EPUB. La chiusura non autorizza nuovi file, codice, test o una milestone successiva.
+
+### Milestone 18 — misure page-local degli insiemi di primitive referenziate da candidate co-riferite
+
+La milestone è aperta esclusivamente a livello documentale dalla baseline `0328d9f`; la baseline funzionale resta `e817084`, con 1102 test OK e 7 skipped, Ruff, BasedPyright e `git diff --check` verdi. Nessun codice o test funzionale è ancora autorizzato.
+
+Il problema ratificato è la mancanza di un contratto pubblico uniforme per descrivere la relazione fra le tuple `primitive_ids` di due candidate esplicitamente riferite nello stesso `BoundCoReferencedPageAnalyses`. I dati sono già derivabili tramite il resolver pubblico, ma la Milestone 16 misura esclusivamente le bbox e non distingue primitive vuote, disgiunte, condivise o incluse.
+
+Il contratto previsto è `CoReferencedPageCandidatePrimitiveSetMeasurements`, prodotto da `measure_co_referenced_page_candidate_primitive_sets(...)`. Conterrà i due riferimenti, le due tuple originarie e le tuple ordinate `shared_primitive_ids`, `first_only_primitive_ids` e `second_only_primitive_ids`.
+
+Le tuple derivate sono sottosequenze filtrate, non blocchi concatenabili. `shared_primitive_ids` e `first_only_primitive_ids` seguono l'ordine della prima candidate; `second_only_primitive_ids` segue l'ordine della seconda. First e second sono operandi, non priorità. `only` esprime esclusivamente presenza relativa nella coppia e non ownership, esclusività editoriale o assenza da terze candidate.
+
+La factory dovrà risolvere entrambi i riferimenti nello stesso binding, conservare per identità riferimenti e tuple originarie e non riesaminare le primitive della pagina. La costruzione diretta dovrà validare la coerenza interna esatta delle sottosequenze, ma non attestare l'origine da uno specifico binding.
+
+Il solo micro-step previsto potrà coinvolgere, dopo autorizzazione separata:
+
+```text
+page_analysis_co_reference_candidate_primitive_set_measurements.py
+tests/test_page_analysis_co_reference_candidate_primitive_set_measurements.py
+```
+
+Restano fuori scope modifiche a contratti o schemi esistenti; diagnostica e CLI; producer; enumerazione o selezione; conteggi e booleani derivati; ratio o coefficienti; famiglie primitive; equivalenza, matching, conflitto, deduplicazione, merge, preferenza, ranking, score, confidence, ownership, coverage o Resolution; binding document-local; persistenza; pipeline legacy, IR, Markdown ed EPUB.
 
 ## Migrazione e shadow mode
 

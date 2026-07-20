@@ -8,7 +8,9 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–17 sono completate. Nessuna nuova milestone è aperta o autorizzata.
+Le Milestone 1–17 sono completate. La milestone corrente è:
+
+> **Milestone 18 — misure page-local degli insiemi di primitive referenziate da candidate co-riferite**
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli. I nuovi contratti lavorano in shadow mode e non producono ancora decisioni editoriali, IR o output finale.
 
@@ -220,7 +222,7 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-Prima di qualunque nuova milestone serve una nuova decisione architetturale esplicita in Chat A. Non sono autorizzati nuovi file, codice, test o comportamento. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
+Il prossimo passaggio è esclusivamente la revisione e il commit del diff documentale di apertura della Milestone 18. L'apertura non autorizza ancora codice o test funzionali: dopo il commit documentale sarà preparato separatamente il primo e unico micro-step previsto. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
 
 ## Ultima baseline funzionale verificata
 
@@ -668,3 +670,66 @@ Smoke reale: su `/home/an4k4pe/Documenti/ManReader/DB.pdf`, pagina CLI 28 (`page
 La milestone completa il primo flusso diagnostico page-local in due passaggi: inventario delle candidate co-riferite osservabili e misura geometrica di una coppia esplicita scelta dal chiamante. Il flusso resta diagnostico, read-only, effimero e in shadow mode.
 
 Restano fuori scope nuovi contratti pubblici persistenti o `schema_version` diagnostico; serializer, store, filesystem persistente, manifest o workspace; autodiscovery o registry generale; producer fuori dalla lista chiusa; `primitive-extent` come operando candidate; selezione automatica o "prima candidate" semantica; enumerazione di coppie; matching, equivalenza, conflitto, deduplicazione, merge, scelta, preferenza, ranking, score, confidence o Resolution; nuove metriche geometriche; modifiche a modelli, schemi, producer o consumer; pipeline legacy, IR, Markdown ed EPUB.
+
+## Milestone 18 — misure page-local degli insiemi di primitive referenziate da candidate co-riferite
+
+L'apertura documentale parte da `0328d9f` — `Close milestone 17 co-referenced page candidate diagnostics`; la baseline funzionale resta `e817084` — `Add co-referenced page candidate pair diagnostics`: 79 test mirati OK, 1102 test complessivi OK e 7 skipped, Ruff verde, BasedPyright 0 errori/0 warning/0 note e `git diff --check` verde. Pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti e le diagnostiche restano in shadow mode e non è introdotta Resolution.
+
+Le Milestone 14–17 consentono di validare più correnti contro la stessa `NormalizedPrimitivePage`, riferire due candidate esplicite, misurarne la geometria e usare il flusso su una pagina reale. I `primitive_ids` delle candidate sono già accessibili tramite il resolver pubblico, ma manca un contratto uniforme che rappresenti la loro relazione come insiemi ordinati. La misura geometrica della Milestone 16 usa esclusivamente le bbox e tratta allo stesso modo primitive vuote, disgiunte o condivise quando la geometria non cambia.
+
+La revisione architetturale indipendente ha dato verdetto **PROBLEMA E PROPOSTA RATIFICABILI**. Il contratto resta separato dalla geometria e descrive esclusivamente appartenenza relativa alla coppia osservata, senza equivalenza, conflitto, preferenza, ownership o decisione.
+
+Contratto ratificato:
+
+```python
+CoReferencedPageCandidatePrimitiveSetMeasurements
+
+measure_co_referenced_page_candidate_primitive_sets(
+    bound_co_referenced_page_analyses,
+    *,
+    first_candidate_reference,
+    second_candidate_reference,
+)
+```
+
+Il valore è pubblico, puro, non versionato, `frozen=True`, `slots=True`, con esattamente, in questo ordine:
+
+```text
+first_candidate_reference
+second_candidate_reference
+first_candidate_primitive_ids
+second_candidate_primitive_ids
+shared_primitive_ids
+first_only_primitive_ids
+second_only_primitive_ids
+```
+
+La factory riceverà esclusivamente un `BoundCoReferencedPageAnalyses`, risolverà entrambi i riferimenti mediante il resolver pubblico della Milestone 15, conserverà per identità i riferimenti ricevuti e le tuple `primitive_ids` delle candidate risolte e produrrà le tre tuple derivate senza riesaminare le primitive della pagina, applicare fallback, ordinamenti lessicografici o normalizzazioni.
+
+Le tuple derivate sono definite come sottosequenze filtrate:
+
+```text
+shared = primitive ID della prima candidate presenti anche nella seconda,
+         nell'ordine della prima candidate
+
+first_only = primitive ID della prima candidate assenti dalla seconda,
+             nell'ordine della prima candidate
+
+second_only = primitive ID della seconda candidate assenti dalla prima,
+              nell'ordine della seconda candidate
+```
+
+L'ordine è intenzionalmente operativo e asimmetrico: invertendo first e second può cambiare l'ordine di `shared_primitive_ids`, senza esprimere priorità, preferenza o ranking. `first_only` e `second_only` significano soltanto presenza in una tuple e assenza nell'altra all'interno della coppia osservata; non implicano ownership, esclusività rispetto a terze candidate o assegnazione editoriale.
+
+La costruzione diretta validerà tipi, tuple, stringhe non vuote, assenza di duplicati e uguaglianza esatta delle tre tuple derivate con le sottosequenze filtrate degli operandi. Non attesterà che il valore derivi da uno specifico binding. Tuple vuote, candidate disgiunte, insiemi identici con ordine uguale o differente, subset proprio, overlap parziale, self-relation, stessa candidate, stesso oggetto condiviso fra correnti, collisioni di candidate ID fra correnti e riferimenti logicamente uguali ma distinti restano casi validi quando risolvibili nel binding.
+
+Lo scope pianificato, non ancora autorizzato, comprende esclusivamente:
+
+```text
+page_analysis_co_reference_candidate_primitive_set_measurements.py
+tests/test_page_analysis_co_reference_candidate_primitive_set_measurements.py
+```
+
+È previsto un solo micro-step. Restano fuori scope diagnostica e CLI; modifiche ai contratti delle Milestone 14–17; modifiche a `RegionCandidate`, `PageAnalysis`, `DocumentAnalysis` o agli schemi; enumerazione o selezione di candidate o coppie; famiglie primitive; conteggi, booleani derivati, ratio, Jaccard o altre metriche; equivalenza, matching, conflitto, deduplicazione, merge, scelta, preferenza, ranking, score, confidence, ownership, coverage o Resolution; binding document-local delle correnti; persistenza, serializer, store, filesystem, manifest o workspace; modifiche ai producer, alla pipeline legacy, a IR, Markdown o EPUB.
+
+L'apertura non autorizza ancora il micro-step implementativo. Dopo la revisione e il commit del diff documentale sarà preparato separatamente il task manuale per i due soli file previsti.
