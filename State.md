@@ -8,9 +8,7 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–17 sono completate. La milestone corrente è:
-
-> **Milestone 18 — misure page-local degli insiemi di primitive referenziate da candidate co-riferite**
+Le Milestone 1–18 sono completate. Nessuna nuova milestone è aperta o autorizzata.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli. I nuovi contratti lavorano in shadow mode e non producono ancora decisioni editoriali, IR o output finale.
 
@@ -222,11 +220,11 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-Il prossimo passaggio è esclusivamente la revisione e il commit del diff documentale di apertura della Milestone 18. L'apertura non autorizza ancora codice o test funzionali: dopo il commit documentale sarà preparato separatamente il primo e unico micro-step previsto. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
+Prima di qualunque nuova milestone serve una nuova decisione architetturale esplicita in Chat A. Non sono autorizzati nuovi file, codice, test o comportamento. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
 
 ## Ultima baseline funzionale verificata
 
-Commit `e817084` — `Add co-referenced page candidate pair diagnostics`: 79 test mirati OK, 1102 test complessivi OK e 7 skipped; Ruff verde; BasedPyright: 0 errori, 0 warning, 0 note; `git diff --check` verde.
+Commit `89228cd` — `Add co-referenced page candidate primitive set measurements`: 10 test mirati OK, 1112 test complessivi OK e 7 skipped; Ruff verde; BasedPyright: 0 errori, 0 warning, 0 note; `git diff --check` verde.
 
 ## Milestone 7 — contesto strutturale page-level — completata
 
@@ -671,7 +669,7 @@ La milestone completa il primo flusso diagnostico page-local in due passaggi: in
 
 Restano fuori scope nuovi contratti pubblici persistenti o `schema_version` diagnostico; serializer, store, filesystem persistente, manifest o workspace; autodiscovery o registry generale; producer fuori dalla lista chiusa; `primitive-extent` come operando candidate; selezione automatica o "prima candidate" semantica; enumerazione di coppie; matching, equivalenza, conflitto, deduplicazione, merge, scelta, preferenza, ranking, score, confidence o Resolution; nuove metriche geometriche; modifiche a modelli, schemi, producer o consumer; pipeline legacy, IR, Markdown ed EPUB.
 
-## Milestone 18 — misure page-local degli insiemi di primitive referenziate da candidate co-riferite
+## Milestone 18 — misure page-local degli insiemi di primitive referenziate da candidate co-riferite — completata
 
 L'apertura documentale parte da `0328d9f` — `Close milestone 17 co-referenced page candidate diagnostics`; la baseline funzionale resta `e817084` — `Add co-referenced page candidate pair diagnostics`: 79 test mirati OK, 1102 test complessivi OK e 7 skipped, Ruff verde, BasedPyright 0 errori/0 warning/0 note e `git diff --check` verde. Pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti e le diagnostiche restano in shadow mode e non è introdotta Resolution.
 
@@ -733,3 +731,5 @@ tests/test_page_analysis_co_reference_candidate_primitive_set_measurements.py
 È previsto un solo micro-step. Restano fuori scope diagnostica e CLI; modifiche ai contratti delle Milestone 14–17; modifiche a `RegionCandidate`, `PageAnalysis`, `DocumentAnalysis` o agli schemi; enumerazione o selezione di candidate o coppie; famiglie primitive; conteggi, booleani derivati, ratio, Jaccard o altre metriche; equivalenza, matching, conflitto, deduplicazione, merge, scelta, preferenza, ranking, score, confidence, ownership, coverage o Resolution; binding document-local delle correnti; persistenza, serializer, store, filesystem, manifest o workspace; modifiche ai producer, alla pipeline legacy, a IR, Markdown o EPUB.
 
 L'apertura non autorizza ancora il micro-step implementativo. Dopo la revisione e il commit del diff documentale sarà preparato separatamente il task manuale per i due soli file previsti.
+
+Il micro-step è stato implementato e verificato nel commit `89228cd` — `Add co-referenced page candidate primitive set measurements`. Il contratto e la factory rispettano esattamente la specifica ratificata sopra. La revisione indipendente ha dato verdetto **BASELINE ARCHITETTURALE ACCETTABILE**, senza criticità bloccanti o correzioni richieste. Restano fuori scope tutti i punti già elencati in apertura. Alla chiusura della Milestone 18 non è aperta né autorizzata alcuna milestone successiva.
