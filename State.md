@@ -8,7 +8,9 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–18 sono completate. Nessuna nuova milestone è aperta o autorizzata.
+Le Milestone 1–18 sono completate. La milestone corrente è:
+
+> **Milestone 19 — diagnostica page-local delle relazioni fra insiemi di primitive di candidate co-riferite (aperta)**
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli. I nuovi contratti lavorano in shadow mode e non producono ancora decisioni editoriali, IR o output finale.
 
@@ -220,7 +222,7 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-Prima di qualunque nuova milestone serve una nuova decisione architetturale esplicita in Chat A. Non sono autorizzati nuovi file, codice, test o comportamento. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
+Il prossimo passaggio è esclusivamente la revisione e il commit del diff documentale di apertura della Milestone 19. L'apertura non autorizza ancora codice o test funzionali: dopo il commit documentale sarà preparato separatamente il primo e unico micro-step previsto, `dump_co_referenced_page_candidate_primitive_set_measurements(...)` e lo stage CLI `co-referenced-candidate-primitive-set-measurements`. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
 
 ## Ultima baseline funzionale verificata
 
@@ -733,3 +735,28 @@ tests/test_page_analysis_co_reference_candidate_primitive_set_measurements.py
 L'apertura non autorizza ancora il micro-step implementativo. Dopo la revisione e il commit del diff documentale sarà preparato separatamente il task manuale per i due soli file previsti.
 
 Il micro-step è stato implementato e verificato nel commit `89228cd` — `Add co-referenced page candidate primitive set measurements`. Il contratto e la factory rispettano esattamente la specifica ratificata sopra. La revisione indipendente ha dato verdetto **BASELINE ARCHITETTURALE ACCETTABILE**, senza criticità bloccanti o correzioni richieste. Restano fuori scope tutti i punti già elencati in apertura. Alla chiusura della Milestone 18 non è aperta né autorizzata alcuna milestone successiva.
+
+## Milestone 19 — diagnostica page-local delle relazioni fra insiemi di primitive di candidate co-riferite (aperta)
+
+M18 ha chiuso il contratto puro `CoReferencedPageCandidatePrimitiveSetMeasurements`
+e la factory `measure_co_referenced_page_candidate_primitive_sets(...)`,
+escludendo esplicitamente "diagnostica e CLI" dal proprio scope. M17 ha già
+stabilito il pattern per esporre in JSON, read-only ed effimero, una misura
+di coppia risolta da due riferimenti candidate espliciti
+(`dump_co_referenced_page_candidate_pair_measurements`, commit e817084).
+Manca l'equivalente per il contratto insiemistico di M18.
+
+Obiettivo unico: aggiungere `dump_co_referenced_page_candidate_primitive_set_measurements(...)`
+e lo stage CLI `co-referenced-candidate-primitive-set-measurements`, stesso
+pattern di M17, senza toccare contratto o validazione dei riferimenti.
+
+Revisione architetturale indipendente: verdetto RATIFICABILE (Chat B),
+condizionato alla fissazione dei nomi letterali (stage, funzione,
+diagnostic_kind) e della formulazione della mutua esclusività CLI — entrambe
+risolte in apertura, vedi sotto.
+
+Restano fuori scope: nuove misure o campi derivati; persistenza o
+schema_version; selezione automatica di candidate o coppie; equivalenza,
+conflitto, score, ranking, Resolution; modifiche al resolver di M15 o alla
+factory di M18; modifiche ai contratti e producer delle Milestone 13-18;
+pipeline legacy, IR, Markdown, EPUB.

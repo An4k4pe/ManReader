@@ -241,7 +241,9 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–18 sono completate. Nessuna nuova milestone è aperta o autorizzata.
+Le Milestone 1–18 sono completate. La milestone corrente è:
+
+> **Milestone 19 — diagnostica page-local delle relazioni fra insiemi di primitive di candidate co-riferite (aperta)**
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti restano in shadow mode.
 
@@ -593,6 +595,10 @@ La costruzione diretta valida tipi, tupla, stringhe non vuote, assenza di duplic
 La revisione indipendente ha dato verdetto **BASELINE ARCHITETTURALE ACCETTABILE**, senza criticità bloccanti, correzioni funzionali richieste, scope creep o coupling improprio. Non esiste una giustificazione concreta per un secondo micro-step.
 
 Restano fuori scope modifiche a contratti o schemi esistenti; diagnostica e CLI; producer; enumerazione o selezione; conteggi e booleani derivati; ratio o coefficienti; famiglie primitive; equivalenza, matching, conflitto, deduplicazione, merge, preferenza, ranking, score, confidence, ownership, coverage o Resolution; binding document-local; persistenza; pipeline legacy, IR, Markdown ed EPUB. La chiusura non apre né nomina una milestone successiva.
+
+### Milestone 19 — diagnostica page-local delle relazioni fra insiemi di primitive di candidate co-riferite (aperta)
+
+Apertura documentale della nuova milestone: obiettivo unico aggiungere `dump_co_referenced_page_candidate_primitive_set_measurements(...)` e lo stage CLI `co-referenced-candidate-primitive-set-measurements`, stesso pattern read-only ed effimero della Milestone 17, senza toccare il contratto o la validazione dei riferimenti della Milestone 18. Revisione architetturale indipendente: verdetto RATIFICABILE (Chat B). Nessun codice o test funzionale è ancora autorizzato; dettagli completi in `State.md`.
 
 ## Migrazione e shadow mode
 
