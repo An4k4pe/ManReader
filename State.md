@@ -8,9 +8,7 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–18 sono completate. La milestone corrente è:
-
-> **Milestone 19 — diagnostica page-local delle relazioni fra insiemi di primitive di candidate co-riferite (aperta)**
+Le Milestone 1–19 sono completate. Nessuna nuova milestone è aperta o autorizzata.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli. I nuovi contratti lavorano in shadow mode e non producono ancora decisioni editoriali, IR o output finale.
 
@@ -222,11 +220,11 @@ Non sono autorizzati:
 
 ## Prossimo passo operativo
 
-Il prossimo passaggio è esclusivamente la revisione e il commit del diff documentale di apertura della Milestone 19. L'apertura non autorizza ancora codice o test funzionali: dopo il commit documentale sarà preparato separatamente il primo e unico micro-step previsto, `dump_co_referenced_page_candidate_primitive_set_measurements(...)` e lo stage CLI `co-referenced-candidate-primitive-set-measurements`. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
+Prima di qualunque nuova milestone serve una nuova decisione architetturale esplicita in Chat A. Non sono autorizzati nuovi file, codice, test o comportamento. I debiti del capture runner restano separati, quelli dell'audit vanno valutati separatamente e JSON/PNG diagnostici reali non vanno committati.
 
 ## Ultima baseline funzionale verificata
 
-Commit `89228cd` — `Add co-referenced page candidate primitive set measurements`: 10 test mirati OK, 1112 test complessivi OK e 7 skipped; Ruff verde; BasedPyright: 0 errori, 0 warning, 0 note; `git diff --check` verde.
+Commit `5e2c91d` — `Diagnosis local page`: 87 test mirati OK, 1120 test complessivi OK e 7 skipped; Ruff verde; BasedPyright: 0 errori, 0 warning, 0 note; `git diff --check` verde.
 
 ## Milestone 7 — contesto strutturale page-level — completata
 
@@ -736,7 +734,7 @@ L'apertura non autorizza ancora il micro-step implementativo. Dopo la revisione 
 
 Il micro-step è stato implementato e verificato nel commit `89228cd` — `Add co-referenced page candidate primitive set measurements`. Il contratto e la factory rispettano esattamente la specifica ratificata sopra. La revisione indipendente ha dato verdetto **BASELINE ARCHITETTURALE ACCETTABILE**, senza criticità bloccanti o correzioni richieste. Restano fuori scope tutti i punti già elencati in apertura. Alla chiusura della Milestone 18 non è aperta né autorizzata alcuna milestone successiva.
 
-## Milestone 19 — diagnostica page-local delle relazioni fra insiemi di primitive di candidate co-riferite (aperta)
+## Milestone 19 — diagnostica page-local delle relazioni fra insiemi di primitive di candidate co-riferite — completata
 
 M18 ha chiuso il contratto puro `CoReferencedPageCandidatePrimitiveSetMeasurements`
 e la factory `measure_co_referenced_page_candidate_primitive_sets(...)`,
@@ -760,3 +758,52 @@ schema_version; selezione automatica di candidate o coppie; equivalenza,
 conflitto, score, ranking, Resolution; modifiche al resolver di M15 o alla
 factory di M18; modifiche ai contratti e producer delle Milestone 13-18;
 pipeline legacy, IR, Markdown, EPUB.
+
+Il primo e unico micro-step (`5e2c91d` — `Diagnosis local page`)
+introduce `dump_co_referenced_page_candidate_primitive_set_measurements(...)`
+in `page_analysis_co_reference_candidate_diagnostics.py` e lo stage CLI
+`co-referenced-candidate-primitive-set-measurements` in
+`pymupdf_capture_dump.py`, riusando esattamente il pattern già ratificato
+in Milestone 17 (`dump_co_referenced_page_candidate_pair_measurements`).
+
+Scope autorizzato, elencato esplicitamente (integrazione retroattiva
+rispetto all'apertura):
+
+```text
+page_analysis_co_reference_candidate_diagnostics.py
+pymupdf_capture_dump.py
+tests/test_page_analysis_co_reference_candidate_diagnostics.py
+tests/test_pymupdf_capture_dump.py
+```
+
+Il contratto e la factory di Milestone 18, il resolver di Milestone 15 e
+`_parse_candidate_reference_json` non sono stati modificati.
+`_build_required_analyses` e `_reference_to_dict` sono riusati senza
+duplicazione né promozione a pubblico. La mutua esclusività CLI delle
+opzioni `--first-candidate-reference`/`--second-candidate-reference` è
+generalizzata su un insieme chiuso esplicito dei due stage che le
+condividono (`co-referenced-candidate-pair-measurements` e
+`co-referenced-candidate-primitive-set-measurements`), non allentata
+genericamente; docstring di modulo e stringhe di help aggiornati di
+conseguenza per restare accurati sui due stage supportati.
+
+Test aggiunti verificano, oltre alla struttura del payload: pass-through
+delle proprietà già garantite da Milestone 18 (ordine asimmetrico di
+`shared_primitive_ids`, self-relation, collisioni di `candidate_id` fra
+correnti); esecuzione delle sole correnti implicate con `wraps` sulla
+factory pubblica reale; rifiuto di riferimenti non risolvibili senza
+fallback; a livello CLI, accettazione delle opzioni condivise da entrambi
+gli stage e rifiuto per uno stage non correlato.
+
+Revisione architetturale indipendente (Chat B): verdetto RATIFICABILE,
+condizionato alla fissazione dei nomi letterali (stage, funzione,
+`diagnostic_kind`) e della formulazione della mutua esclusività CLI —
+entrambe risolte come sopra.
+
+Baseline verificata: Ruff verde su tutti i file coinvolti; BasedPyright
+0 errori/0 warning/0 note sui due file sorgente; 87 test mirati OK; suite
+completa 1120 test OK e 7 skipped; `git diff --check` verde.
+
+Non esiste una giustificazione concreta per un secondo micro-step. Restano
+fuori scope tutti i punti già elencati in apertura. Alla chiusura della
+Milestone 19 non è aperta né autorizzata alcuna milestone successiva.

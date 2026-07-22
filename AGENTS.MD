@@ -241,9 +241,7 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–18 sono completate. La milestone corrente è:
-
-> **Milestone 19 — diagnostica page-local delle relazioni fra insiemi di primitive di candidate co-riferite (aperta)**
+Le Milestone 1–19 sono completate. Nessuna nuova milestone è aperta o autorizzata.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti restano in shadow mode.
 
@@ -596,9 +594,13 @@ La revisione indipendente ha dato verdetto **BASELINE ARCHITETTURALE ACCETTABILE
 
 Restano fuori scope modifiche a contratti o schemi esistenti; diagnostica e CLI; producer; enumerazione o selezione; conteggi e booleani derivati; ratio o coefficienti; famiglie primitive; equivalenza, matching, conflitto, deduplicazione, merge, preferenza, ranking, score, confidence, ownership, coverage o Resolution; binding document-local; persistenza; pipeline legacy, IR, Markdown ed EPUB. La chiusura non apre né nomina una milestone successiva.
 
-### Milestone 19 — diagnostica page-local delle relazioni fra insiemi di primitive di candidate co-riferite (aperta)
+### Milestone 19 — diagnostica page-local delle relazioni fra insiemi di primitive di candidate co-riferite — completata
 
-Apertura documentale della nuova milestone: obiettivo unico aggiungere `dump_co_referenced_page_candidate_primitive_set_measurements(...)` e lo stage CLI `co-referenced-candidate-primitive-set-measurements`, stesso pattern read-only ed effimero della Milestone 17, senza toccare il contratto o la validazione dei riferimenti della Milestone 18. Revisione architetturale indipendente: verdetto RATIFICABILE (Chat B). Nessun codice o test funzionale è ancora autorizzato; dettagli completi in `State.md`.
+Il primo e unico micro-step (`5e2c91d` — `Diagnosis local page`) introduce `dump_co_referenced_page_candidate_primitive_set_measurements(...)` in `page_analysis_co_reference_candidate_diagnostics.py` e lo stage CLI `co-referenced-candidate-primitive-set-measurements` in `pymupdf_capture_dump.py`, riusando esattamente il pattern già ratificato in Milestone 17. Il contratto e la factory di Milestone 18, il resolver di Milestone 15 e `_parse_candidate_reference_json` restano invariati; `_build_required_analyses` e `_reference_to_dict` sono riusati senza duplicazione. La mutua esclusività CLI delle opzioni `--first-candidate-reference`/`--second-candidate-reference` è generalizzata su un insieme chiuso esplicito dei due stage che le condividono, non allentata genericamente.
+
+La revisione architetturale indipendente (Chat B) ha dato verdetto RATIFICABILE, condizionato alla fissazione dei nomi letterali (stage, funzione, `diagnostic_kind`) e della formulazione della mutua esclusività CLI, entrambe risolte in chiusura. Baseline verificata: Ruff verde, BasedPyright 0 errori/0 warning/0 note sui due file sorgente, 87 test mirati OK, suite completa 1120 test OK e 7 skipped, `git diff --check` verde. Dettagli completi in `State.md`.
+
+Restano fuori scope nuove misure o campi derivati; persistenza o `schema_version`; selezione automatica di candidate o coppie; equivalenza, conflitto, score, ranking, Resolution; modifiche al resolver di Milestone 15 o alla factory di Milestone 18; modifiche ai contratti e producer delle Milestone 13–18; pipeline legacy, IR, Markdown, EPUB. La chiusura non apre né nomina una milestone successiva.
 
 ## Migrazione e shadow mode
 
