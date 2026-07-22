@@ -12,6 +12,7 @@ from geometry_model import PageGeometry
 from page_analysis_co_reference_candidate_diagnostics import (
     dump_co_referenced_page_candidate_inventory,
     dump_co_referenced_page_candidate_pair_measurements,
+    dump_co_referenced_page_candidate_primitive_set_measurements,
 )
 from page_analysis_co_reference_candidate_reference import (
     CoReferencedPageCandidateReference,
@@ -581,6 +582,353 @@ class CoReferencedPageCandidateDiagnosticsTests(unittest.TestCase):
             )
         with self.assertRaisesRegex(ValueError, "first_candidate_reference"):
             dump_co_referenced_page_candidate_pair_measurements(
+                page,
+                first_candidate_reference=cast(CoReferencedPageCandidateReference, object()),
+                second_candidate_reference=singleton_reference,
+            )
+
+    def test_primitive_set_signature_and_payload_structure(self) -> None:
+        signature = inspect.signature(
+            dump_co_referenced_page_candidate_primitive_set_measurements
+        )
+        self.assertEqual(
+            tuple(signature.parameters),
+            (
+                "primitive_page",
+                "first_candidate_reference",
+                "second_candidate_reference",
+            ),
+        )
+        self.assertIs(
+            signature.parameters["first_candidate_reference"].kind,
+            inspect.Parameter.KEYWORD_ONLY,
+        )
+        self.assertIs(
+            signature.parameters["second_candidate_reference"].kind,
+            inspect.Parameter.KEYWORD_ONLY,
+        )
+
+        page = _page()
+        inventory = dump_co_referenced_page_candidate_inventory(
+            page,
+            candidate_producers=("singleton-side-band",),
+        )
+        first, second = _inventory_references(inventory)
+        result = dump_co_referenced_page_candidate_primitive_set_measurements(
+            page,
+            first_candidate_reference=first,
+            second_candidate_reference=second,
+        )
+
+        self.assertEqual(
+            set(result),
+            {
+                "diagnostic_kind",
+                "page_id",
+                "page_index",
+                "source_capture_id",
+                "first_candidate_reference",
+                "second_candidate_reference",
+                "first_candidate_primitive_ids",
+                "second_candidate_primitive_ids",
+                "shared_primitive_ids",
+                "first_only_primitive_ids",
+                "second_only_primitive_ids",
+            },
+        )
+        self.assertEqual(
+            result["diagnostic_kind"],
+            "co-referenced-candidate-primitive-set-measurements",
+        )
+        self.assertEqual(result["page_id"], page.page_id)
+        self.assertEqual(result["page_index"], page.page_index)
+        self.assertEqual(result["source_capture_id"], page.source_capture_id)
+        self.assertFalse(_contains_key(result, "schema_version"))
+        self.assertEqual(json.loads(json.dumps(result)), result)
+
+    def test_primitive_set_pass_through_with_asymmetric_order_and_self_relation(
+        self,
+    ) -> None:
+        page = _page()
+        candidate_a = RegionCandidate(
+            candidate_id="a",
+            page_id=page.page_id,
+            bbox=(0.0, 60.0, 20.0, 70.0),
+            proposed_structural_kind="layout.side_band",
+            primitive_ids=("left", "right", "edge"),
+        )
+        candidate_b = RegionCandidate(
+            candidate_id="b",
+            page_id=page.page_id,
+            bbox=(80.0, 80.0, 100.0, 90.0),
+            proposed_structural_kind="layout.page_edge_visual",
+            primitive_ids=("right", "covering"),
+        )
+        analysis_a = _analysis(
+            page,
+            producer_name="page_analysis.singleton_side_band",
+            generation_id="generation-a",
+            candidate=candidate_a,
+        )
+        analysis_b = _analysis(
+            page,
+            producer_name="page_analysis.page_edge_visual",
+            generation_id="generation-b",
+            candidate=candidate_b,
+        )
+        import page_analysis_co_reference_candidate_diagnostics as diagnostics
+
+        with patch.dict(
+            diagnostics._BUILDERS,
+            {
+                "singleton-side-band": lambda *_args, **_kwargs: analysis_a,
+                "page-edge-visual": lambda *_args, **_kwargs: analysis_b,
+            },
+            clear=False,
+        ):
+            reference_a = CoReferencedPageCandidateReference(
+                producer_name="page_analysis.singleton_side_band",
+                producer_version="0.1",
+                configuration_id="page_analysis.singleton_side_band-config",
+                generation_id="generation-a",
+                candidate_id="a",
+            )
+            reference_b = CoReferencedPageCandidateReference(
+                producer_name="page_analysis.page_edge_visual",
+                producer_version="0.1",
+                configuration_id="page_analysis.page_edge_visual-config",
+                generation_id="generation-b",
+                candidate_id="b",
+            )
+
+            forward = dump_co_referenced_page_candidate_primitive_set_measurements(
+                page,
+                first_candidate_reference=reference_a,
+                second_candidate_reference=reference_b,
+            )
+            backward = dump_co_referenced_page_candidate_primitive_set_measurements(
+                page,
+                first_candidate_reference=reference_b,
+                second_candidate_reference=reference_a,
+            )
+            self_relation = dump_co_referenced_page_candidate_primitive_set_measurements(
+                page,
+                first_candidate_reference=reference_a,
+                second_candidate_reference=reference_a,
+            )
+
+        self.assertEqual(forward["first_candidate_primitive_ids"], ["left", "right", "edge"])
+        self.assertEqual(forward["second_candidate_primitive_ids"], ["right", "covering"])
+        self.assertEqual(forward["shared_primitive_ids"], ["right"])
+        self.assertEqual(forward["first_only_primitive_ids"], ["left", "edge"])
+        self.assertEqual(forward["second_only_primitive_ids"], ["covering"])
+
+        self.assertEqual(backward["first_candidate_primitive_ids"], ["right", "covering"])
+        self.assertEqual(backward["second_candidate_primitive_ids"], ["left", "right", "edge"])
+        self.assertEqual(backward["shared_primitive_ids"], ["right"])
+        self.assertEqual(backward["first_only_primitive_ids"], ["covering"])
+        self.assertEqual(backward["second_only_primitive_ids"], ["left", "edge"])
+
+        self.assertEqual(self_relation["shared_primitive_ids"], ["left", "right", "edge"])
+        self.assertEqual(self_relation["first_only_primitive_ids"], [])
+        self.assertEqual(self_relation["second_only_primitive_ids"], [])
+
+    def test_primitive_set_cross_stream_candidate_id_collision(self) -> None:
+        page = _page()
+        candidate_singleton = RegionCandidate(
+            candidate_id="shared",
+            page_id=page.page_id,
+            bbox=(0.0, 60.0, 20.0, 70.0),
+            proposed_structural_kind="layout.side_band",
+            primitive_ids=("left", "right"),
+        )
+        candidate_local_fragment = RegionCandidate(
+            candidate_id="shared",
+            page_id=page.page_id,
+            bbox=(80.0, 80.0, 100.0, 90.0),
+            proposed_structural_kind="layout.side_band",
+            primitive_ids=("right", "edge"),
+        )
+        analysis_singleton = _analysis(
+            page,
+            producer_name="page_analysis.singleton_side_band",
+            generation_id="generation-singleton",
+            candidate=candidate_singleton,
+        )
+        analysis_local_fragment = _analysis(
+            page,
+            producer_name="page_analysis.local_fragment_side_band",
+            generation_id="generation-local-fragment",
+            candidate=candidate_local_fragment,
+        )
+        import page_analysis_co_reference_candidate_diagnostics as diagnostics
+
+        with patch.dict(
+            diagnostics._BUILDERS,
+            {
+                "singleton-side-band": lambda *_args, **_kwargs: analysis_singleton,
+                "local-fragment-side-band": lambda *_args, **_kwargs: analysis_local_fragment,
+            },
+            clear=False,
+        ):
+            reference_singleton = CoReferencedPageCandidateReference(
+                producer_name="page_analysis.singleton_side_band",
+                producer_version="0.1",
+                configuration_id="page_analysis.singleton_side_band-config",
+                generation_id="generation-singleton",
+                candidate_id="shared",
+            )
+            reference_local_fragment = CoReferencedPageCandidateReference(
+                producer_name="page_analysis.local_fragment_side_band",
+                producer_version="0.1",
+                configuration_id="page_analysis.local_fragment_side_band-config",
+                generation_id="generation-local-fragment",
+                candidate_id="shared",
+            )
+
+            result = dump_co_referenced_page_candidate_primitive_set_measurements(
+                page,
+                first_candidate_reference=reference_singleton,
+                second_candidate_reference=reference_local_fragment,
+            )
+
+        self.assertEqual(result["first_candidate_primitive_ids"], ["left", "right"])
+        self.assertEqual(result["second_candidate_primitive_ids"], ["right", "edge"])
+        self.assertEqual(result["shared_primitive_ids"], ["right"])
+        self.assertEqual(result["first_only_primitive_ids"], ["left"])
+        self.assertEqual(result["second_only_primitive_ids"], ["edge"])
+
+    def test_primitive_set_executes_only_required_streams_and_uses_public_measurement(
+        self,
+    ) -> None:
+        page = _page()
+        inventory = dump_co_referenced_page_candidate_inventory(
+            page,
+            candidate_producers=("singleton-side-band", "page-edge-visual"),
+        )
+        singleton_reference = _reference_for_producer(
+            inventory,
+            "page_analysis.singleton_side_band",
+        )
+        edge_reference = _reference_for_producer(
+            inventory,
+            "page_analysis.page_edge_visual",
+        )
+        import page_analysis_co_reference_candidate_diagnostics as diagnostics
+
+        original_builders = diagnostics._BUILDERS.copy()
+        calls: list[tuple[str, str]] = []
+
+        def tracked(name: str):
+            def build(
+                primitive_page: NormalizedPrimitivePage,
+                *,
+                generation_id: str,
+            ) -> PageAnalysis:
+                calls.append((name, generation_id))
+                return original_builders[name](
+                    primitive_page,
+                    generation_id=generation_id,
+                )
+
+            return build
+
+        with (
+            patch.dict(
+                diagnostics._BUILDERS,
+                {name: tracked(name) for name in original_builders},
+                clear=True,
+            ),
+            patch.object(
+                diagnostics,
+                "measure_co_referenced_page_candidate_primitive_sets",
+                wraps=diagnostics.measure_co_referenced_page_candidate_primitive_sets,
+            ) as measure,
+        ):
+            result = dump_co_referenced_page_candidate_primitive_set_measurements(
+                page,
+                first_candidate_reference=singleton_reference,
+                second_candidate_reference=edge_reference,
+            )
+
+        self.assertEqual(
+            {name for name, _generation_id in calls},
+            {"singleton-side-band", "page-edge-visual"},
+        )
+        self.assertEqual(len(calls), 2)
+        measure.assert_called_once()
+        self.assertEqual(
+            result["diagnostic_kind"],
+            "co-referenced-candidate-primitive-set-measurements",
+        )
+
+    def test_primitive_set_rejects_invalid_references_without_fallback(self) -> None:
+        page = _page()
+        inventory = dump_co_referenced_page_candidate_inventory(
+            page,
+            candidate_producers=("singleton-side-band", "local-fragment-side-band"),
+        )
+        singleton_reference = _reference_for_producer(
+            inventory,
+            "page_analysis.singleton_side_band",
+        )
+        local_reference = _reference_for_producer(
+            inventory,
+            "page_analysis.local_fragment_side_band",
+        )
+        invalid_references = (
+            (
+                CoReferencedPageCandidateReference(
+                    "unknown", "0.1", "config", "generation", "candidate"
+                ),
+                "producer_name",
+            ),
+            (
+                CoReferencedPageCandidateReference(
+                    singleton_reference.producer_name,
+                    "wrong",
+                    singleton_reference.configuration_id,
+                    singleton_reference.generation_id,
+                    singleton_reference.candidate_id,
+                ),
+                "producer_version",
+            ),
+            (
+                CoReferencedPageCandidateReference(
+                    singleton_reference.producer_name,
+                    singleton_reference.producer_version,
+                    "wrong",
+                    singleton_reference.generation_id,
+                    singleton_reference.candidate_id,
+                ),
+                "configuration_id",
+            ),
+            (
+                CoReferencedPageCandidateReference(
+                    local_reference.producer_name,
+                    local_reference.producer_version,
+                    local_reference.configuration_id,
+                    local_reference.generation_id,
+                    singleton_reference.candidate_id,
+                ),
+                "candidate_id",
+            ),
+        )
+        for invalid_reference, token in invalid_references:
+            with self.subTest(token=token), self.assertRaisesRegex(ValueError, token):
+                dump_co_referenced_page_candidate_primitive_set_measurements(
+                    page,
+                    first_candidate_reference=invalid_reference,
+                    second_candidate_reference=singleton_reference,
+                )
+        with self.assertRaisesRegex(ValueError, "primitive_page"):
+            dump_co_referenced_page_candidate_primitive_set_measurements(
+                cast(NormalizedPrimitivePage, object()),
+                first_candidate_reference=singleton_reference,
+                second_candidate_reference=singleton_reference,
+            )
+        with self.assertRaisesRegex(ValueError, "first_candidate_reference"):
+            dump_co_referenced_page_candidate_primitive_set_measurements(
                 page,
                 first_candidate_reference=cast(CoReferencedPageCandidateReference, object()),
                 second_candidate_reference=singleton_reference,

@@ -5,8 +5,9 @@ It opens one PDF page and can serialize the raw ``BackendPageCapture``,
 the derived ``NormalizedPrimitivePage``, a primitive-extent ``PageAnalysis``,
 or singleton/local-fragment side-band ``PageAnalysis`` values, page-covering
 visual and page-edge visual ``PageAnalysis`` values, explicit primitive-pair
-measurements, primitive-neighborhood measurements, or local-fragment side-band
-diagnostics, to stdout or to an explicitly requested file.
+measurements, primitive-neighborhood measurements, local-fragment side-band
+diagnostics, or explicit co-referenced candidate pair/primitive-set
+measurements, to stdout or to an explicitly requested file.
 
 The generated identifiers are diagnostic placeholders. They do not establish
 the canonical identity policy for future workspace artifacts.
@@ -35,6 +36,9 @@ from page_analysis_co_reference_candidate_diagnostics import (
 )
 from page_analysis_co_reference_candidate_diagnostics import (
     dump_co_referenced_page_candidate_pair_measurements as dump_co_referenced_page_candidate_pair_measurements_data,
+)
+from page_analysis_co_reference_candidate_diagnostics import (
+    dump_co_referenced_page_candidate_primitive_set_measurements as dump_co_referenced_page_candidate_primitive_set_measurements_data,
 )
 from page_analysis_co_reference_candidate_reference import (
     CoReferencedPageCandidateReference,
@@ -74,6 +78,7 @@ type DiagnosticStage = Literal[
     "primitive-neighborhood",
     "co-referenced-candidate-inventory",
     "co-referenced-candidate-pair-measurements",
+    "co-referenced-candidate-primitive-set-measurements",
 ]
 
 
@@ -109,6 +114,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
             "primitive-neighborhood",
             "co-referenced-candidate-inventory",
             "co-referenced-candidate-pair-measurements",
+            "co-referenced-candidate-primitive-set-measurements",
         ),
         default="capture",
         help="Diagnostic stage to serialize. Default: capture.",
@@ -147,11 +153,19 @@ def build_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--first-candidate-reference",
-        help="First candidate reference JSON; required for co-referenced-candidate-pair-measurements.",
+        help=(
+            "First candidate reference JSON; required for stages "
+            "co-referenced-candidate-pair-measurements and "
+            "co-referenced-candidate-primitive-set-measurements."
+        ),
     )
     parser.add_argument(
         "--second-candidate-reference",
-        help="Second candidate reference JSON; required for co-referenced-candidate-pair-measurements.",
+        help=(
+            "Second candidate reference JSON; required for stages "
+            "co-referenced-candidate-pair-measurements and "
+            "co-referenced-candidate-primitive-set-measurements."
+        ),
     )
     return parser
 
@@ -420,6 +434,28 @@ def dump_co_referenced_page_candidate_pair_measurements(
     )
 
 
+def dump_co_referenced_page_candidate_primitive_set_measurements(
+    pdf_path: Path,
+    *,
+    first_candidate_reference: CoReferencedPageCandidateReference,
+    second_candidate_reference: CoReferencedPageCandidateReference,
+    page_number: int = 1,
+    output_path: Path | None = None,
+    compact: bool = False,
+) -> str:
+    """Capture, normalize, and return explicit candidate primitive-set measurements JSON."""
+
+    return _dump_page(
+        pdf_path,
+        page_number=page_number,
+        stage="co-referenced-candidate-primitive-set-measurements",
+        output_path=output_path,
+        compact=compact,
+        first_candidate_reference=first_candidate_reference,
+        second_candidate_reference=second_candidate_reference,
+    )
+
+
 def _dump_page(
     pdf_path: Path,
     *,
@@ -544,6 +580,23 @@ def _dump_page(
             )
         primitive_page = normalize_backend_page_capture(capture)
         artifact_data = dump_co_referenced_page_candidate_pair_measurements_data(
+            primitive_page,
+            first_candidate_reference=first_candidate_reference,
+            second_candidate_reference=second_candidate_reference,
+        )
+    elif stage == "co-referenced-candidate-primitive-set-measurements":
+        if first_candidate_reference is None:
+            raise ValueError(
+                "first_candidate_reference is required for stage "
+                "co-referenced-candidate-primitive-set-measurements"
+            )
+        if second_candidate_reference is None:
+            raise ValueError(
+                "second_candidate_reference is required for stage "
+                "co-referenced-candidate-primitive-set-measurements"
+            )
+        primitive_page = normalize_backend_page_capture(capture)
+        artifact_data = dump_co_referenced_page_candidate_primitive_set_measurements_data(
             primitive_page,
             first_candidate_reference=first_candidate_reference,
             second_candidate_reference=second_candidate_reference,
@@ -690,6 +743,14 @@ def _primitive_neighborhood_coverage_ratios(
     }
 
 
+_CANDIDATE_REFERENCE_STAGES = frozenset(
+    {
+        "co-referenced-candidate-pair-measurements",
+        "co-referenced-candidate-primitive-set-measurements",
+    }
+)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_argument_parser()
     args = parser.parse_args(argv)
@@ -711,24 +772,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             "--candidate-producer is only valid for stage "
             "co-referenced-candidate-inventory"
         )
-    if args.stage == "co-referenced-candidate-pair-measurements":
+    if args.stage in _CANDIDATE_REFERENCE_STAGES:
         if args.first_candidate_reference is None:
-            parser.error(
-                "--first-candidate-reference is required for stage "
-                "co-referenced-candidate-pair-measurements"
-            )
+            parser.error(f"--first-candidate-reference is required for stage {args.stage}")
         if args.second_candidate_reference is None:
-            parser.error(
-                "--second-candidate-reference is required for stage "
-                "co-referenced-candidate-pair-measurements"
-            )
+            parser.error(f"--second-candidate-reference is required for stage {args.stage}")
     elif (
         args.first_candidate_reference is not None
         or args.second_candidate_reference is not None
     ):
         parser.error(
-            "--first-candidate-reference and --second-candidate-reference are only "
-            "valid for stage co-referenced-candidate-pair-measurements"
+            "--first-candidate-reference and --second-candidate-reference are "
+            "only valid for stages: "
+            + ", ".join(sorted(_CANDIDATE_REFERENCE_STAGES))
         )
 
     try:

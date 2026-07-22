@@ -12,6 +12,9 @@ from page_analysis_co_reference_binding import (
 from page_analysis_co_reference_candidate_pair_measurements import (
     measure_co_referenced_page_candidate_pair,
 )
+from page_analysis_co_reference_candidate_primitive_set_measurements import (
+    measure_co_referenced_page_candidate_primitive_sets,
+)
 from page_analysis_co_reference_candidate_reference import (
     CoReferencedPageCandidateReference,
     build_co_referenced_page_candidate_reference,
@@ -152,6 +155,53 @@ def dump_co_referenced_page_candidate_pair_measurements(
         "y0_delta": measurements.y0_delta,
         "x1_delta": measurements.x1_delta,
         "y1_delta": measurements.y1_delta,
+    }
+
+
+def dump_co_referenced_page_candidate_primitive_set_measurements(
+    primitive_page: NormalizedPrimitivePage,
+    *,
+    first_candidate_reference: CoReferencedPageCandidateReference,
+    second_candidate_reference: CoReferencedPageCandidateReference,
+) -> dict[str, object]:
+    """Measure one explicit candidate primitive-ID relation as read-only JSON-compatible data."""
+
+    if not isinstance(primitive_page, NormalizedPrimitivePage):
+        raise ValueError("primitive_page must be a NormalizedPrimitivePage")
+    references = (first_candidate_reference, second_candidate_reference)
+    for field_name, reference in zip(
+        ("first_candidate_reference", "second_candidate_reference"),
+        references,
+        strict=True,
+    ):
+        if not isinstance(reference, CoReferencedPageCandidateReference):
+            raise ValueError(
+                f"{field_name} must be a CoReferencedPageCandidateReference"
+            )
+
+    analyses = _build_required_analyses(primitive_page, references=references)
+    collection = build_co_referenced_page_analyses(analyses)
+    binding = bind_co_referenced_page_analyses(
+        primitive_page,
+        co_referenced_page_analyses=collection,
+    )
+    measurements = measure_co_referenced_page_candidate_primitive_sets(
+        binding,
+        first_candidate_reference=first_candidate_reference,
+        second_candidate_reference=second_candidate_reference,
+    )
+    return {
+        "diagnostic_kind": "co-referenced-candidate-primitive-set-measurements",
+        "page_id": primitive_page.page_id,
+        "page_index": primitive_page.page_index,
+        "source_capture_id": primitive_page.source_capture_id,
+        "first_candidate_reference": _reference_to_dict(first_candidate_reference),
+        "second_candidate_reference": _reference_to_dict(second_candidate_reference),
+        "first_candidate_primitive_ids": list(measurements.first_candidate_primitive_ids),
+        "second_candidate_primitive_ids": list(measurements.second_candidate_primitive_ids),
+        "shared_primitive_ids": list(measurements.shared_primitive_ids),
+        "first_only_primitive_ids": list(measurements.first_only_primitive_ids),
+        "second_only_primitive_ids": list(measurements.second_only_primitive_ids),
     }
 
 

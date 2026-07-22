@@ -27,6 +27,7 @@ from pymupdf_capture_dump import (
     dump_capture,
     dump_co_referenced_page_candidate_inventory,
     dump_co_referenced_page_candidate_pair_measurements,
+    dump_co_referenced_page_candidate_primitive_set_measurements,
     dump_local_fragment_side_band_candidate_extent_relations,
     dump_local_fragment_side_band_candidate_page_context,
     dump_local_fragment_side_band_diagnostics,
@@ -171,6 +172,34 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             )
         )
 
+        self.assertEqual(args.first_candidate_reference, reference_json)
+        self.assertEqual(args.second_candidate_reference, reference_json)
+
+    def test_parser_accepts_co_referenced_candidate_primitive_set_stage_and_references(
+        self,
+    ) -> None:
+        reference_json = json.dumps(
+            {
+                "producer_name": "page_analysis.singleton_side_band",
+                "producer_version": "0.1",
+                "configuration_id": "singleton-side-band-v1",
+                "generation_id": "generation",
+                "candidate_id": "candidate",
+            }
+        )
+        args = build_argument_parser().parse_args(
+            (
+                "sample.pdf",
+                "--stage",
+                "co-referenced-candidate-primitive-set-measurements",
+                "--first-candidate-reference",
+                reference_json,
+                "--second-candidate-reference",
+                reference_json,
+            )
+        )
+
+        self.assertEqual(args.stage, "co-referenced-candidate-primitive-set-measurements")
         self.assertEqual(args.first_candidate_reference, reference_json)
         self.assertEqual(args.second_candidate_reference, reference_json)
 
@@ -514,6 +543,49 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
             self.assertEqual(payload["second_candidate_reference"], reference_data)
             self.assertEqual(payload["horizontal_gap"], 0.0)
             self.assertEqual(payload["vertical_gap"], 0.0)
+            self.assertTrue(output_path.is_file())
+            self.assertEqual(output_path.read_text(encoding="utf-8"), returned)
+
+    def test_co_referenced_candidate_primitive_set_helper_reuses_inventory_reference(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            pdf_path = root / "side-band.pdf"
+            output_path = root / "diagnostics" / "primitive-set.json"
+            _create_pdf_with_side_band_text(pdf_path)
+            inventory = json.loads(
+                dump_co_referenced_page_candidate_inventory(
+                    pdf_path,
+                    candidate_producers=("singleton-side-band",),
+                )
+            )
+            reference_data = inventory["analysis_streams"][0]["candidates"][0][
+                "candidate_reference"
+            ]
+            reference = CoReferencedPageCandidateReference(**reference_data)
+
+            returned = dump_co_referenced_page_candidate_primitive_set_measurements(
+                pdf_path,
+                first_candidate_reference=reference,
+                second_candidate_reference=reference,
+                output_path=output_path,
+                compact=True,
+            )
+            payload = json.loads(returned)
+
+            self.assertEqual(
+                payload["diagnostic_kind"],
+                "co-referenced-candidate-primitive-set-measurements",
+            )
+            self.assertEqual(payload["first_candidate_reference"], reference_data)
+            self.assertEqual(payload["second_candidate_reference"], reference_data)
+            self.assertEqual(
+                payload["shared_primitive_ids"],
+                payload["first_candidate_primitive_ids"],
+            )
+            self.assertEqual(payload["first_only_primitive_ids"], [])
+            self.assertEqual(payload["second_only_primitive_ids"], [])
             self.assertTrue(output_path.is_file())
             self.assertEqual(output_path.read_text(encoding="utf-8"), returned)
 
@@ -1383,6 +1455,100 @@ class PyMuPDFCaptureDumpTest(unittest.TestCase):
                         "--stage",
                         "capture",
                         "--first-candidate-reference",
+                        reference,
+                    )
+                )
+
+    def test_main_primitive_set_stage_parses_inventory_references_and_shares_option_gating(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            pdf_path = Path(temporary_directory) / "side-band.pdf"
+            _create_pdf_with_side_band_text(pdf_path)
+            inventory_stdout = StringIO()
+            with redirect_stdout(inventory_stdout):
+                self.assertEqual(
+                    main(
+                        (
+                            str(pdf_path),
+                            "--stage",
+                            "co-referenced-candidate-inventory",
+                            "--candidate-producer",
+                            "singleton-side-band",
+                        )
+                    ),
+                    0,
+                )
+            reference = json.dumps(
+                json.loads(inventory_stdout.getvalue())["analysis_streams"][0][
+                    "candidates"
+                ][0]["candidate_reference"]
+            )
+
+            for stage in (
+                "co-referenced-candidate-pair-measurements",
+                "co-referenced-candidate-primitive-set-measurements",
+            ):
+                with self.subTest(stage=stage):
+                    stdout = StringIO()
+                    with redirect_stdout(stdout):
+                        self.assertEqual(
+                            main(
+                                (
+                                    str(pdf_path),
+                                    "--stage",
+                                    stage,
+                                    "--first-candidate-reference",
+                                    reference,
+                                    "--second-candidate-reference",
+                                    reference,
+                                )
+                            ),
+                            0,
+                        )
+                    payload = json.loads(stdout.getvalue())
+                    self.assertEqual(payload["diagnostic_kind"], stage)
+
+            primitive_set_stdout = StringIO()
+            with redirect_stdout(primitive_set_stdout):
+                self.assertEqual(
+                    main(
+                        (
+                            str(pdf_path),
+                            "--stage",
+                            "co-referenced-candidate-primitive-set-measurements",
+                            "--first-candidate-reference",
+                            reference,
+                            "--second-candidate-reference",
+                            reference,
+                        )
+                    ),
+                    0,
+                )
+            primitive_set_payload = json.loads(primitive_set_stdout.getvalue())
+            self.assertEqual(
+                primitive_set_payload["first_candidate_reference"], json.loads(reference)
+            )
+
+            with redirect_stderr(StringIO()), self.assertRaises(SystemExit):
+                main(
+                    (
+                        str(pdf_path),
+                        "--stage",
+                        "co-referenced-candidate-primitive-set-measurements",
+                        "--second-candidate-reference",
+                        reference,
+                    )
+                )
+            with redirect_stderr(StringIO()), self.assertRaises(SystemExit):
+                main(
+                    (
+                        str(pdf_path),
+                        "--stage",
+                        "capture",
+                        "--first-candidate-reference",
+                        reference,
+                        "--second-candidate-reference",
                         reference,
                     )
                 )
