@@ -241,7 +241,7 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–19 sono completate. Nessuna nuova milestone è aperta o autorizzata.
+Le Milestone 1–19 sono completate.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti restano in shadow mode.
 
@@ -614,11 +614,11 @@ micro-step.
 
 Punto architetturale non affrontato dalla progettazione originale: nessun producer
 delle Milestone 13+ riceve oggi input da una libreria diversa da PyMuPDF; `text_lines`
-è una strategia pdfplumber, mai integrata nel modello a primitive. Un prototipo
-standalone fuori dal job system è autorizzato per validare che il contratto
-`RegionCandidate` accetti candidate pdfplumber con `primitive_ids=()`; l'integrazione
-job/workspace resta rinviata, nessuna scelta presa. Apertura non autorizza un
-micro-step implementativo nel job system. Dettagli completi in `State.md`
+è una strategia pdfplumber, mai integrata nel modello a primitive. Un prototipo standalone fuori dal job system, autorizzato per validare che il contratto
+RegionCandidate accetti candidate pdfplumber con primitive_ids=(), è stato implementato
+e verificato (commit `30d9f4e`); l'integrazione job/workspace resta rinviata, nessuna
+scelta presa. Apertura non autorizza ancora un micro-step implementativo nel job system.
+Dettagli completi in State.md
 
 ## Migrazione e shadow mode
 

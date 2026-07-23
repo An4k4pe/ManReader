@@ -849,18 +849,24 @@ progettazione, consegnato separatamente):
 Rinviabili portati esplicitamente alla fase di implementazione (non richiusi da questa
 progettazione):
 
-- sospetto non quantificato che anche `text_lines` sottostimi l'area reale della tabella in
-  alcuni casi genuini (Dag.pdf p.136-137, p.286) — non risolvibile dal producer da solo:
-  richiede una bbox strutturale indipendente non derivata dal contenuto testuale. È un
-  problema per un consumer/Resolution futuro, non per questo producer;
+- `text_lines` sottostima l'area reale della tabella in almeno un caso, confermato non più
+  solo sospettato: il blocco sinistro di Dag.pdf p.137, rilevato raw (senza merge) dal
+  prototipo, ha bbox x 72.5–234.6 (~162pt) — sensibilmente più stretta di quella riportata
+  in `Proposta_TableCandidateProducer_v5.md` §6 per lo stesso blocco (x 70.9–306.1, ~235pt,
+  ottenuta con merge di adiacenza, esplicitamente fuori scope per questo producer). Il
+  blocco destro della stessa pagina e i blocchi di Dag p.136 invece coincidono con v5.
+  Non risolvibile dal producer da solo: richiede una bbox strutturale indipendente non
+  derivata dal contenuto testuale. Resta un problema per un consumer/Resolution futuro,
+  non per questo producer;
 - offset pagina PDF→stampata (+2 osservato per una zona di Dag.pdf), non verificato come
   costante sull'intero file o sul corpus;
 - classificazione delle tabelle a riga singola (11.2% del totale finale, dopo dedup e
   merge) come rumore residuo vs. contenuto legittimo;
-- spot-check dell'ambiente pdfplumber reale (0.11.10) non ancora eseguito contro
-  l'ambiente usato per l'analisi quantitativa (0.11.9 nella sessione di progettazione) —
-  meno urgente ora che le soglie di merge/dedup calcolate nella progettazione sono
-  ritirate, perché non più necessarie;
+- **Chiuso dal prototipo (commit `30d9f4e`)**: lo spot-check dell'ambiente pdfplumber
+  reale (0.11.10) è stato eseguito — i quattro run manuali del prototipo girano
+  nell'ambiente reale dell'utente, non nel sandbox 0.11.9 usato per il solo
+  post-processing in v5. Risultato: coincidenza quasi completa con i numeri di v5,
+  unica eccezione il blocco sinistro di Dag p.137 (vedi rinviabile sopra);
 - Apo.pdf p.16: confermato non-tabella dall'ispezione visiva dell'utente, ma non
   identificato con certezza — non bloccante, da non perdere in una passata futura.
 
@@ -899,6 +905,28 @@ qualunque cross-reference fra candidate tabella e primitive PyMuPDF.
 Apertura non autorizza ancora un micro-step implementativo nel job system. Il prototipo
 standalone descritto sopra è autorizzato come passo di validazione, non come codice di
 produzione.
+
+Il prototipo è stato implementato e verificato nel commit `30d9f4e` — "Add standalone
+prototype validating pdfplumber table candidates". Introduce
+`scripts/prototype_table_candidate_producer.py` e
+`tests/test_prototype_table_candidate_producer.py`, con guardie esplicite su bound pagina
+(`1 <= page_number <= page_count`), rotazione (`rotation != 0`) e frame pagina
+(`CropBox != MediaBox`). Quest'ultima guardia è stata aggiunta dopo un secondo giro di
+revisione Chat B: un failure mode indipendente dalla rotazione, stessa firma (bbox
+pdfplumber contenuta nei bound pagina ma in un frame diverso da quello usato da PyMuPDF),
+innescato da CropBox più piccola della MediaBox — comune in PDF scansionati con margini
+di stampa ritagliati. Entrambe le guardie rifiutano esplicitamente (`PRECONDITION_FAIL`,
+exit code 3) invece di produrre candidate silenziosamente errate.
+
+Verificato su quattro pagine reali nell'ambiente utente (pdfplumber 0.11.10, non il
+sandbox 0.11.9 usato per il solo post-processing in v5): Dag.pdf `page_number` 136, 137,
+286 e Vil.pdf `page_number` 91, tutte con esito `PASS`. Le bbox del blocco destro di Dag
+p.136 e p.137 e del blocco unico di Vil p.91 coincidono con quelle già riportate in
+`Proposta_TableCandidateProducer_v5.md` §6; il cluster di Dag p.286 conferma il pattern a
+3 colonne parallele di v5 §5 (vedi anche rinviabile aggiornato sotto per una discrepanza
+osservata sul blocco sinistro di Dag p.137). Baseline verificata: Ruff verde, BasedPyright
+0 errori/0 warning/0 note, suite completa 1122 test OK (1120 preesistenti + 2 nuovi) e 7
+skipped, `git diff --check` verde.
 
 Riferimento documentale: `Proposta_TableCandidateProducer_v5.md` (consegnato all'utente,
 non incluso nel repo).
