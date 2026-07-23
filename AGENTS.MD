@@ -604,6 +604,22 @@ Restano fuori scope nuove misure o campi derivati; persistenza o `schema_version
 
 ## Milestone 20 - TableCandidateProducer (producer tabelle, configurazione unica `text_lines`) — apertura
 
+Chiude un filone di progettazione Modalità P su un futuro producer di rilevamento
+tabelle: unica configurazione `text_lines`, `default` eliminato; nessuna
+deduplicazione cross-config necessaria (verificato: 0 duplicati su 1170 record
+`text_lines`); pattern di clustering same-page (≥3 blocchi) raro e confermato tale
+(3 casi su 1241 tabelle fisiche); pattern di continuazione multi-pagina confermato
+su un caso reale ma non quantificato in frequenza — entrambi esclusi dal primo
+micro-step.
+
+Punto architetturale non affrontato dalla progettazione originale: nessun producer
+delle Milestone 13+ riceve oggi input da una libreria diversa da PyMuPDF; `text_lines`
+è una strategia pdfplumber, mai integrata nel modello a primitive. Un prototipo
+standalone fuori dal job system è autorizzato per validare che il contratto
+`RegionCandidate` accetti candidate pdfplumber con `primitive_ids=()`; l'integrazione
+job/workspace resta rinviata, nessuna scelta presa. Apertura non autorizza un
+micro-step implementativo nel job system. Dettagli completi in `State.md`
+
 ## Migrazione e shadow mode
 
 Modalità transitorie:

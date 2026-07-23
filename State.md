@@ -805,8 +805,7 @@ Baseline verificata: Ruff verde su tutti i file coinvolti; BasedPyright
 completa 1120 test OK e 7 skipped; `git diff --check` verde.
 
 Non esiste una giustificazione concreta per un secondo micro-step. Restano
-fuori scope tutti i punti già elencati in apertura. Alla chiusura della
-Milestone 19 non è aperta né autorizzata alcuna milestone successiva.
+fuori scope tutti i punti già elencati in apertura.
 
 ## Milestone 20 — TableCandidateProducer (producer tabelle, configurazione unica `text_lines`) — apertura
 
@@ -880,6 +879,22 @@ da script diagnostici, non da alcun producer Milestone 13+. Verificato anche che
 `CaptureProgress`/`CapturePageState` (`job_capture_progress.py`) traccia oggi esattamente
 un artifact per pagina: un capture pdfplumber persistito e resumable come quello PyMuPDF
 richiederebbe estendere questo schema.
+
+**Decisione presa in un breve giro di Modalità P dedicato**: per il primo prototipo, la
+rilevazione pdfplumber non entra nel job/workspace. Un prototipo standalone, fuori dal job
+system (analogo per collocazione a `scripts/debug_pdfplumber_table_settings.py`, non un
+producer definitivo), riceve un PDF passato direttamente, invoca pdfplumber con
+`text_lines` e verifica il contratto `RegionCandidate` su casi reali. Le candidate
+prodotte useranno `primitive_ids=()`: il contratto attuale lo permette già
+(`RegionCandidate.primitive_ids` ha default `()` e la validazione non richiede tupla non
+vuota — nessuna modifica di schema necessaria), e il cross-reference con le
+`TextPrimitive` PyMuPDF contenute nella bbox resta un rinviabile esplicito, non
+necessario per validare la forma della candidate.
+
+Restano esplicitamente rinviate, non decise oggi: l'integrazione nel job/workspace
+(persistenza resumable di un capture pdfplumber, vs. esecuzione a runtime su uno snapshot
+già verificato — sono due alternative concrete, nessuna scelta ancora fra le due) e
+qualunque cross-reference fra candidate tabella e primitive PyMuPDF.
 
 Apertura non autorizza ancora un micro-step implementativo nel job system. Il prototipo
 standalone descritto sopra è autorizzato come passo di validazione, non come codice di
