@@ -602,6 +602,8 @@ La revisione architetturale indipendente (Chat B) ha dato verdetto RATIFICABILE,
 
 Restano fuori scope nuove misure o campi derivati; persistenza o `schema_version`; selezione automatica di candidate o coppie; equivalenza, conflitto, score, ranking, Resolution; modifiche al resolver di Milestone 15 o alla factory di Milestone 18; modifiche ai contratti e producer delle Milestone 13–18; pipeline legacy, IR, Markdown, EPUB. La chiusura non apre né nomina una milestone successiva.
 
+## Milestone 20 - TableCandidateProducer (producer tabelle, configurazione unica `text_lines`) — apertura
+
 ## Migrazione e shadow mode
 
 Modalità transitorie:

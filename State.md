@@ -8,7 +8,7 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–19 sono completate. Nessuna nuova milestone è aperta o autorizzata.
+Le Milestone 1–19 sono completate. La Milestone 20 (`TableCandidateProducer`) è aperta in fase di progettazione: le decisioni di configurazione sono ratificate in Modalità P, un prototipo standalone fuori dal job system è autorizzato per validare il contratto `RegionCandidate`, ma l'integrazione nel job/workspace e il micro-step implementativo definitivo non sono ancora autorizzati.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli. I nuovi contratti lavorano in shadow mode e non producono ancora decisioni editoriali, IR o output finale.
 
@@ -807,3 +807,83 @@ completa 1120 test OK e 7 skipped; `git diff --check` verde.
 Non esiste una giustificazione concreta per un secondo micro-step. Restano
 fuori scope tutti i punti già elencati in apertura. Alla chiusura della
 Milestone 19 non è aperta né autorizzata alcuna milestone successiva.
+
+## Milestone 20 — TableCandidateProducer (producer tabelle, configurazione unica `text_lines`) — apertura
+
+Chiude un filone di progettazione Modalità P condotto in una sessione separata (documento
+`Proposta_TableCandidateProducer_v5.md`, versioni v1→v5, con revisione Chat B integrata),
+fin qui non riflesso come milestone numerata. Il documento non è incluso nel repo: è
+un'analisi offline su un dump pdfplumber già estratto, non un contratto di codice; la
+sintesi utile alle decisioni è qui. La baseline funzionale resta quella di chiusura della
+Milestone 19 (`b1548e7` — "Close milestone 19 co-referenced page candidate primitive set
+diagnostics").
+
+Obiettivo: introdurre un `TableCandidateProducer` che rilevi tabelle a livello di singola
+pagina ed emetta `RegionCandidate` coerenti col contratto delle Milestone 13+.
+
+Decisioni ratificate in Modalità P (dettaglio quantitativo completo nel documento di
+progettazione, consegnato separatamente):
+
+1. `text_lines` è l'unica configurazione del producer; la configurazione `default`
+   (line-based) è **eliminata**, non derubricata a fallback. Verificato con analisi
+   quantitativa su un dump di 3946 record grezzi (7 manuali) e poi con ispezione visiva
+   diretta dell'utente su tutte le 35 pagine dove `default` rilevava tabelle non vuote
+   assenti da `text_lines`: nessuna delle 35 (100% del campione, incluso il caso incerto
+   Apo.pdf p.16) è una tabella reale — sono sfondi decorativi di apertura capitolo,
+   copertine, illustrazioni o bande/titoli laterali.
+2. La deduplicazione cross-config non è un requisito del producer. Una stesura precedente
+   dello stesso thread l'aveva definita obbligatoria (senza di essa il 65.9% delle tabelle
+   del corpus sarebbe emerso come candidate duplicate), ma quel calcolo presupponeva
+   entrambe le configurazioni attive. Con `default` eliminato non c'è più nulla da
+   riconciliare fra configurazioni: verificato che `text_lines` da sola non produce mai
+   duplicati sulla stessa pagina in tutto il corpus (0 casi su 1170 record non vuoti, 251
+   pagine con più record).
+3. Il pattern "≥3 blocchi affiancati sulla stessa pagina" è raro e confermato tale su
+   dataset completo (3 casi su 1241 tabelle fisiche, 7 manuali): non giustifica una logica
+   di clustering same-page generale nel producer.
+4. Il pattern di continuazione multi-pagina (2 blocchi per pagina, numerazione continua)
+   esiste ed è confermato su un caso reale verificato end-to-end (Dag.pdf p.136-137, offset
+   di pagina PDF→stampata +2). La frequenza generale nel corpus non è quantificata (207
+   pagine candidate, 44 run multi-pagina, un solo caso verificato manualmente): non blocca
+   la decisione producer/configuration_id, ma resta fuori scope per il primo micro-step.
+
+Rinviabili portati esplicitamente alla fase di implementazione (non richiusi da questa
+progettazione):
+
+- sospetto non quantificato che anche `text_lines` sottostimi l'area reale della tabella in
+  alcuni casi genuini (Dag.pdf p.136-137, p.286) — non risolvibile dal producer da solo:
+  richiede una bbox strutturale indipendente non derivata dal contenuto testuale. È un
+  problema per un consumer/Resolution futuro, non per questo producer;
+- offset pagina PDF→stampata (+2 osservato per una zona di Dag.pdf), non verificato come
+  costante sull'intero file o sul corpus;
+- classificazione delle tabelle a riga singola (11.2% del totale finale, dopo dedup e
+  merge) come rumore residuo vs. contenuto legittimo;
+- spot-check dell'ambiente pdfplumber reale (0.11.10) non ancora eseguito contro
+  l'ambiente usato per l'analisi quantitativa (0.11.9 nella sessione di progettazione) —
+  meno urgente ora che le soglie di merge/dedup calcolate nella progettazione sono
+  ritirate, perché non più necessarie;
+- Apo.pdf p.16: confermato non-tabella dall'ispezione visiva dell'utente, ma non
+  identificato con certezza — non bloccante, da non perdere in una passata futura.
+
+Fuori scope per il primo micro-step di implementazione: logica di clustering same-page,
+continuation multi-pagina, deduplicazione o merge cross-config.
+
+**Punto architetturale nuovo, non affrontato dalla progettazione originale**: tutti i
+producer esistenti delle Milestone 13+ (`page_analysis_root.py`,
+`page_analysis_page_covering_visual.py`, `page_analysis_side_band.py`, ecc.) hanno la
+stessa forma — `build_..._page_analysis(primitive_page: NormalizedPrimitivePage, *,
+generation_id) -> PageAnalysis` — e derivano `RegionCandidate.primitive_ids`
+esclusivamente da primitive già normalizzate da PyMuPDF. `text_lines` è invece una
+strategia di rilevamento tabelle di **pdfplumber**, mai integrata nel modello a primitive:
+nel repo pdfplumber è oggi usato solo dalla pipeline legacy (`extractor.py`, `main.py`) e
+da script diagnostici, non da alcun producer Milestone 13+. Verificato anche che
+`CaptureProgress`/`CapturePageState` (`job_capture_progress.py`) traccia oggi esattamente
+un artifact per pagina: un capture pdfplumber persistito e resumable come quello PyMuPDF
+richiederebbe estendere questo schema.
+
+Apertura non autorizza ancora un micro-step implementativo nel job system. Il prototipo
+standalone descritto sopra è autorizzato come passo di validazione, non come codice di
+produzione.
+
+Riferimento documentale: `Proposta_TableCandidateProducer_v5.md` (consegnato all'utente,
+non incluso nel repo).
