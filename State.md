@@ -8,7 +8,10 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–19 sono completate. La Milestone 20 (`TableCandidateProducer`) è aperta in fase di progettazione: le decisioni di configurazione sono ratificate in Modalità P, un prototipo standalone fuori dal job system è autorizzato per validare il contratto `RegionCandidate`, ma l'integrazione nel job/workspace e il micro-step implementativo definitivo non sono ancora autorizzati.
+Le Milestone 1–20 sono completate. Il producer di produzione `TableCandidateProducer` è
+implementato e verificato, non ancora integrato nel job/workspace: quell'integrazione
+(il primo producer Milestone 13+ mai wired in un job) resta rinviata a una milestone
+futura non ancora aperta né numerata.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli. I nuovi contratti lavorano in shadow mode e non producono ancora decisioni editoriali, IR o output finale.
 
@@ -807,7 +810,7 @@ completa 1120 test OK e 7 skipped; `git diff --check` verde.
 Non esiste una giustificazione concreta per un secondo micro-step. Restano
 fuori scope tutti i punti già elencati in apertura.
 
-## Milestone 20 — TableCandidateProducer (producer tabelle, configurazione unica `text_lines`) — apertura
+## Milestone 20 — TableCandidateProducer (producer tabelle, configurazione unica `text_lines`) — completata
 
 Chiude un filone di progettazione Modalità P condotto in una sessione separata (documento
 `Proposta_TableCandidateProducer_v5.md`, versioni v1→v5, con revisione Chat B integrata),
@@ -935,6 +938,13 @@ progettazione):
 
 - Apo.pdf p.16: confermato non-tabella dall'ispezione visiva dell'utente, ma non
   identificato con certezza — non bloccante, da non perdere in una passata futura.
+
+**Milestone chiusa nel commit `b32c833`** — "Close milestone 20 TableCandidateProducer".
+Le tre fasi pianificate (prototipo standalone, diagnostica cross-reference con ratifica
+della regola geometrica, producer di produzione) sono tutte completate e verificate.
+L'integrazione nel job/workspace resta esplicitamente rinviata a una milestone futura,
+non ancora aperta né numerata — sarebbe il primo producer Milestone 13+ mai eseguito
+dentro il job (verificato: nessun modulo `job_*.py` invoca oggi alcun producer).
 
 Fuori scope per il primo micro-step di implementazione: logica di clustering same-page,
 continuation multi-pagina, deduplicazione o merge cross-config.

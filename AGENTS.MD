@@ -241,7 +241,7 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–19 sono completate.
+Le Milestone 1–20 sono completate.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti restano in shadow mode.
 
@@ -602,23 +602,25 @@ La revisione architetturale indipendente (Chat B) ha dato verdetto RATIFICABILE,
 
 Restano fuori scope nuove misure o campi derivati; persistenza o `schema_version`; selezione automatica di candidate o coppie; equivalenza, conflitto, score, ranking, Resolution; modifiche al resolver di Milestone 15 o alla factory di Milestone 18; modifiche ai contratti e producer delle Milestone 13–18; pipeline legacy, IR, Markdown, EPUB. La chiusura non apre né nomina una milestone successiva.
 
-## Milestone 20 - TableCandidateProducer (producer tabelle, configurazione unica `text_lines`) — apertura
+## Milestone 20 - TableCandidateProducer (producer tabelle, configurazione unica `text_lines`) — completata
 
-Chiude un filone di progettazione Modalità P su un futuro producer di rilevamento
-tabelle: unica configurazione `text_lines`, `default` eliminato; nessuna
-deduplicazione cross-config necessaria (verificato: 0 duplicati su 1170 record
-`text_lines`); pattern di clustering same-page (≥3 blocchi) raro e confermato tale
-(3 casi su 1241 tabelle fisiche); pattern di continuazione multi-pagina confermato
-su un caso reale ma non quantificato in frequenza — entrambi esclusi dal primo
-micro-step.
+Tre fasi completate in sequenza: prototipo standalone fuori dal job system che valida il
+contratto `RegionCandidate` con candidate pdfplumber (`30d9f4e`); strumento diagnostico
+che confronta tre regole geometriche di appartenenza primitiva/candidate su otto blocchi
+tabella noti (`62f98f3`), seguito dalla ratifica di `positive_intersection`
+(`overlap_ratio > 0`, nessuna soglia) come regola di produzione (`4568276`); producer di
+produzione `build_table_candidate_page_analysis` con binding `BoundTableCandidatePage` e
+modulo condiviso `measure_candidate_primitive_overlap_ratio`, verificato contro i
+conteggi già noti su Dag.pdf p.137 (114/57 primitive) (`e41d10c`).
 
-Punto architetturale non affrontato dalla progettazione originale: nessun producer
-delle Milestone 13+ riceve oggi input da una libreria diversa da PyMuPDF; `text_lines`
-è una strategia pdfplumber, mai integrata nel modello a primitive. Un prototipo standalone fuori dal job system, autorizzato per validare che il contratto
-RegionCandidate accetti candidate pdfplumber con primitive_ids=(), è stato implementato
-e verificato (commit `30d9f4e`); l'integrazione job/workspace resta rinviata, nessuna
-scelta presa. Apertura non autorizza ancora un micro-step implementativo nel job system.
-Dettagli completi in State.md
+Punto architetturale verificato in chiusura: nessun producer delle Milestone 13+ è oggi
+invocato da alcun modulo `job_*.py` — le uniche invocazioni reali fuori dai test sono in
+strumenti diagnostici read-only (`pymupdf_capture_dump.py` e tre file `*_diagnostics.py`).
+Questo producer sarebbe il primo, quando verrà wired. L'integrazione nel job/workspace
+resta esplicitamente rinviata a una milestone futura, non ancora aperta né numerata.
+Baseline finale verificata: Ruff verde, BasedPyright 0 errori/0 warning/0 note, suite
+completa 1131 test OK e 7 skipped, `git diff --check` verde. Dettagli completi in
+`State.md`.
 
 ## Migrazione e shadow mode
 
