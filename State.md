@@ -867,6 +867,18 @@ progettazione):
   nell'ambiente reale dell'utente, non nel sandbox 0.11.9 usato per il solo
   post-processing in v5. Risultato: coincidenza quasi completa con i numeri di v5,
   unica eccezione il blocco sinistro di Dag p.137 (vedi rinviabile sopra);
+- Lo strumento diagnostico di cross-reference è stato implementato e verificato nel commit
+  `62f98f3` — "Add diagnostic cross-reference for table candidates and text primitives".
+  Introduce `scripts/prototype_table_candidate_primitive_cross_reference.py`, che confronta
+  tre regole geometriche indipendenti (contenimento completo, centro nella bbox,
+  intersezione positiva con `overlap_ratio = overlap_area / primitive_area`) fra le
+  candidate tabella e le `TextPrimitive` PyMuPDF, senza ratificarne alcuna: produce solo i
+  dati per una scelta informata successiva. Stesse guardie del prototipo esistente
+  (bound pagina, rotazione, CropBox/MediaBox), reimplementate localmente senza dipendenza
+  diretta dall'altro script. Nessuna regola è ancora ratificata: l'ispezione dell'output
+  sugli otto blocchi già validati (`State.md`, prototipo) resta il prossimo passo, non
+  ancora eseguito. Baseline verificata: Ruff verde, BasedPyright 0 errori/0 warning/0 note,
+  suite completa 1122 test OK (invariata) e 7 skipped, `git diff --check` verde.
 - Apo.pdf p.16: confermato non-tabella dall'ispezione visiva dell'utente, ma non
   identificato con certezza — non bloccante, da non perdere in una passata futura.
 
