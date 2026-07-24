@@ -879,6 +879,34 @@ progettazione):
   sugli otto blocchi già validati (`State.md`, prototipo) resta il prossimo passo, non
   ancora eseguito. Baseline verificata: Ruff verde, BasedPyright 0 errori/0 warning/0 note,
   suite completa 1122 test OK (invariata) e 7 skipped, `git diff --check` verde.
+- Ispezione dell'output sugli otto blocchi noti (Dag.pdf `page_number` 136, 137, 286,
+  Vil.pdf `page_number` 91) eseguita. Confronto quantitativo delle tre regole:
+  `full_containment` fallisce a zero primitive su un blocco (Dag 286, terza colonna
+  "Tutti gli ingredienti" — nessuna riga interamente contenuta) e sottostima negli altri
+  sei blocchi non perfettamente rettangolari; `center_in_bbox` coincide con
+  `positive_intersection` in sette blocchi su otto, ma ne perde 7 primitive proprio sul
+  blocco con la sottostima d'area nota (Dag 137, blocco sinistro — le stesse primitive
+  tagliate dal bordo sottostimato hanno centro fuori bbox ma sovrapposizione positiva).
+  `positive_intersection` (`overlap_ratio > 0`, nessuna soglia minima) è l'unica regola
+  senza fallimenti sugli otto blocchi ed è quella ratificata per popolare `primitive_ids`
+  nel producer di produzione. Verificato anche il rischio opposto (falsi positivi da
+  sovrapposizioni marginali con testo esterno): su Dag 137 il vicino esterno più vicino
+  resta a ~85pt di distanza, nessuna primitiva in una zona grigia tra "dentro" e "fuori".
+
+Limite esplicito, non risolto: nessun fixture con due tabelle a distanza minima (1-3pt)
+è stato testato — un caso del genere potrebbe comportarsi diversamente con una regola
+priva di soglia minima. Da verificare se e quando un caso reale simile viene
+identificato; non blocca la ratifica sugli otto blocchi noti.
+
+Nota emersa durante l'ispezione visiva delle pagine, non specifica di questo producer:
+il numero di pagina stampato sul manuale (quello leggibile dall'utente, es. "284") non
+coincide con `page_number` PDF one-based usato da script e producer (es. 286, per via di
+pagine di frontespizio/sommario non numerate) — la differenza non è necessariamente
+costante in tutto il documento. Script e producer lavorano sempre in spazio `page_number`
+PDF, mai in spazio "numero stampato"; un'eventuale mappatura fra i due resta un problema
+distinto, per una fase di rendering/cross-reference futura verso l'utente, non per
+questo producer né per la rilevazione delle tabelle.
+
 - Apo.pdf p.16: confermato non-tabella dall'ispezione visiva dell'utente, ma non
   identificato con certezza — non bloccante, da non perdere in una passata futura.
 
