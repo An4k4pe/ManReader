@@ -892,20 +892,46 @@ progettazione):
   nel producer di produzione. Verificato anche il rischio opposto (falsi positivi da
   sovrapposizioni marginali con testo esterno): su Dag 137 il vicino esterno più vicino
   resta a ~85pt di distanza, nessuna primitiva in una zona grigia tra "dentro" e "fuori".
+  Limite esplicito, non risolto: nessun fixture con due tabelle a distanza minima (1-3pt)
+  è stato testato — un caso del genere potrebbe comportarsi diversamente con una regola
+  priva di soglia minima. Da verificare se e quando un caso reale simile viene
+  identificato; non blocca la ratifica sugli otto blocchi noti.
+  Nota emersa durante l'ispezione visiva delle pagine, non specifica di questo producer:
+  il numero di pagina stampato sul manuale (quello leggibile dall'utente, es. "284") non
+  coincide con `page_number` PDF one-based usato da script e producer (es. 286, per via di
+  pagine di frontespizio/sommario non numerate) — la differenza non è necessariamente
+  costante in tutto il documento. Script e producer lavorano sempre in spazio `page_number`
+  PDF, mai in spazio "numero stampato"; un'eventuale mappatura fra i due resta un problema
+  distinto, per una fase di rendering/cross-reference futura verso l'utente, non per
+  questo producer né per la rilevazione delle tabelle.
+- Il producer di produzione è stato implementato e verificato nel commit `e41d10c` —
+  "Add production TableCandidateProducer with ratified overlap rule". Introduce tre moduli
+  puri: `page_analysis_candidate_primitive_overlap_measurements.py`
+  (`measure_candidate_primitive_overlap_ratio`, sede pubblica condivisa della formula
+  `intersection_area / primitive_area`, non importata da `ir_builder.py` né dagli script
+  diagnostici, che mantengono le proprie copie indipendenti), `page_analysis_table_candidate_binding.py`
+  (`BoundTableCandidatePage`, verifica la corrispondenza `page_id`/`plumber_page.page_number`
+  in `__post_init__`, rifiuta mismatch numerico e formato inatteso con `ValueError`
+  esplicito) e `page_analysis_table_candidate.py`
+  (`build_table_candidate_page_analysis`, nessuna apertura di file, `primitive_ids`
+  popolato con la regola `overlap_ratio > 0` ratificata). Una candidate con bbox fuori dai
+  limiti pagina viene scartata singolarmente con warning loggato, non causa il rifiuto
+  dell'intera pagina — comportamento deciso esplicitamente nella proposta di design (v3),
+  non lasciato all'implementazione.
 
-Limite esplicito, non risolto: nessun fixture con due tabelle a distanza minima (1-3pt)
-è stato testato — un caso del genere potrebbe comportarsi diversamente con una regola
-priva di soglia minima. Da verificare se e quando un caso reale simile viene
-identificato; non blocca la ratifica sugli otto blocchi noti.
+  Nessuna integrazione con job/workspace in questo passo, per scelta esplicita: il
+  producer è una funzione pura, non wired in nessun modulo `job_*.py`. Verificato (grep
+  sul repo) che nessun producer Milestone 13+ è oggi invocato dal job — le uniche
+  invocazioni reali fuori dai test sono in moduli diagnostici read-only
+  (`pymupdf_capture_dump.py` e tre file `*_diagnostics.py`); questo producer sarebbe il
+  primo, quando verrà wired. Dove vive quell'orchestrazione (nuovo modulo dedicato,
+  orientamento indicato, non deciso) resta un giro futuro separato.
 
-Nota emersa durante l'ispezione visiva delle pagine, non specifica di questo producer:
-il numero di pagina stampato sul manuale (quello leggibile dall'utente, es. "284") non
-coincide con `page_number` PDF one-based usato da script e producer (es. 286, per via di
-pagine di frontespizio/sommario non numerate) — la differenza non è necessariamente
-costante in tutto il documento. Script e producer lavorano sempre in spazio `page_number`
-PDF, mai in spazio "numero stampato"; un'eventuale mappatura fra i due resta un problema
-distinto, per una fase di rendering/cross-reference futura verso l'utente, non per
-questo producer né per la rilevazione delle tabelle.
+  Verificato con confronto diretto contro dati già noti: su Dag.pdf `page_number` 137, i
+  conteggi di `primitive_ids` per le due candidate (114 e 57) coincidono esattamente con i
+  conteggi `positive_intersection` già registrati dalla diagnostica cross-reference.
+  Baseline verificata: Ruff verde, BasedPyright 0 errori/0 warning/0 note, suite completa
+  1131 test OK (1122 preesistenti + 9 nuovi) e 7 skipped, `git diff --check` verde.
 
 - Apo.pdf p.16: confermato non-tabella dall'ispezione visiva dell'utente, ma non
   identificato con certezza — non bloccante, da non perdere in una passata futura.
