@@ -8,10 +8,12 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–20 sono completate. Il producer di produzione `TableCandidateProducer` è
-implementato e verificato, non ancora integrato nel job/workspace: quell'integrazione
-(il primo producer Milestone 13+ mai wired in un job) resta rinviata a una milestone
-futura non ancora aperta né numerata.
+Le Milestone 1–21 sono completate. Il primo producer Milestone 13+ è ora wired nel job
+(`table_candidate`, Milestone 21, commit `93ee631`): esecuzione runtime-only sopra una
+pagina già catturata, nessuna persistenza del risultato. Restano rinviate a milestone
+future non ancora aperte né numerate: persistenza tracciata del `PageAnalysis` prodotto,
+resume/batch multi-pagina, estensione di `CapturePageState` per un secondo artifact
+(es. capture pdfplumber), wiring di un secondo producer.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli. I nuovi contratti lavorano in shadow mode e non producono ancora decisioni editoriali, IR o output finale.
 
@@ -1003,6 +1005,100 @@ p.136 e p.137 e del blocco unico di Vil p.91 coincidono con quelle già riportat
 osservata sul blocco sinistro di Dag p.137). Baseline verificata: Ruff verde, BasedPyright
 0 errori/0 warning/0 note, suite completa 1122 test OK (1120 preesistenti + 2 nuovi) e 7
 skipped, `git diff --check` verde.
+
+## Milestone 21 — wiring del primo producer nel job (esecuzione runtime, senza persistenza) — completata
+
+Chiude un giro di progettazione Modalità P breve, condotto in sessione separata da questo
+State.md (documenti `Proposta_Milestone21_ProducerJobWiring_v1.md`,
+`Revisione_ChatB_Milestone21_ProducerJobWiring_v1.md`,
+`Milestone21_Decisioni_e_PromptZed_v1.md`, non inclusi nel repo). Obiettivo: introdurre la
+prima infrastruttura generica per eseguire un producer di `PageAnalysis` dentro il job,
+sopra una pagina già catturata. `table_candidate` (Milestone 20) è il primo consumer
+concreto e il caso più esigente, non l'unico beneficiario dichiarato: qualunque producer
+PyMuPDF-only futuro userà la stessa infrastruttura senza modifiche strutturali attese.
+
+Punto di partenza verificato in apertura: nessun modulo `job_*.py` invocava alcun
+producer Milestone 13+ prima di questa milestone (stesso punto architetturale già
+registrato in chiusura Milestone 20).
+
+Decisioni ratificate in Modalità P, con revisione Chat B indipendente e verifica
+empirica delle citazioni contro il codice reale, non per fiducia:
+
+1. Nessuna persistenza del `PageAnalysis` prodotto in questo giro. Il runner lo
+   restituisce al chiamante; `page_analysis_store.py` (Milestone 5, mai collegato prima
+   d'ora e non collegato nemmeno qui) resta un mattone disponibile per una milestone
+   futura. Persistenza tracciata avrebbe richiesto un nuovo campo in `WorkspacePaths` e
+   un bump di `JOB_MANIFEST_SCHEMA_VERSION`, lavoro comparabile a quello già rinviato per
+   `CapturePageState` — non aperto in questo giro.
+2. Apertura document-scoped a doppio backend in un modulo dedicato, non
+   nell'attestazione PyMuPDF-only di Milestone 9 (`attest_pymupdf_document_source`,
+   chiusa, non riaperta) e non inline nel runner.
+3. Dispatcher a lista chiusa (`frozenset`) sul nome del producer richiesto, non un
+   registry dinamico: un solo producer reale (`table_candidate`) non giustifica quella
+   complessità. Forma da rivedere quando arriverà un secondo producer con un caso
+   concreto davanti, non indovinata ora.
+4. Le guardie pagina `rotation != 0` e `mediabox != cropbox`, verificate nel prototipo
+   standalone di Milestone 20 (`30d9f4e`) ma assenti dalla produzione (`page_analysis_table_candidate.py`,
+   `page_analysis_table_candidate_binding.py`, `pymupdf_capture.py` — quest'ultimo anzi
+   ammette rotazioni 90/180/270), vanno riapplicate nel runner a livello di pagina
+   specifica, prima di costruire `BoundTableCandidatePage`. Trovato da Chat A durante il
+   dettaglio implementativo, non presente né nella proposta iniziale né nella revisione
+   di Chat B.
+5. Il runner non legge l'artifact di capture persistito da `job_capture_page_runner.py`:
+   verificato che nessuna funzione `*_from_dict` ricostruisce un `BackendPageCapture` dal
+   JSON persistito in produzione (i test esistenti lo leggono solo come dict grezzo).
+   Il runner ricalcola la capture PyMuPDF a runtime dalla pagina già aperta, stesso
+   pattern già usato da `pymupdf_capture_dump.py` e dal prototipo Milestone 20. Costo
+   noto e accettato: la capture PyMuPDF viene rifatta due volte (persistenza al momento
+   della cattura, ricalcolo al momento dell'analisi) — inefficienza rinviabile a un
+   futuro deserializzatore, non costruito qui. Anche questo trovato da Chat A durante il
+   dettaglio implementativo, non nei due documenti precedenti.
+
+Implementato e verificato nel commit `93ee631` — "Add job-wired page analysis runner for
+the table_candidate producer". Due moduli nuovi: `pymupdf_pdfplumber_document_source_binding.py`
+(`BoundDocumentSource`, dataclass pura senza semantica di context manager;
+`bind_pymupdf_pdfplumber_document_source(snapshot_path, *, expected_file)`, legge i byte
+una sola volta, verifica digest/size con gli stessi messaggi di `attest_pymupdf_document_source`,
+apre `fitz` e `pdfplumber` dallo stesso buffer — confermato `pdfplumber.open is PDF.open`,
+non un aggiramento —, `ValueError` esplicito su mismatch `page_count` fra i due backend,
+chiusura di quanto già aperto su ogni percorso di errore) e `job_page_analysis_runner.py`
+(`run_job_page_analysis`, `PageAnalysisRunResult`). Il runner valida `producer_name`
+contro la lista chiusa prima di aprire qualunque file, richiede la pagina già `COMPLETED`
+e risolvibile (`is_capture_page_resumable`) come gate di precondizione — nessuna cattura
+implicita —, applica le guardie pagina del punto 4, ricalcola la capture come da punto 5,
+per `table_candidate` costruisce `BoundTableCandidatePage` e chiama
+`build_table_candidate_page_analysis` invariato dalla Milestone 20, chiude entrambi i
+backend in un blocco `finally`. Aggiunta non richiesta dal design ma verificata coerente:
+un controllo `page_count` PDF-vs-manifest, a specchio di quello già presente in
+`job_capture_page_runner.py`.
+
+`job_capture_page_runner.py` resta invariato (capture-only, come da nome e da vincolo
+esplicito). Nessuna modifica a `CapturePageState`, `CaptureProgress`, `JobManifest`,
+`WorkspacePaths`. Nessuna modifica ai contratti Milestone 20
+(`BoundTableCandidatePage`, `measure_candidate_primitive_overlap_ratio`,
+`build_table_candidate_page_analysis`, regola `positive_intersection`).
+
+Verificato con test end-to-end su Dag.pdf `page_number` 137: i conteggi `primitive_ids`
+delle due candidate (114 e 57) coincidono con l'oracolo già stabilito in Milestone 20,
+attraverso il nuovo percorso wired nel job anziché lo script diagnostico standalone.
+Test aggiuntivi: rifiuto di pagina non catturata (nessuna cattura implicita), rifiuto di
+pagina catturata con artifact invalido, rifiuto di `producer_name` sconosciuto, rifiuto
+di pagina ruotata, rifiuto di pagina con `cropbox != mediabox`, apertura corretta dei due
+backend dallo stesso buffer, rifiuto e cleanup su mismatch digest/size/`page_count`.
+Baseline verificata: Ruff verde, BasedPyright 0 errori/0 warning/0 note, suite completa
+1140 test OK (1131 preesistenti + 9 nuovi) e 7 skipped, `git diff --check` verde.
+
+Fuori scope per questo micro-step, esplicitamente rinviato: persistenza tracciata o non
+tracciata del `PageAnalysis` prodotto; resume o esecuzione batch su più pagine; estensione
+di `CapturePageState` per un secondo artifact (es. capture pdfplumber persistita); wiring
+di un secondo producer reale (nessuno oggi pronto oltre `table_candidate`); un punto di
+invocazione manuale/CLI dedicato (non richiesto in questo giro, `pymupdf_capture_dump.py`
+resta invariato, PyMuPDF-only).
+
+**Milestone chiusa nel commit `93ee631`.** Il deliverable pianificato in Modalità P
+(apertura document-scoped a doppio backend, runner generico, wiring di `table_candidate`)
+è l'unico previsto per questa milestone, non multi-fase come la Milestone 20: nessuna
+fase ulteriore risultava pianificata in chiusura di progettazione.
 
 Riferimento documentale: `Proposta_TableCandidateProducer_v5.md` (consegnato all'utente,
 non incluso nel repo).

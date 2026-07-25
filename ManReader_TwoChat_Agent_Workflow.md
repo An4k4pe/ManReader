@@ -278,12 +278,19 @@ Test:
 - python -m unittest [test mirati]
 - python -m unittest
 
+Prima di riportare l'esito:
+- git add -- [file ammessi elencati sopra] (mai `git add .`, mai file fuori lista)
+- git diff --cached --stat
+- git diff --cached
+
 Accettazione:
 - [criterio verificabile]
 - nessun hardcode;
 - nessuna regressione nota;
-- mostra diff, test e `git status --short`.
+- mostra `git add`/`git diff --cached` come sopra, test e `git status --short`.
 ```
+
+File nuovi (mai tracciati) non compaiono in `git diff` semplice: senza `git add` esplicito sui soli file ammessi, Chat A non ha un diff reale da rivedere e deve rileggere i file interi, più lento e più soggetto a distrazioni. Lo staging richiesto qui è solo locale, per generare un diff leggibile: non è un commit e non sostituisce la regola permanente "niente `git add .`" né "nessun commit automatico" (§3) — resta vietato aggiungere file fuori dalla lista "File ammessi".
 
 ## 10. Review diff in Chat A
 
@@ -293,6 +300,8 @@ Fornire:
 git status --short
 git diff --stat
 git diff -- [file]
+git diff --cached --stat    (se i file sono nuovi/staged da Zed agent, §9)
+git diff --cached           (se i file sono nuovi/staged da Zed agent, §9)
 
 Test eseguiti:
 [...]

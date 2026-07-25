@@ -622,6 +622,30 @@ Baseline finale verificata: Ruff verde, BasedPyright 0 errori/0 warning/0 note, 
 completa 1131 test OK e 7 skipped, `git diff --check` verde. Dettagli completi in
 `State.md`.
 
+## Milestone 21 - wiring del primo producer nel job (esecuzione runtime, senza persistenza) — completata
+
+Prima infrastruttura generica per eseguire un producer di `PageAnalysis` dentro il job.
+`table_candidate` è il primo consumer wired, non l'unico beneficiario dichiarato. Due
+moduli nuovi: `pymupdf_pdfplumber_document_source_binding.py`
+(`bind_pymupdf_pdfplumber_document_source` → `BoundDocumentSource`, apertura di `fitz` e
+`pdfplumber` dallo stesso buffer verificato una sola volta, `ValueError` su mismatch
+digest/size/`page_count`) e `job_page_analysis_runner.py`
+(`run_job_page_analysis` → `PageAnalysisRunResult`, lista chiusa di producer supportati,
+richiede pagina già catturata e risolvibile, riapplica le guardie pagina
+`rotation != 0`/`mediabox != cropbox` di Milestone 20 assenti dalla produzione, ricalcola
+la capture a runtime invece di leggere l'artifact persistito — nessun deserializzatore di
+`BackendPageCapture` esiste in produzione —, nessuna persistenza del risultato).
+`job_capture_page_runner.py` resta capture-only, invariato; nessuna modifica a
+`CapturePageState`/`CaptureProgress`/`JobManifest`/`WorkspacePaths` né ai contratti
+Milestone 20. Verificato contro l'oracolo Dag.pdf p.137 (114/57 primitive) attraverso il
+percorso wired. Implementato nel commit `93ee631`. Baseline verificata: Ruff verde,
+BasedPyright 0 errori/0 warning/0 note, suite completa 1140 test OK (1131 preesistenti +
+9 nuovi) e 7 skipped, `git diff --check` verde. Dettagli completi in `State.md`.
+
+Restano fuori scope, rinviati a milestone future non numerate: persistenza del
+`PageAnalysis` prodotto; resume/batch multi-pagina; estensione di `CapturePageState` per
+un secondo artifact; wiring di un secondo producer reale; CLI/diagnostica dedicata.
+
 ## Migrazione e shadow mode
 
 Modalità transitorie:
