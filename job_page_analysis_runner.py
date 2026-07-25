@@ -2,22 +2,31 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 
 from job_capture_progress import CapturePageStatus, is_capture_page_resumable
 from job_manifest_model import JobManifest
 from job_manifest_store import load_job_manifest
+from job_page_analysis_cache import (
+    read_cached_page_analysis,
+    write_page_analysis_cache,
+)
 from page_analysis_model import PageAnalysis
 from page_analysis_table_candidate import build_table_candidate_page_analysis
 from page_analysis_table_candidate_binding import BoundTableCandidatePage
-from primitive_normalizer import normalize_backend_page_capture
+from primitive_normalizer import (
+    NORMALIZED_PRIMITIVE_SCHEMA_VERSION,
+    normalize_backend_page_capture,
+)
 from pymupdf_capture import capture_pymupdf_page
 from pymupdf_pdfplumber_document_source_binding import (
     bind_pymupdf_pdfplumber_document_source,
 )
 
 _SUPPORTED_PRODUCERS = frozenset({"table_candidate"})
+_TABLE_CANDIDATE_PRODUCER_VERSION = "1.0"
+_TABLE_CANDIDATE_CONFIGURATION_ID = "pdfplumber-text-lines-v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +44,7 @@ def run_job_page_analysis(
     page_num: int,
     producer_name: str,
     generation_id: str,
+    force_recompute: bool = False,
 ) -> PageAnalysisRunResult:
     """Run one supported producer for a verified, completed capture page."""
 
@@ -57,6 +67,30 @@ def run_job_page_analysis(
             "explicit reset is required"
         )
 
+    source_page_id = f"page:{page_num:04d}"
+    source_capture_id = f"{manifest.job_id}:analysis:pymupdf:page:{page_num:04d}"
+    expected_producer_version, expected_configuration_id = _producer_cache_identity(
+        producer_name
+    )
+    if not force_recompute:
+        cached_analysis = read_cached_page_analysis(
+            job_dir=job_dir,
+            producer_name=producer_name,
+            page_num=page_num,
+            expected_source_id=manifest.source.sha256,
+            expected_source_capture_id=source_capture_id,
+            expected_source_page_id=source_page_id,
+            expected_source_primitive_schema_version=NORMALIZED_PRIMITIVE_SCHEMA_VERSION,
+            expected_producer_name=producer_name,
+            expected_producer_version=expected_producer_version,
+            expected_configuration_id=expected_configuration_id,
+        )
+        if cached_analysis is not None:
+            return PageAnalysisRunResult(
+                manifest=manifest,
+                analysis=replace(cached_analysis, generation_id=generation_id),
+            )
+
     snapshot_path = _workspace_path(job_dir, manifest.workspace.source_snapshot)
     bound_source = bind_pymupdf_pdfplumber_document_source(
         snapshot_path,
@@ -76,10 +110,8 @@ def run_job_page_analysis(
             capture_pymupdf_page(
                 page,
                 source_id=manifest.source.sha256,
-                page_id=f"page:{page_num:04d}",
-                capture_id=(
-                    f"{manifest.job_id}:analysis:pymupdf:page:{page_num:04d}"
-                ),
+                page_id=source_page_id,
+                capture_id=source_capture_id,
             )
         )
         if producer_name == "table_candidate":
@@ -96,7 +128,22 @@ def run_job_page_analysis(
         bound_source.fitz_document.close()
         bound_source.plumber_pdf.close()
 
+    write_page_analysis_cache(
+        job_dir=job_dir,
+        producer_name=producer_name,
+        page_num=page_num,
+        analysis=analysis,
+    )
     return PageAnalysisRunResult(manifest=manifest, analysis=analysis)
+
+
+def _producer_cache_identity(producer_name: str) -> tuple[str, str]:
+    if producer_name == "table_candidate":
+        return (
+            _TABLE_CANDIDATE_PRODUCER_VERSION,
+            _TABLE_CANDIDATE_CONFIGURATION_ID,
+        )
+    raise AssertionError("supported producer cache identity is incomplete")
 
 
 def _validate_manifest_path(

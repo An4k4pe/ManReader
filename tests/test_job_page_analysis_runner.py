@@ -5,9 +5,11 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import fitz
 
+import job_page_analysis_runner
 from job_capture_page_runner import capture_job_page
 from job_initializer import initialize_job
 from job_page_analysis_runner import run_job_page_analysis
@@ -133,18 +135,97 @@ class JobPageAnalysisRunnerTests(unittest.TestCase):
             manifest_path = job_dir / manifest.workspace.manifest_path
             capture_job_page(job_dir=job_dir, manifest_path=manifest_path, page_num=137)
 
-            result = run_job_page_analysis(
+            first_result = run_job_page_analysis(
                 job_dir=job_dir,
                 manifest_path=manifest_path,
                 page_num=137,
                 producer_name="table_candidate",
-                generation_id="generation:test",
+                generation_id="generation:first",
             )
 
+            cache_path = (
+                job_dir
+                / "analysis_cache"
+                / "table_candidate"
+                / "page-0137.json"
+            )
+            self.assertTrue(cache_path.is_file())
+
+            with (
+                patch(
+                    "job_page_analysis_runner.bind_pymupdf_pdfplumber_document_source",
+                    side_effect=AssertionError("cache hit must not open the PDF"),
+                ),
+                patch(
+                    "job_page_analysis_runner.capture_pymupdf_page",
+                    side_effect=AssertionError("cache hit must not recapture the page"),
+                ),
+            ):
+                cached_result = run_job_page_analysis(
+                    job_dir=job_dir,
+                    manifest_path=manifest_path,
+                    page_num=137,
+                    producer_name="table_candidate",
+                    generation_id="generation:second",
+                )
+
         self.assertEqual(
-            tuple(len(candidate.primitive_ids) for candidate in result.analysis.candidates),
+            tuple(
+                len(candidate.primitive_ids)
+                for candidate in first_result.analysis.candidates
+            ),
             (114, 57),
         )
+        self.assertEqual(
+            cached_result.analysis,
+            replace_generation_id(first_result.analysis, "generation:second"),
+        )
+
+    def test_force_recompute_ignores_valid_cache_and_rewrites_it(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            job_dir, manifest_path = self._create_job(Path(temporary_directory))
+            capture_job_page(job_dir=job_dir, manifest_path=manifest_path, page_num=1)
+            first_result = run_job_page_analysis(
+                job_dir=job_dir,
+                manifest_path=manifest_path,
+                page_num=1,
+                producer_name="table_candidate",
+                generation_id="generation:first",
+            )
+
+            with (
+                patch(
+                    "job_page_analysis_runner.bind_pymupdf_pdfplumber_document_source",
+                    wraps=job_page_analysis_runner.bind_pymupdf_pdfplumber_document_source,
+                ) as bind_mock,
+                patch(
+                    "job_page_analysis_runner.capture_pymupdf_page",
+                    wraps=job_page_analysis_runner.capture_pymupdf_page,
+                ) as capture_mock,
+            ):
+                recomputed_result = run_job_page_analysis(
+                    job_dir=job_dir,
+                    manifest_path=manifest_path,
+                    page_num=1,
+                    producer_name="table_candidate",
+                    generation_id="generation:forced",
+                    force_recompute=True,
+                )
+
+            self.assertTrue(bind_mock.called)
+            self.assertTrue(capture_mock.called)
+            self.assertEqual(
+                recomputed_result.analysis,
+                replace_generation_id(first_result.analysis, "generation:forced"),
+            )
+
+
+def replace_generation_id(analysis: object, generation_id: str) -> object:
+    """Return a comparison value with only the runtime generation changed."""
+
+    from dataclasses import replace
+
+    return replace(analysis, generation_id=generation_id)
 
 
 if __name__ == "__main__":
