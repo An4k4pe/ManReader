@@ -8,12 +8,14 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–21 sono completate. Il primo producer Milestone 13+ è ora wired nel job
-(`table_candidate`, Milestone 21, commit `93ee631`): esecuzione runtime-only sopra una
-pagina già catturata, nessuna persistenza del risultato. Restano rinviate a milestone
-future non ancora aperte né numerate: persistenza tracciata del `PageAnalysis` prodotto,
-resume/batch multi-pagina, estensione di `CapturePageState` per un secondo artifact
-(es. capture pdfplumber), wiring di un secondo producer.
+Le Milestone 1–22 sono completate. Il primo producer Milestone 13+ è wired nel job
+(`table_candidate`, Milestone 21, commit `93ee631`); `run_job_page_analysis` ha ora anche
+una cache opportunistica non tracciata dal manifest (Milestone 22, commit `fce90e2`).
+Restano rinviate a milestone future non ancora aperte né numerate: persistenza *tracciata*
+del `PageAnalysis` prodotto (quella opportunistica esiste già), resume/batch multi-pagina,
+estensione di `CapturePageState` per un secondo artifact (es. capture pdfplumber — utile
+solo per un futuro producer pdfplumber diverso da `table_candidate`, non per questo),
+wiring di un secondo producer.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli. I nuovi contratti lavorano in shadow mode e non producono ancora decisioni editoriali, IR o output finale.
 
@@ -409,3 +411,79 @@ fase ulteriore risultava pianificata in chiusura di progettazione.
 
 Riferimento documentale: `Proposta_TableCandidateProducer_v5.md` (consegnato all'utente,
 non incluso nel repo).
+
+## Milestone 22 — cache opportunistica del PageAnalysis — completata
+
+Emersa da una domanda diretta sul costo reale di `run_job_page_analysis`: un
+deserializzatore di `BackendPageCapture` (discusso e poi scartato in Modalità P) avrebbe
+risolto solo la ricattura PyMuPDF, non il costo del parsing pdfplumber (`find_tables`),
+verosimilmente il più pesante dei due — verificato leggendo `page_analysis_table_candidate.py`,
+le bbox delle tabelle vengono esclusivamente da `bound_page.plumber_page.find_tables(...)`,
+mai da `BackendPageCapture`. Per `table_candidate` l'output di pdfplumber è già
+candidate-shaped: non esiste un livello "capture pdfplumber grezzo" utile da persistere
+separatamente dalle candidate. "Leggere una volta e poter riaccedere ai dati" coincide,
+per questo producer, con persistere il `PageAnalysis` prodotto.
+
+Decisioni ratificate in Modalità P, con revisione Chat B indipendente e verifica empirica
+delle citazioni:
+
+1. Cache non tracciata dal manifest — nessuna modifica a `WorkspacePaths`, `JobManifest`,
+   `CapturePageState`, `CaptureProgress`. Non fa parte del contratto di resumability del
+   job: se assente o invalida, degrada sempre al ricalcolo completo, mai a un errore o a
+   un dato scorretto.
+2. Chiave di validità = i sette campi di `PageAnalysisProvenance` (`source_id`,
+   `source_capture_id`, `source_page_id`, `source_primitive_schema_version`,
+   `producer_name`, `producer_version`, `configuration_id`), tutti noti staticamente senza
+   aprire il PDF. Corretto in revisione (Chat B): la proposta iniziale includeva anche
+   `sha256`/`size_bytes` di `CapturePageState`, scartati perché `run_job_page_analysis` non
+   li consuma mai come input — l'identità del contenuto documentale è già interamente
+   verificata da `source_id` a ogni chiamata via digest check in
+   `bind_pymupdf_pdfplumber_document_source`.
+3. `generation_id` escluso dalla chiave, gestito con `dataclasses.replace(cached_analysis,
+   generation_id=generation_id)` su cache hit, senza mai riscrivere il file. Necessario
+   perché `BoundPageAnalysis.__post_init__` (`document_analysis_binding.py`) impone
+   `reference.page_analysis_generation_id == analysis.generation_id` — un gap trovato in
+   revisione (Chat B), assente dalla proposta iniziale.
+4. Percorso convenzionale `job_dir / "analysis_cache" / producer_name /
+   f"page-{page_num:04d}.json"`, nome deliberatamente diverso da `raw_dir`/`analysis` per
+   segnalare che non è tracciato dal manifest.
+5. Logging esplicito (INFO) su ogni cache hit — mitigazione proporzionata a un rischio
+   segnalato in revisione: nessuna versione della logica di cattura è oggi tracciata
+   (solo `CAPTURE_SCHEMA_VERSION`, `NORMALIZED_PRIMITIVE_SCHEMA_VERSION`,
+   `PAGE_ANALYSIS_SCHEMA_VERSION`, tutte sullo *schema* dei dati, non sulla *logica*); un
+   futuro bug fix in `capture_pymupdf_page`/`normalize_backend_page_capture` che cambi
+   l'output senza bump di schema non invaliderebbe la cache. Non risolto — reso
+   diagnosticabile via log, non lasciato silenzioso. Un vero versionamento della logica di
+   cattura resta esplicitamente rinviato.
+6. `force_recompute: bool = False` su `run_job_page_analysis`: bypassa una cache valida e
+   riscrive comunque il file.
+
+Implementato e verificato nel commit `fce90e2` — "Add opportunistic PageAnalysis cache to
+job_page_analysis_runner". Nuovo modulo `job_page_analysis_cache.py`
+(`read_cached_page_analysis`, `write_page_analysis_cache`, riuso di `page_analysis_store.py`
+Milestone 5, mai collegato prima d'ora). `run_job_page_analysis` modificato: prova la
+lettura cache prima di aprire qualunque backend, usando solo valori noti staticamente dal
+manifest; su hit restituisce `dataclasses.replace(...)`; su miss o `force_recompute=True`
+procede come in Milestone 21 e scrive la cache a calcolo completato. Le costanti
+`producer_version`/`configuration_id` di `table_candidate` sono duplicate come costanti
+private in `job_page_analysis_runner.py` (il file `page_analysis_table_candidate.py` era
+fuori scope, quei valori vi restano letterali inline, non esportabili) — verificato che
+coincidano esattamente, nessuna deriva.
+
+Verificato con test end-to-end su Dag.pdf `page_number` 137: al primo run i conteggi
+`primitive_ids` (114, 57) coincidono con l'oracolo già stabilito; al secondo run, con
+`bind_pymupdf_pdfplumber_document_source`/`capture_pymupdf_page` forzati a sollevare
+`AssertionError` se chiamati, il cache hit restituisce lo stesso risultato con solo
+`generation_id` sostituito, confermando che nessun backend viene riaperto. Baseline
+verificata: Ruff verde, BasedPyright 0 errori/0 warning/0 note, suite completa 1146 test
+OK (1140 preesistenti + 12 nuovi, di cui alcuni sostitutivi) e 7 skipped, `git diff --check`
+verde.
+
+Fuori scope, esplicitamente rinviato: persistenza *tracciata* nel manifest (resterebbe
+un'alternativa distinta se servirà il resume); versionamento della logica di cattura;
+gestione della concorrenza in scrittura (nessun job manager/batch runner esiste oggi);
+deserializzatore di `BackendPageCapture` (valore ridotto per `table_candidate`, resta
+un'idea per un eventuale producer PyMuPDF-only futuro).
+
+**Milestone chiusa nel commit `fce90e2`.** Documenti di progettazione (non inclusi nel
+repo): `Proposta_PageAnalysisCache_v1.md`, `PageAnalysisCache_Decisioni_e_PromptZed_v1.md`.

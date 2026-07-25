@@ -241,7 +241,7 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–21 sono completate.
+Le Milestone 1–22 sono completate.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti restano in shadow mode.
 
@@ -364,6 +364,27 @@ BasedPyright 0 errori/0 warning/0 note, suite completa 1140 test OK (1131 preesi
 Restano fuori scope, rinviati a milestone future non numerate: persistenza del
 `PageAnalysis` prodotto; resume/batch multi-pagina; estensione di `CapturePageState` per
 un secondo artifact; wiring di un secondo producer reale; CLI/diagnostica dedicata.
+
+## Milestone 22 - cache opportunistica del PageAnalysis - completata
+
+`job_page_analysis_cache.py` introduce `read_cached_page_analysis`/
+`write_page_analysis_cache`, riuso di `page_analysis_store.py` (Milestone 5, mai
+collegato prima). Cache non tracciata dal manifest sotto
+`job_dir/analysis_cache/<producer_name>/page-NNNN.json`; chiave di validità = i sette
+campi di `PageAnalysisProvenance` (non `generation_id`, gestito con `dataclasses.replace`
+su hit, senza riscrivere il file); qualunque mismatch o file assente/corrotto degrada al
+ricalcolo completo, mai a un errore. `run_job_page_analysis` guadagna
+`force_recompute: bool = False`. Nessuna modifica a `WorkspacePaths`/`JobManifest`/
+`CapturePageState`/`CaptureProgress`; nessun versionamento della logica di cattura
+(solo schema-version esistenti), mitigato con logging esplicito su ogni cache hit, non
+risolto. Implementato nel commit `fce90e2`. Baseline verificata: Ruff verde, BasedPyright
+0 errori/0 warning/0 note, suite completa 1146 test OK e 7 skipped, `git diff --check`
+verde. Dettagli completi in `State.md`.
+
+Restano fuori scope: persistenza tracciata nel manifest; versionamento della logica di
+cattura; concorrenza in scrittura; deserializzatore di `BackendPageCapture` (valore
+ridotto per `table_candidate`, verificato che le bbox tabella vengano solo da
+`plumber_page.find_tables`, mai da `BackendPageCapture`).
 
 ## Migrazione e shadow mode
 
