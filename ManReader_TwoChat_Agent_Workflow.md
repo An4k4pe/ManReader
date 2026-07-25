@@ -105,7 +105,9 @@ Un refactor può essere ampio nel risultato complessivo, ma ogni step affidato a
 
 ## 3. Regole permanenti
 
-- leggere sempre `State.md` e `AGENTS.MD`;
+- leggere sempre `State.md` e `AGENTS.MD` (non `State_Archive.md`: contiene il dettaglio
+  narrativo delle milestone chiuse e non più citate per contenuto, consultarlo solo
+  quando serve quel dettaglio specifico, non a ogni task);
 - elaborazione locale, nessun cloud obbligatorio nel core;
 - nessuna invenzione del contenuto mancante;
 - niente hardcode su manuale, pagina, filename, titolo o parola come soluzione primaria;
@@ -341,3 +343,23 @@ Aggiornare questo workflow quando cambiano:
 - passaggio progettazione/implementazione;
 - uso di Zed agent;
 - criteri di review.
+
+## 12. Archiviazione delle milestone chiuse
+
+`State_Archive.md` raccoglie il dettaglio narrativo completo delle milestone chiuse,
+spostato lì da `State.md`/`AGENTS.MD` senza riscritture o sintesi: il testo archiviato è
+identico a quello rimosso. Non rientra nella lettura obbligatoria di §3.
+
+Una milestone chiusa è candidata all'archiviazione quando non viene più citata per
+contenuto (solo per numero o commit hash) da decisioni correnti — non per anzianità o
+posizione in una lista fissa. Verificarlo con una ricerca reale dei riferimenti
+incrociati fra milestone in `State.md`/`AGENTS.MD`, non per impressione.
+
+Quando una milestone viene archiviata:
+
+- il testo integrale si sposta in `State_Archive.md`, invariato;
+- resta in `State.md`/`AGENTS.MD` solo una riga o poche righe di sintesi, nello stile già
+  usato per le Milestone 1–5 in `State.md`;
+- i contratti, le classi e le regole introdotti restano vigenti e descritti in forma
+  permanente in `AGENTS.MD` §"Architettura approvata"/§"Invarianti da non violare" —
+  l'archiviazione riguarda solo la narrazione storica, non lo stato dei contratti.
