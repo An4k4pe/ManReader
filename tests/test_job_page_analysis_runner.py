@@ -320,7 +320,7 @@ class JobPageAnalysisRunnerTests(unittest.TestCase):
                 )
             )
 
-            cache_path = job_dir, "analysis_cache", "page_edge_visual", "page-0001.json"
+            cache_path = job_dir / "analysis_cache" / "page_edge_visual" / "page-0001.json"
             self.assertTrue(cache_path.is_file())
 
             with (
