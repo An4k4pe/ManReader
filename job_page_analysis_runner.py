@@ -13,6 +13,7 @@ from job_page_analysis_cache import (
     write_page_analysis_cache,
 )
 from page_analysis_model import PageAnalysis
+from page_analysis_page_covering_visual import build_page_covering_visual_page_analysis
 from page_analysis_table_candidate import build_table_candidate_page_analysis
 from page_analysis_table_candidate_binding import BoundTableCandidatePage
 from primitive_normalizer import (
@@ -24,9 +25,31 @@ from pymupdf_pdfplumber_document_source_binding import (
     bind_pymupdf_pdfplumber_document_source,
 )
 
-_SUPPORTED_PRODUCERS = frozenset({"table_candidate"})
-_TABLE_CANDIDATE_PRODUCER_VERSION = "1.0"
-_TABLE_CANDIDATE_CONFIGURATION_ID = "pdfplumber-text-lines-v1"
+
+@dataclass(frozen=True, slots=True)
+class _ProducerSpec:
+    """Static per-producer identity used for dispatch, caching and backend needs."""
+
+    internal_producer_name: str
+    producer_version: str
+    configuration_id: str
+    requires_pdfplumber: bool
+
+
+_PRODUCER_SPECS: dict[str, _ProducerSpec] = {
+    "table_candidate": _ProducerSpec(
+        internal_producer_name="table_candidate",
+        producer_version="1.0",
+        configuration_id="pdfplumber-text-lines-v1",
+        requires_pdfplumber=True,
+    ),
+    "page_covering_visual": _ProducerSpec(
+        internal_producer_name="page_analysis.page_covering_visual",
+        producer_version="0.1",
+        configuration_id="page-covering-visual-v1",
+        requires_pdfplumber=False,
+    ),
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,7 +78,7 @@ def run_job_page_analysis(
         manifest_path=manifest_path,
     )
     _validate_page_num(manifest, page_num)
-    if producer_name not in _SUPPORTED_PRODUCERS:
+    if producer_name not in _PRODUCER_SPECS:
         raise ValueError(f"unsupported page analysis producer: {producer_name!r}")
 
     capture_page = manifest.capture_progress.pages[page_num - 1]
@@ -69,9 +92,7 @@ def run_job_page_analysis(
 
     source_page_id = f"page:{page_num:04d}"
     source_capture_id = f"{manifest.job_id}:analysis:pymupdf:page:{page_num:04d}"
-    expected_producer_version, expected_configuration_id = _producer_cache_identity(
-        producer_name
-    )
+    producer_spec = _PRODUCER_SPECS[producer_name]
     if not force_recompute:
         cached_analysis = read_cached_page_analysis(
             job_dir=job_dir,
@@ -81,9 +102,9 @@ def run_job_page_analysis(
             expected_source_capture_id=source_capture_id,
             expected_source_page_id=source_page_id,
             expected_source_primitive_schema_version=NORMALIZED_PRIMITIVE_SCHEMA_VERSION,
-            expected_producer_name=producer_name,
-            expected_producer_version=expected_producer_version,
-            expected_configuration_id=expected_configuration_id,
+            expected_producer_name=producer_spec.internal_producer_name,
+            expected_producer_version=producer_spec.producer_version,
+            expected_configuration_id=producer_spec.configuration_id,
         )
         if cached_analysis is not None:
             return PageAnalysisRunResult(
@@ -95,6 +116,7 @@ def run_job_page_analysis(
     bound_source = bind_pymupdf_pdfplumber_document_source(
         snapshot_path,
         expected_file=manifest.source,
+        include_pdfplumber=producer_spec.requires_pdfplumber,
     )
     try:
         if bound_source.fitz_document.page_count != manifest.capture_progress.page_count:
@@ -115,6 +137,10 @@ def run_job_page_analysis(
             )
         )
         if producer_name == "table_candidate":
+            if bound_source.plumber_pdf is None:
+                raise AssertionError(
+                    "table_candidate requires an open pdfplumber document"
+                )
             analysis = build_table_candidate_page_analysis(
                 BoundTableCandidatePage(
                     primitive_page=primitive_page,
@@ -122,11 +148,17 @@ def run_job_page_analysis(
                 ),
                 generation_id=generation_id,
             )
+        elif producer_name == "page_covering_visual":
+            analysis = build_page_covering_visual_page_analysis(
+                primitive_page,
+                generation_id=generation_id,
+            )
         else:
             raise AssertionError("supported producer dispatch is incomplete")
     finally:
         bound_source.fitz_document.close()
-        bound_source.plumber_pdf.close()
+        if bound_source.plumber_pdf is not None:
+            bound_source.plumber_pdf.close()
 
     write_page_analysis_cache(
         job_dir=job_dir,
@@ -135,15 +167,6 @@ def run_job_page_analysis(
         analysis=analysis,
     )
     return PageAnalysisRunResult(manifest=manifest, analysis=analysis)
-
-
-def _producer_cache_identity(producer_name: str) -> tuple[str, str]:
-    if producer_name == "table_candidate":
-        return (
-            _TABLE_CANDIDATE_PRODUCER_VERSION,
-            _TABLE_CANDIDATE_CONFIGURATION_ID,
-        )
-    raise AssertionError("supported producer cache identity is incomplete")
 
 
 def _validate_manifest_path(

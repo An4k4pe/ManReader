@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -13,6 +14,7 @@ import job_page_analysis_runner
 from job_capture_page_runner import capture_job_page
 from job_initializer import initialize_job
 from job_page_analysis_runner import run_job_page_analysis
+from page_analysis_model import PageAnalysis
 
 
 class JobPageAnalysisRunnerTests(unittest.TestCase):
@@ -37,6 +39,25 @@ class JobPageAnalysisRunnerTests(unittest.TestCase):
             source_path=source_path,
             job_dir=job_dir,
             job_id="job-test-001",
+            page_count=1,
+        )
+        return job_dir, job_dir / "manifest.json"
+
+    def _create_full_page_image_job(self, root: Path) -> tuple[Path, Path]:
+        source_path = root / "source.pdf"
+        document = fitz.open()
+        page = document.new_page(width=300.0, height=220.0)
+        pixmap = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 10, 10))
+        pixmap.set_rect(pixmap.irect, (200, 0, 0))
+        page.insert_image(page.rect, stream=pixmap.tobytes("png"))
+        document.save(source_path)
+        document.close()
+
+        job_dir = root / "job-test-page-covering-visual"
+        initialize_job(
+            source_path=source_path,
+            job_dir=job_dir,
+            job_id="job-test-page-covering-visual",
             page_count=1,
         )
         return job_dir, job_dir / "manifest.json"
@@ -219,11 +240,93 @@ class JobPageAnalysisRunnerTests(unittest.TestCase):
                 replace_generation_id(first_result.analysis, "generation:forced"),
             )
 
+    def test_runs_page_covering_visual_for_synthetic_full_page_image(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            job_dir, manifest_path = self._create_full_page_image_job(
+                Path(temporary_directory)
+            )
+            capture_job_page(job_dir=job_dir, manifest_path=manifest_path, page_num=1)
 
-def replace_generation_id(analysis: object, generation_id: str) -> object:
+            first_result = run_job_page_analysis(
+                job_dir=job_dir,
+                manifest_path=manifest_path,
+                page_num=1,
+                producer_name="page_covering_visual",
+                generation_id="generation:first",
+            )
+
+            self.assertTrue(
+                any(
+                    candidate.proposed_structural_kind == "layout.page_covering_visual"
+                    for candidate in first_result.analysis.candidates
+                )
+            )
+
+            cache_path = (
+                job_dir
+                / "analysis_cache"
+                / "page_covering_visual"
+                / "page-0001.json"
+            )
+            self.assertTrue(cache_path.is_file())
+
+            with (
+                patch(
+                    "job_page_analysis_runner.bind_pymupdf_pdfplumber_document_source",
+                    side_effect=AssertionError("cache hit must not open the PDF"),
+                ),
+                patch(
+                    "job_page_analysis_runner.capture_pymupdf_page",
+                    side_effect=AssertionError("cache hit must not recapture the page"),
+                ),
+            ):
+                cached_result = run_job_page_analysis(
+                    job_dir=job_dir,
+                    manifest_path=manifest_path,
+                    page_num=1,
+                    producer_name="page_covering_visual",
+                    generation_id="generation:second",
+                )
+
+            self.assertEqual(
+                cached_result.analysis,
+                replace_generation_id(first_result.analysis, "generation:second"),
+            )
+
+    def test_include_pdfplumber_is_symmetric_per_producer(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            job_dir, manifest_path = self._create_full_page_image_job(
+                Path(temporary_directory)
+            )
+            capture_job_page(job_dir=job_dir, manifest_path=manifest_path, page_num=1)
+
+            with patch(
+                "job_page_analysis_runner.bind_pymupdf_pdfplumber_document_source",
+                wraps=job_page_analysis_runner.bind_pymupdf_pdfplumber_document_source,
+            ) as bind_mock:
+                run_job_page_analysis(
+                    job_dir=job_dir,
+                    manifest_path=manifest_path,
+                    page_num=1,
+                    producer_name="table_candidate",
+                    generation_id="generation:table",
+                )
+                run_job_page_analysis(
+                    job_dir=job_dir,
+                    manifest_path=manifest_path,
+                    page_num=1,
+                    producer_name="page_covering_visual",
+                    generation_id="generation:visual",
+                )
+
+            self.assertEqual(bind_mock.call_count, 2)
+            table_call, visual_call = bind_mock.call_args_list
+            self.assertTrue(table_call.kwargs.get("include_pdfplumber", True))
+            self.assertFalse(visual_call.kwargs.get("include_pdfplumber", True))
+
+
+def replace_generation_id(analysis: PageAnalysis, generation_id: str) -> PageAnalysis:
     """Return a comparison value with only the runtime generation changed."""
-
-    from dataclasses import replace
 
     return replace(analysis, generation_id=generation_id)
 

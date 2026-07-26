@@ -1,4 +1,4 @@
-"""Binding of verified PDF bytes opened by PyMuPDF and pdfplumber."""
+"""Binding of verified PDF bytes opened by PyMuPDF and, optionally, pdfplumber."""
 
 from __future__ import annotations
 
@@ -14,18 +14,23 @@ from verified_file_model import VerifiedFileReference, inspect_verified_bytes
 
 @dataclass(frozen=True, slots=True)
 class BoundDocumentSource:
-    """Two backend documents opened from the same verified byte buffer."""
+    """Backend document(s) opened from the same verified byte buffer.
+
+    ``plumber_pdf`` is ``None`` when the caller opted out of pdfplumber via
+    ``include_pdfplumber=False``.
+    """
 
     fitz_document: fitz.Document
-    plumber_pdf: PDF
+    plumber_pdf: PDF | None
 
 
 def bind_pymupdf_pdfplumber_document_source(
     snapshot_path: Path,
     *,
     expected_file: VerifiedFileReference,
+    include_pdfplumber: bool = True,
 ) -> BoundDocumentSource:
-    """Open both PDF backends from one verified, in-memory source snapshot."""
+    """Open PyMuPDF, and optionally pdfplumber, from one verified source snapshot."""
 
     if not isinstance(snapshot_path, Path):
         raise ValueError("snapshot_path must be a Path")
@@ -43,6 +48,9 @@ def bind_pymupdf_pdfplumber_document_source(
         fitz_document = fitz.open(stream=data, filetype="pdf")
     except Exception as exc:
         raise ValueError("PyMuPDF could not open verified PDF bytes") from exc
+
+    if not include_pdfplumber:
+        return BoundDocumentSource(fitz_document=fitz_document, plumber_pdf=None)
 
     try:
         plumber_pdf = PDF.open(io.BytesIO(data))

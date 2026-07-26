@@ -77,11 +77,14 @@ class PyMuPDFPdfplumberDocumentSourceBindingTests(unittest.TestCase):
                 expected_file=inspect_verified_bytes(payload),
             )
             try:
+                self.assertIsNotNone(bound.plumber_pdf)
+                assert bound.plumber_pdf is not None
                 self.assertEqual(bound.fitz_document.page_count, 2)
                 self.assertEqual(len(bound.plumber_pdf.pages), 2)
             finally:
                 bound.fitz_document.close()
-                bound.plumber_pdf.close()
+                if bound.plumber_pdf is not None:
+                    bound.plumber_pdf.close()
 
     def test_rejects_and_closes_on_page_count_mismatch(self) -> None:
         payload = _pdf_bytes(1)
@@ -100,6 +103,28 @@ class PyMuPDFPdfplumberDocumentSourceBindingTests(unittest.TestCase):
                 )
 
         self.assertTrue(mismatched.closed)
+
+    def test_skips_pdfplumber_when_not_included(self) -> None:
+        payload = _pdf_bytes(2)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            snapshot_path = Path(temporary_directory) / "source.pdf"
+            snapshot_path.write_bytes(payload)
+
+            with patch(
+                "pymupdf_pdfplumber_document_source_binding.PDF.open"
+            ) as plumber_open:
+                bound = bind_pymupdf_pdfplumber_document_source(
+                    snapshot_path,
+                    expected_file=inspect_verified_bytes(payload),
+                    include_pdfplumber=False,
+                )
+                try:
+                    self.assertIsNone(bound.plumber_pdf)
+                    self.assertEqual(bound.fitz_document.page_count, 2)
+                finally:
+                    bound.fitz_document.close()
+
+            plumber_open.assert_not_called()
 
 
 if __name__ == "__main__":
