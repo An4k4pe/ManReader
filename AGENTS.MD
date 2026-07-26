@@ -241,7 +241,7 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–22 sono completate.
+Le Milestone 1–23 sono completate.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti restano in shadow mode.
 
@@ -385,6 +385,28 @@ Restano fuori scope: persistenza tracciata nel manifest; versionamento della log
 cattura; concorrenza in scrittura; deserializzatore di `BackendPageCapture` (valore
 ridotto per `table_candidate`, verificato che le bbox tabella vengano solo da
 `plumber_page.find_tables`, mai da `BackendPageCapture`).
+
+## Milestone 23 - wiring del secondo producer nel job (page_covering_visual, apertura selettiva del backend) — completata
+
+Secondo producer wired nel job dopo `table_candidate` (Milestone 21). Trovato e
+corretto un mismatch fra la chiave di dispatch del runner e il `producer_name` interno
+scritto da `page_analysis_page_covering_visual.py`
+(`"page_analysis.page_covering_visual"`), che avrebbe vanificato silenziosamente la
+cache Milestone 22 per questo producer. `bind_pymupdf_pdfplumber_document_source`
+guadagna `include_pdfplumber: bool = True` (`BoundDocumentSource.plumber_pdf: PDF |
+None`); nessuna apertura pdfplumber per i producer che non la richiedono.
+`_SUPPORTED_PRODUCERS`/`_producer_cache_identity` sostituiti da `_PRODUCER_SPECS:
+dict[str, _ProducerSpec]` (nome interno, versione, configuration_id, necessità di
+pdfplumber); il dispatcher di esecuzione resta `if`/`elif`, non giustificato un
+registry a interfaccia comune con due soli producer di forma diversa. Implementato nel
+commit `<hash>`. Baseline verificata: Ruff verde, BasedPyright 0 errori/0 warning/0
+note, suite completa 1149 test OK (1146 preesistenti + 3 nuovi) e 7 skipped,
+`git diff --check` verde. Dettagli completi, inclusa la verifica su manuali reali, in
+`State.md`.
+
+Restano fuori scope: CLI/diagnostica dedicata; wiring di un terzo producer;
+classificazione decorative/structural delle candidate `page_covering_visual`; un
+consumer document-level di ricorrenza per `content_digest`.
 
 ## Migrazione e shadow mode
 

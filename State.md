@@ -8,14 +8,33 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–22 sono completate. Il primo producer Milestone 13+ è wired nel job
-(`table_candidate`, Milestone 21, commit `93ee631`); `run_job_page_analysis` ha ora anche
-una cache opportunistica non tracciata dal manifest (Milestone 22, commit `fce90e2`).
-Restano rinviate a milestone future non ancora aperte né numerate: persistenza *tracciata*
-del `PageAnalysis` prodotto (quella opportunistica esiste già), resume/batch multi-pagina,
-estensione di `CapturePageState` per un secondo artifact (es. capture pdfplumber — utile
-solo per un futuro producer pdfplumber diverso da `table_candidate`, non per questo),
-wiring di un secondo producer.
+Le Milestone 1–23 sono completate. Due producer Milestone 13+ sono wired nel job:
+`table_candidate` (Milestone 21, commit `93ee631`) e `page_covering_visual`
+(Milestone 23, commit `3bda611`); `run_job_page_analysis` ha una cache opportunistica
+non tracciata dal manifest (Milestone 22, commit `fce90e2`) e apre selettivamente il
+backend pdfplumber solo per i producer che lo richiedono (Milestone 23). Restano
+rinviate a milestone future non ancora aperte né numerate: persistenza _tracciata_ del
+`PageAnalysis` prodotto, resume/batch multi-pagina, estensione di `CapturePageState`
+per un secondo artifact, wiring di un terzo producer, un consumer document-level di
+ricorrenza per `content_digest` (vedi appunto sotto).
+
+Appunto per una futura passata di raffinamento (non aperta, non numerata): `layout.page_edge_visual` (Milestone 6, producer `page_analysis_page_edge_visual.py`) e i producer `layout.side_band` (singleton e local-fragment, stessa Milestone 6, già congelati come baseline diagnostiche, non detector affidabili) individuano lo stesso tipo di oggetto — forme lunghe/sottili vicine a un bordo pagina — con regole geometriche indipendenti e mai confrontate direttamente fra loro. Da affrontare insieme in una futura ratifica, non separatamente.
+
+Appunto per una futura passata di raffinamento (non aperta, non numerata):
+`layout.page_covering_visual` non distingue geometricamente sfondo ripetuto da
+illustrazione unica (regola page-local, nessuna visibilità sul documento). Verificato su
+tre manuali reali: `ImageOccurrencePrimitive.content_digest` (già in
+`primitive_model.py`, popolato da `pymupdf_capture.py`/`primitive_normalizer.py` via
+`get_image_info(hashes=True)`) permette di raggruppare le candidate per identità di
+contenuto — digest su decine/centinaia di pagine (spesso a passo 2) è sfondo; digest su
+una pagina, o poche non sistematiche, è candidato a illustrazione unica. Un futuro
+consumer document-level nello stile di `measure_document_candidate_kind_occurrences`
+(Milestone 12), raggruppato per `content_digest`, non richiederebbe modifiche di schema
+per il caso immagine. `DrawingPrimitive` non ha invece alcun campo di identità
+(`primitive_model.py`): non bloccante nei tre manuali testati, perché lo sfondo
+ricorrente è sempre risultato un'immagine raster; le candidate `drawing` erano rare,
+concentrate su coppie di pagine adiacenti, coerenti con spread illustrativi doppi. Da
+trattare separatamente dalla nota su `page_edge_visual`/`side_band`.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli. I nuovi contratti lavorano in shadow mode e non producono ancora decisioni editoriali, IR o output finale.
 
@@ -440,17 +459,17 @@ delle citazioni:
    verificata da `source_id` a ogni chiamata via digest check in
    `bind_pymupdf_pdfplumber_document_source`.
 3. `generation_id` escluso dalla chiave, gestito con `dataclasses.replace(cached_analysis,
-   generation_id=generation_id)` su cache hit, senza mai riscrivere il file. Necessario
+generation_id=generation_id)` su cache hit, senza mai riscrivere il file. Necessario
    perché `BoundPageAnalysis.__post_init__` (`document_analysis_binding.py`) impone
    `reference.page_analysis_generation_id == analysis.generation_id` — un gap trovato in
    revisione (Chat B), assente dalla proposta iniziale.
 4. Percorso convenzionale `job_dir / "analysis_cache" / producer_name /
-   f"page-{page_num:04d}.json"`, nome deliberatamente diverso da `raw_dir`/`analysis` per
+f"page-{page_num:04d}.json"`, nome deliberatamente diverso da `raw_dir`/`analysis` per
    segnalare che non è tracciato dal manifest.
 5. Logging esplicito (INFO) su ogni cache hit — mitigazione proporzionata a un rischio
    segnalato in revisione: nessuna versione della logica di cattura è oggi tracciata
    (solo `CAPTURE_SCHEMA_VERSION`, `NORMALIZED_PRIMITIVE_SCHEMA_VERSION`,
-   `PAGE_ANALYSIS_SCHEMA_VERSION`, tutte sullo *schema* dei dati, non sulla *logica*); un
+   `PAGE_ANALYSIS_SCHEMA_VERSION`, tutte sullo _schema_ dei dati, non sulla _logica_); un
    futuro bug fix in `capture_pymupdf_page`/`normalize_backend_page_capture` che cambi
    l'output senza bump di schema non invaliderebbe la cache. Non risolto — reso
    diagnosticabile via log, non lasciato silenzioso. Un vero versionamento della logica di
@@ -479,7 +498,7 @@ verificata: Ruff verde, BasedPyright 0 errori/0 warning/0 note, suite completa 1
 OK (1140 preesistenti + 12 nuovi, di cui alcuni sostitutivi) e 7 skipped, `git diff --check`
 verde.
 
-Fuori scope, esplicitamente rinviato: persistenza *tracciata* nel manifest (resterebbe
+Fuori scope, esplicitamente rinviato: persistenza _tracciata_ nel manifest (resterebbe
 un'alternativa distinta se servirà il resume); versionamento della logica di cattura;
 gestione della concorrenza in scrittura (nessun job manager/batch runner esiste oggi);
 deserializzatore di `BackendPageCapture` (valore ridotto per `table_candidate`, resta
@@ -487,3 +506,46 @@ un'idea per un eventuale producer PyMuPDF-only futuro).
 
 **Milestone chiusa nel commit `fce90e2`.** Documenti di progettazione (non inclusi nel
 repo): `Proposta_PageAnalysisCache_v1.md`, `PageAnalysisCache_Decisioni_e_PromptZed_v1.md`.
+
+## Milestone 23 — wiring del secondo producer nel job (page_covering_visual, apertura selettiva del backend) — completata
+
+Chiude il rinvio esplicito di Milestone 21/22 ("wiring di un secondo producer"). Giro di
+Modalità P con revisione Chat B indipendente (documenti non inclusi nel repo).
+
+Wired `page_covering_visual` (Milestone 6, `producer_version="0.1"`,
+`configuration_id="page-covering-visual-v1"`) accanto a `table_candidate`. A differenza
+di quest'ultimo consuma solo `NormalizedPrimitivePage`, senza pdfplumber.
+
+Scoperta di Chat A, confermata da Chat B: il runner usava la chiave di dispatch
+(`producer_name`) anche come `producer_name` atteso nella cache Milestone 22. Per
+`table_candidate` coincidono per costruzione; per `page_covering_visual` no (il modulo
+scrive internamente `"page_analysis.page_covering_visual"`), causando cache-miss
+sistematico e silenzioso se non corretto.
+
+Decisioni: `bind_pymupdf_pdfplumber_document_source` guadagna
+`include_pdfplumber: bool = True` (`BoundDocumentSource.plumber_pdf: PDF | None`),
+nessun secondo backend aperto quando non richiesto — unico chiamante di produzione, una
+funzione separata avrebbe solo duplicato la verifica digest/size.
+`_SUPPORTED_PRODUCERS`/`_producer_cache_identity` sostituiti da `_PRODUCER_SPECS:
+dict[str, _ProducerSpec]` (nome interno, versione, configuration_id, necessità di
+pdfplumber), che risolve anche la scoperta sopra. Dispatcher di esecuzione resta
+`if`/`elif`: due builder con firme diverse, un adapter comune non è giustificato da due
+casi. Narrowing esplicito su `plumber_pdf` (`AssertionError` se `None` nel ramo
+`table_candidate`, guardia nel `finally`).
+
+Implementato nel commit `<hash>`. Baseline: Ruff verde, BasedPyright 0/0/0, 1149 test OK
+(1146 + 3 nuovi), 7 skipped, `git diff --check` verde.
+
+Verifica reale su tre manuali (Dag/Vil/DB, 11 pagine campione più scansione completa
+379/272/126 pagine): wiring corretto su tutte, nessun rifiuto da guardie. La scansione
+per `content_digest` conferma che il producer non distingue sfondi ripetuti da
+illustrazioni uniche (comportamento già dichiarato non-obiettivo in Milestone 6, non una
+regressione). Dettaglio e possibile seguito nell'appunto sotto.
+
+Fuori scope: CLI dedicata; terzo producer; classificazione decorative/structural;
+consumer document-level di ricorrenza. Nessuna modifica a
+`page_analysis_page_covering_visual.py`, `page_analysis_table_candidate*.py`,
+`page_analysis_model.py`, `job_page_analysis_cache.py`, `job_capture_page_runner.py`,
+manifest/workspace.
+
+**Milestone chiusa nel commit `3bda611`.**
