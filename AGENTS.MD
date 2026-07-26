@@ -408,6 +408,26 @@ Restano fuori scope: CLI/diagnostica dedicata; wiring di un terzo producer;
 classificazione decorative/structural delle candidate `page_covering_visual`; un
 consumer document-level di ricorrenza per `content_digest`.
 
+## Milestone 24 - wiring del terzo producer nel job (page_edge_visual, ratifica
+
+side_band/page_edge_visual) — completata
+
+Terzo producer wired nel job dopo `table_candidate` (Milestone 21) e
+`page_covering_visual` (Milestone 23), stesso pattern (`_PRODUCER_SPECS` +
+`elif`, nessuna modifica al binding pdfplumber). Ratificata la relazione fra
+`page_edge_visual` e `side_band`: nessuna unificazione a livello di producer
+(primitive di tipo diverso, co-occorrenza reale <1% su 5 manuali/1381 pagine); la
+relazione resta lavoro futuro di Resolution/consumer secondo l'invariante di
+`State.md` ("Resolution è l'unico livello che può accettare, rifiutare o lasciare
+irrisolto un candidato"), con nota di design su una futura soglia di magnitudo per
+distinguere containment genuino da coincidenza di margine. Implementato nel commit
+`<hash>`. Baseline verificata: Ruff verde, BasedPyright 0 errori/0 warning/0 note,
+suite completa N test OK (1149 preesistenti + 2 nuovi) e 7 skipped, `git diff --check`
+verde. Dettagli completi, inclusa la verifica empirica sui 5 manuali, in `State.md`.
+
+Restano fuori scope: soglia di magnitudo/containment in produzione; quarto producer;
+classificazione decorative/structural; consumer document-level di ricorrenza.
+
 ## Migrazione e shadow mode
 
 Modalità transitorie:

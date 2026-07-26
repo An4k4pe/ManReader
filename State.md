@@ -8,17 +8,30 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–23 sono completate. Due producer Milestone 13+ sono wired nel job:
+Le Milestone 1–23 sono completate. Tre producer Milestone 13+ sono wired nel job:
 `table_candidate` (Milestone 21, commit `93ee631`) e `page_covering_visual`
-(Milestone 23, commit `3bda611`); `run_job_page_analysis` ha una cache opportunistica
-non tracciata dal manifest (Milestone 22, commit `fce90e2`) e apre selettivamente il
-backend pdfplumber solo per i producer che lo richiedono (Milestone 23). Restano
-rinviate a milestone future non ancora aperte né numerate: persistenza _tracciata_ del
+(Milestone 23, commit `3bda611`), pageedge_visual (Milestone 24;
+`run_job_page_analysis` ha una cache opportunistica non tracciata dal manifest
+(Milestone 22, commit `fce90e2`) e apre selettivamente il
+backend pdfplumber solo per i producer che lo richiedono (Milestone 23).
+Restano rinviate a milestone future non ancora aperte né numerate: persistenza tracciata del
 `PageAnalysis` prodotto, resume/batch multi-pagina, estensione di `CapturePageState`
-per un secondo artifact, wiring di un terzo producer, un consumer document-level di
-ricorrenza per `content_digest` (vedi appunto sotto).
+per un secondo artifact, un consumer document-level di ricorrenza per `content_digest`
+(vedi appunto sotto).
 
-Appunto per una futura passata di raffinamento (non aperta, non numerata): `layout.page_edge_visual` (Milestone 6, producer `page_analysis_page_edge_visual.py`) e i producer `layout.side_band` (singleton e local-fragment, stessa Milestone 6, già congelati come baseline diagnostiche, non detector affidabili) individuano lo stesso tipo di oggetto — forme lunghe/sottili vicine a un bordo pagina — con regole geometriche indipendenti e mai confrontate direttamente fra loro. Da affrontare insieme in una futura ratifica, non separatamente.
+Milestone 24 ha ratificato la relazione fra `layout.page_edge_visual` e
+`layout.side_band` (singleton e local-fragment): restano due producer indipendenti,
+nessuna unificazione di contratto — operano su primitive di tipo diverso (`text` vs.
+`image`/`drawing`) e la co-occorrenza reale è rara (<1% delle pagine su 5 manuali
+interi testati, 1381 pagine). La relazione resta lavoro futuro di Resolution/consumer
+(invariante `State.md`: "Resolution è l'unico livello che può accettare, rifiutare o
+lasciare irrisolto un candidato"), con una nota di design: quando quel lavoro verrà
+aperto, distinguere contenuto reale (es. testo di intestazione capitolo contenuto in
+una fascia decorativa) da coincidenza di margine (overlap geometrico presente ma di
+magnitudo trascurabile, es. un bullet decorativo che sfiora il bordo di uno sfondo)
+richiederà una soglia sul rapporto fra overlap e dimensione del candidato più piccolo,
+non un booleano overlap/disjoint — coerente con la scelta di Milestone 16 di non
+esporre containment/ratio in `measure_co_referenced_page_candidate_pair`.
 
 Appunto per una futura passata di raffinamento (non aperta, non numerata):
 `layout.page_covering_visual` non distingue geometricamente sfondo ripetuto da
@@ -33,8 +46,7 @@ consumer document-level nello stile di `measure_document_candidate_kind_occurren
 per il caso immagine. `DrawingPrimitive` non ha invece alcun campo di identità
 (`primitive_model.py`): non bloccante nei tre manuali testati, perché lo sfondo
 ricorrente è sempre risultato un'immagine raster; le candidate `drawing` erano rare,
-concentrate su coppie di pagine adiacenti, coerenti con spread illustrativi doppi. Da
-trattare separatamente dalla nota su `page_edge_visual`/`side_band`.
+concentrate su coppie di pagine adiacenti, coerenti con spread illustrativi doppi.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli. I nuovi contratti lavorano in shadow mode e non producono ancora decisioni editoriali, IR o output finale.
 
@@ -533,7 +545,7 @@ pdfplumber), che risolve anche la scoperta sopra. Dispatcher di esecuzione resta
 casi. Narrowing esplicito su `plumber_pdf` (`AssertionError` se `None` nel ramo
 `table_candidate`, guardia nel `finally`).
 
-Implementato nel commit `<hash>`. Baseline: Ruff verde, BasedPyright 0/0/0, 1149 test OK
+Implementato nel commit `3bda611`. Baseline: Ruff verde, BasedPyright 0/0/0, 1149 test OK
 (1146 + 3 nuovi), 7 skipped, `git diff --check` verde.
 
 Verifica reale su tre manuali (Dag/Vil/DB, 11 pagine campione più scansione completa
@@ -549,3 +561,37 @@ consumer document-level di ricorrenza. Nessuna modifica a
 manifest/workspace.
 
 **Milestone chiusa nel commit `3bda611`.**
+
+## Milestone 24 — wiring del terzo producer nel job (page_edge_visual, ratifica
+
+side_band/page_edge_visual) — completata
+
+Chiude il blocco esplicito posto dall'utente su un terzo producer prima di ratificare
+la relazione fra `page_edge_visual` e `side_band`. Giro di Modalità P con revisione
+Chat B indipendente (documenti non inclusi nel repo).
+
+Wired `page_edge_visual` (Milestone 6, `producer_version="0.1"`,
+`configuration_id="page-edge-visual-v1"`) accanto a `table_candidate` e
+`page_covering_visual`, stesso pattern di Milestone 23: nessuna modifica a
+`bind_pymupdf_pdfplumber_document_source`, `job_page_analysis_cache.py`,
+`page_analysis_page_edge_visual.py`, `page_analysis_side_band.py`.
+
+Ratifica: `side_band` e `page_edge_visual` restano due producer indipendenti (vedi
+appunto sopra). Nessun bisogno tecnico di unificarli — tipi di primitive diversi,
+co-occorrenza reale rara. Verifica empirica su 5 manuali interi (Vil 272p, Dag 379p,
+DB 126p, Kul 242p, Fab 362p, 1381 pagine totali), riusando solo API già ratificate
+(Milestone 6, 13-19): >99% delle coppie side_band × page_edge_visual sono disgiunte
+su tutti i manuali; le eccezioni si dividono in containment genuino (Fab p.271
+stampata: testo "4"/"CAPITOLO" interamente dentro la tab decorativa margine destro)
+e coincidenza di margine (DB p.119, Fab p.106/p.324: overlap di 0.3pt su candidate
+larghe 2-15pt, un simbolo decorativo che sfiora il bordo fisso di uno sfondo).
+
+Implementato nel commit `27af1ef`. Baseline: Ruff verde, BasedPyright 0/0/0, N test OK
+(1149 + 2 nuovi), 7 skipped, `git diff --check` verde.
+
+Fuori scope: soglia di magnitudo/containment nel codice di produzione (resta nota di
+design); quarto producer; classificazione decorative/structural; consumer
+document-level. Nessuna modifica a `page_analysis_page_edge_visual.py`,
+`page_analysis_side_band.py`, `page_analysis_co_reference*.py`.
+
+**Milestone chiusa nel commit `27af1ef`.**
