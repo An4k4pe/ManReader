@@ -62,6 +62,28 @@ class JobPageAnalysisRunnerTests(unittest.TestCase):
         )
         return job_dir, job_dir / "manifest.json"
 
+    def _create_edge_image_job(self, root: Path) -> tuple[Path, Path]:
+        source_path = root / "source.pdf"
+        document = fitz.open()
+        page = document.new_page(width=300.0, height=220.0)
+        pixmap = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 10, 10))
+        pixmap.set_rect(pixmap.irect, (0, 100, 200))
+        page.insert_image(
+            fitz.Rect(0.0, 10.0, 20.0, 210.0),
+            stream=pixmap.tobytes("png"),
+        )
+        document.save(source_path)
+        document.close()
+
+        job_dir = root / "job-test-page-edge-visual"
+        initialize_job(
+            source_path=source_path,
+            job_dir=job_dir,
+            job_id="job-test-page-edge-visual",
+            page_count=1,
+        )
+        return job_dir, job_dir / "manifest.json"
+
     def test_rejects_page_that_has_not_been_captured(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             job_dir, manifest_path = self._create_job(Path(temporary_directory))
@@ -164,12 +186,7 @@ class JobPageAnalysisRunnerTests(unittest.TestCase):
                 generation_id="generation:first",
             )
 
-            cache_path = (
-                job_dir
-                / "analysis_cache"
-                / "table_candidate"
-                / "page-0137.json"
-            )
+            cache_path = job_dir / "analysis_cache" / "table_candidate" / "page-0137.json"
             self.assertTrue(cache_path.is_file())
 
             with (
@@ -191,10 +208,7 @@ class JobPageAnalysisRunnerTests(unittest.TestCase):
                 )
 
         self.assertEqual(
-            tuple(
-                len(candidate.primitive_ids)
-                for candidate in first_result.analysis.candidates
-            ),
+            tuple(len(candidate.primitive_ids) for candidate in first_result.analysis.candidates),
             (114, 57),
         )
         self.assertEqual(
@@ -242,9 +256,7 @@ class JobPageAnalysisRunnerTests(unittest.TestCase):
 
     def test_runs_page_covering_visual_for_synthetic_full_page_image(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
-            job_dir, manifest_path = self._create_full_page_image_job(
-                Path(temporary_directory)
-            )
+            job_dir, manifest_path = self._create_full_page_image_job(Path(temporary_directory))
             capture_job_page(job_dir=job_dir, manifest_path=manifest_path, page_num=1)
 
             first_result = run_job_page_analysis(
@@ -262,12 +274,7 @@ class JobPageAnalysisRunnerTests(unittest.TestCase):
                 )
             )
 
-            cache_path = (
-                job_dir
-                / "analysis_cache"
-                / "page_covering_visual"
-                / "page-0001.json"
-            )
+            cache_path = job_dir / "analysis_cache" / "page_covering_visual" / "page-0001.json"
             self.assertTrue(cache_path.is_file())
 
             with (
@@ -293,11 +300,55 @@ class JobPageAnalysisRunnerTests(unittest.TestCase):
                 replace_generation_id(first_result.analysis, "generation:second"),
             )
 
+    def test_runs_page_edge_visual_for_synthetic_edge_image(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            job_dir, manifest_path = self._create_edge_image_job(Path(temporary_directory))
+            capture_job_page(job_dir=job_dir, manifest_path=manifest_path, page_num=1)
+
+            first_result = run_job_page_analysis(
+                job_dir=job_dir,
+                manifest_path=manifest_path,
+                page_num=1,
+                producer_name="page_edge_visual",
+                generation_id="generation:first",
+            )
+
+            self.assertTrue(
+                any(
+                    candidate.proposed_structural_kind == "layout.page_edge_visual"
+                    for candidate in first_result.analysis.candidates
+                )
+            )
+
+            cache_path = job_dir, "analysis_cache", "page_edge_visual", "page-0001.json"
+            self.assertTrue(cache_path.is_file())
+
+            with (
+                patch(
+                    "job_page_analysis_runner.bind_pymupdf_pdfplumber_document_source",
+                    side_effect=AssertionError("cache hit must not open the PDF"),
+                ),
+                patch(
+                    "job_page_analysis_runner.capture_pymupdf_page",
+                    side_effect=AssertionError("cache hit must not recapture the page"),
+                ),
+            ):
+                cached_result = run_job_page_analysis(
+                    job_dir=job_dir,
+                    manifest_path=manifest_path,
+                    page_num=1,
+                    producer_name="page_edge_visual",
+                    generation_id="generation:second",
+                )
+
+            self.assertEqual(
+                cached_result.analysis,
+                replace_generation_id(first_result.analysis, "generation:second"),
+            )
+
     def test_include_pdfplumber_is_symmetric_per_producer(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
-            job_dir, manifest_path = self._create_full_page_image_job(
-                Path(temporary_directory)
-            )
+            job_dir, manifest_path = self._create_full_page_image_job(Path(temporary_directory))
             capture_job_page(job_dir=job_dir, manifest_path=manifest_path, page_num=1)
 
             with patch(
@@ -318,11 +369,19 @@ class JobPageAnalysisRunnerTests(unittest.TestCase):
                     producer_name="page_covering_visual",
                     generation_id="generation:visual",
                 )
+                run_job_page_analysis(
+                    job_dir=job_dir,
+                    manifest_path=manifest_path,
+                    page_num=1,
+                    producer_name="page_edge_visual",
+                    generation_id="generation:edge",
+                )
 
-            self.assertEqual(bind_mock.call_count, 2)
-            table_call, visual_call = bind_mock.call_args_list
+            self.assertEqual(bind_mock.call_count, 3)
+            table_call, covering_call, edge_call = bind_mock.call_args_list
             self.assertTrue(table_call.kwargs.get("include_pdfplumber", True))
-            self.assertFalse(visual_call.kwargs.get("include_pdfplumber", True))
+            self.assertFalse(covering_call.kwargs.get("include_pdfplumber", True))
+            self.assertFalse(edge_call.kwargs.get("include_pdfplumber", True))
 
 
 def replace_generation_id(analysis: PageAnalysis, generation_id: str) -> PageAnalysis:

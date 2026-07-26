@@ -14,6 +14,7 @@ from job_page_analysis_cache import (
 )
 from page_analysis_model import PageAnalysis
 from page_analysis_page_covering_visual import build_page_covering_visual_page_analysis
+from page_analysis_page_edge_visual import build_page_edge_visual_page_analysis
 from page_analysis_table_candidate import build_table_candidate_page_analysis
 from page_analysis_table_candidate_binding import BoundTableCandidatePage
 from primitive_normalizer import (
@@ -47,6 +48,12 @@ _PRODUCER_SPECS: dict[str, _ProducerSpec] = {
         internal_producer_name="page_analysis.page_covering_visual",
         producer_version="0.1",
         configuration_id="page-covering-visual-v1",
+        requires_pdfplumber=False,
+    ),
+    "page_edge_visual": _ProducerSpec(
+        internal_producer_name="page_analysis.page_edge_visual",
+        producer_version="0.1",
+        configuration_id="page-edge-visual-v1",
         requires_pdfplumber=False,
     ),
 }
@@ -138,9 +145,7 @@ def run_job_page_analysis(
         )
         if producer_name == "table_candidate":
             if bound_source.plumber_pdf is None:
-                raise AssertionError(
-                    "table_candidate requires an open pdfplumber document"
-                )
+                raise AssertionError("table_candidate requires an open pdfplumber document")
             analysis = build_table_candidate_page_analysis(
                 BoundTableCandidatePage(
                     primitive_page=primitive_page,
@@ -150,6 +155,11 @@ def run_job_page_analysis(
             )
         elif producer_name == "page_covering_visual":
             analysis = build_page_covering_visual_page_analysis(
+                primitive_page,
+                generation_id=generation_id,
+            )
+        elif producer_name == "page_edge_visual":
+            analysis = build_page_edge_visual_page_analysis(
                 primitive_page,
                 generation_id=generation_id,
             )
