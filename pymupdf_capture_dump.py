@@ -43,6 +43,9 @@ from page_analysis_co_reference_candidate_diagnostics import (
 from page_analysis_co_reference_candidate_reference import (
     CoReferencedPageCandidateReference,
 )
+from page_analysis_drawing_cluster_diagnostics import (
+    dump_drawing_cluster_diagnostics as dump_drawing_cluster_diagnostics_data,
+)
 from page_analysis_interior_visual_diagnostics import (
     dump_interior_visual_diagnostics as dump_interior_visual_diagnostics_data,
 )
@@ -74,6 +77,7 @@ type DiagnosticStage = Literal[
     "analysis-side-band-local-fragment",
     "side-band-local-fragment-diagnostics",
     "interior-visual-diagnostics",
+    "drawing-cluster-diagnostics",
     "candidate-page-context-local-fragment-side-band",
     "candidate-page-context-extent-relations-local-fragment-side-band",
     "analysis-page-edge-visual",
@@ -111,6 +115,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
             "analysis-side-band-local-fragment",
             "side-band-local-fragment-diagnostics",
             "interior-visual-diagnostics",
+            "drawing-cluster-diagnostics",
             "candidate-page-context-local-fragment-side-band",
             "candidate-page-context-extent-relations-local-fragment-side-band",
             "analysis-page-edge-visual",
@@ -296,6 +301,24 @@ def dump_interior_visual_diagnostics(
         pdf_path,
         page_number=page_number,
         stage="interior-visual-diagnostics",
+        output_path=output_path,
+        compact=compact,
+    )
+
+
+def dump_drawing_cluster_diagnostics(
+    pdf_path: Path,
+    *,
+    page_number: int = 1,
+    output_path: Path | None = None,
+    compact: bool = False,
+) -> str:
+    """Capture, normalize, and return drawing-cluster diagnostics JSON."""
+
+    return _dump_page(
+        pdf_path,
+        page_number=page_number,
+        stage="drawing-cluster-diagnostics",
         output_path=output_path,
         compact=compact,
     )
@@ -554,6 +577,12 @@ def _dump_page(
         artifact_data = dump_interior_visual_diagnostics_data(
             primitive_page,
             generation_id=f"diagnostic-interior-visual-diagnostics:{page_index}",
+        )
+    elif stage == "drawing-cluster-diagnostics":
+        primitive_page = normalize_backend_page_capture(capture)
+        artifact_data = dump_drawing_cluster_diagnostics_data(
+            primitive_page,
+            generation_id=f"diagnostic-drawing-cluster-diagnostics:{page_index}",
         )
     elif stage == "candidate-page-context-local-fragment-side-band":
         primitive_page = normalize_backend_page_capture(capture)

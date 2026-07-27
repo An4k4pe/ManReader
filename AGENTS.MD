@@ -241,7 +241,7 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–25 sono completate.
+Le Milestone 1–26 sono completate.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti restano in shadow mode.
 
@@ -443,6 +443,27 @@ warning/0 note, suite completa 1157 test OK (1150 preesistenti + 7 nuovi) e 7 sk
 
 Restano fuori scope: producer per visuali interne, wiring nel job, classificazione
 decorativo/contenuto, callout/box, elenchi.
+
+## Milestone 26 - diagnostica di clustering geometrico per DrawingPrimitive (drawing-cluster-diagnostics) — completata
+
+Decisione architetturale dedicata che sblocca "clustering" come categoria —
+vietata separatamente dalla moratoria "visuali interne" in almeno sei punti di
+`State_Archive.md` (righe 117, 135, 160, 228, 894, 921-926, 962), sempre "salvo
+una futura decisione architetturale dedicata" (894, 962). Perimetro stretto: solo
+`DrawingPrimitive`, solo diagnostica read-only (nessun nuovo tipo pubblico
+`Cluster`/`Block`/`Group`/`Span`, nessun `RegionCandidate`, `PageAnalysis`,
+`structural_kind`, nessun uso come meccanismo di producer o candidate), nessuna
+estensione a `TextPrimitive`/`side_band` o a `ImageOccurrencePrimitive` (già
+identificata via `content_digest`). Nuovo stage `drawing-cluster-diagnostics`:
+union-find su bbox espanse di un margine esplicito (`cluster_margin`), pre-filtro
+esplicito (`min_member_area`, `max_member_page_width/height_ratio`) con
+`excluded_reason` non silenzioso, `dispersion_ratio` per cluster. Implementato nel
+commit `<hash>`. Baseline verificata: Ruff verde, BasedPyright 0 errori/0
+warning/0 note, suite completa 1164 test OK (1157 preesistenti + 7 nuovi) e 7
+skipped, `git diff --check` verde. Dettagli completi in `State.md`.
+
+Restano fuori scope: producer, wiring nel job, estensione a testo/immagini,
+ottimizzazione O(n²), soglie legacy come default definitivo.
 
 ## Migrazione e shadow mode
 

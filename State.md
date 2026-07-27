@@ -627,3 +627,35 @@ legacy, callout/box (`layout.interior_visual_frame`, non-obiettivo Milestone 6,
 ancora non aperto), elenchi.
 
 **Milestone chiusa nel commit `<hash>`.**
+
+## Milestone 26 — diagnostica di clustering geometrico per DrawingPrimitive (drawing-cluster-diagnostics) — completata
+
+Questa milestone è la decisione architetturale dedicata che sblocca "clustering"
+come categoria — vietata separatamente dalla moratoria "visuali interne" in almeno
+sei punti di `State_Archive.md` (righe 117, 135, 160, 228, 894, 921-926, 962),
+sempre "salvo una futura decisione architetturale dedicata" (894, 962). La ratifica
+ha perimetro stretto: solo `DrawingPrimitive`, solo diagnostica read-only (nessun
+nuovo tipo pubblico `Cluster`/`Block`/`Group`/`Span`, nessun `RegionCandidate`,
+`PageAnalysis`, `structural_kind`, nessun uso come meccanismo di producer o
+candidate), nessuna estensione a `TextPrimitive`/`side_band` o a
+`ImageOccurrencePrimitive` (già identificata via `content_digest`).
+
+Nuovo stage `drawing-cluster-diagnostics`, modulo
+`page_analysis_drawing_cluster_diagnostics.py`: union-find su bbox di
+`DrawingPrimitive` espanse di un margine esplicito (`cluster_margin`, default 5.0pt,
+ispirato a `extractor.py:_extract_vectors`, legacy, mai validato sul nuovo modello
+dati). Pre-filtro esplicito (`min_member_area`, `max_member_page_width/height_ratio`,
+default legacy) esclude dal confronto a coppie i frammenti troppo piccoli o
+bordo-simili, riportati comunque in output con `excluded_reason` (nessuna esclusione
+silenziosa). Ogni cluster espone `dispersion_ratio` (somma aree membri / area
+bbox-unione) per distinguere un'unione compatta da una dispersa prima di applicare
+le soglie di `page_covering_visual`/`page_edge_visual` (duplicate localmente) al
+bbox-unione.
+
+Implementato nel commit `<hash>`. Baseline: Ruff verde, BasedPyright 0/0/0, 1164 test OK
+(1157 preesistenti + 7 nuovi), 7 skipped, `git diff --check` verde.
+
+Fuori scope: producer, wiring nel job, estensione a testo/immagini, ottimizzazione
+O(n²), soglie legacy come default definitivo (restano punto di partenza esplicito).
+
+**Milestone chiusa nel commit `<hash>`.**
