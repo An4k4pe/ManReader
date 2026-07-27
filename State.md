@@ -626,7 +626,7 @@ Fuori scope: producer, wiring nel job, classificazione decorativo/contenuto, sog
 legacy, callout/box (`layout.interior_visual_frame`, non-obiettivo Milestone 6,
 ancora non aperto), elenchi.
 
-**Milestone chiusa nel commit `<hash>`.**
+**Milestone chiusa nel commit `<c5aea29>`.**
 
 ## Milestone 26 — diagnostica di clustering geometrico per DrawingPrimitive (drawing-cluster-diagnostics) — completata
 
@@ -652,10 +652,10 @@ bbox-unione) per distinguere un'unione compatta da una dispersa prima di applica
 le soglie di `page_covering_visual`/`page_edge_visual` (duplicate localmente) al
 bbox-unione.
 
-Implementato nel commit `<hash>`. Baseline: Ruff verde, BasedPyright 0/0/0, 1164 test OK
+Implementato nel commit `<f3e16cf>`. Baseline: Ruff verde, BasedPyright 0/0/0, 1164 test OK
 (1157 preesistenti + 7 nuovi), 7 skipped, `git diff --check` verde.
 
 Fuori scope: producer, wiring nel job, estensione a testo/immagini, ottimizzazione
 O(n²), soglie legacy come default definitivo (restano punto di partenza esplicito).
 
-**Milestone chiusa nel commit `<hash>`.**
+**Milestone chiusa nel commit `<f3e16cf>`.**
