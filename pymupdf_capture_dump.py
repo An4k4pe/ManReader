@@ -43,6 +43,9 @@ from page_analysis_co_reference_candidate_diagnostics import (
 from page_analysis_co_reference_candidate_reference import (
     CoReferencedPageCandidateReference,
 )
+from page_analysis_interior_visual_diagnostics import (
+    dump_interior_visual_diagnostics as dump_interior_visual_diagnostics_data,
+)
 from page_analysis_page_covering_visual import build_page_covering_visual_page_analysis
 from page_analysis_page_edge_visual import build_page_edge_visual_page_analysis
 from page_analysis_primitive_extent import build_primitive_extent_page_analysis
@@ -70,6 +73,7 @@ type DiagnosticStage = Literal[
     "analysis-side-band",
     "analysis-side-band-local-fragment",
     "side-band-local-fragment-diagnostics",
+    "interior-visual-diagnostics",
     "candidate-page-context-local-fragment-side-band",
     "candidate-page-context-extent-relations-local-fragment-side-band",
     "analysis-page-edge-visual",
@@ -106,6 +110,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
             "analysis-side-band",
             "analysis-side-band-local-fragment",
             "side-band-local-fragment-diagnostics",
+            "interior-visual-diagnostics",
             "candidate-page-context-local-fragment-side-band",
             "candidate-page-context-extent-relations-local-fragment-side-band",
             "analysis-page-edge-visual",
@@ -273,6 +278,24 @@ def dump_local_fragment_side_band_diagnostics(
         pdf_path,
         page_number=page_number,
         stage="side-band-local-fragment-diagnostics",
+        output_path=output_path,
+        compact=compact,
+    )
+
+
+def dump_interior_visual_diagnostics(
+    pdf_path: Path,
+    *,
+    page_number: int = 1,
+    output_path: Path | None = None,
+    compact: bool = False,
+) -> str:
+    """Capture, normalize, and return interior-visual diagnostics JSON."""
+
+    return _dump_page(
+        pdf_path,
+        page_number=page_number,
+        stage="interior-visual-diagnostics",
         output_path=output_path,
         compact=compact,
     )
@@ -525,6 +548,12 @@ def _dump_page(
         artifact_data = dump_side_band_local_fragment_diagnostics(
             primitive_page,
             generation_id=f"diagnostic-local-fragment-side-band-diagnostics:{page_index}",
+        )
+    elif stage == "interior-visual-diagnostics":
+        primitive_page = normalize_backend_page_capture(capture)
+        artifact_data = dump_interior_visual_diagnostics_data(
+            primitive_page,
+            generation_id=f"diagnostic-interior-visual-diagnostics:{page_index}",
         )
     elif stage == "candidate-page-context-local-fragment-side-band":
         primitive_page = normalize_backend_page_capture(capture)

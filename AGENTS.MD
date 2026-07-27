@@ -241,7 +241,7 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–23 sono completate.
+Le Milestone 1–25 sono completate.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti restano in shadow mode.
 
@@ -427,6 +427,22 @@ verde. Dettagli completi, inclusa la verifica empirica sui 5 manuali, in `State.
 
 Restano fuori scope: soglia di magnitudo/containment in produzione; quarto producer;
 classificazione decorative/structural; consumer document-level di ricorrenza.
+
+## Milestone 25 - diagnostica pura per visuali interne (interior-visual-diagnostics) — completata
+
+Nuovo stage diagnostico, nessun producer: descrive ogni primitivo visivo rispetto
+alle soglie esistenti di `page_covering_visual`/`page_edge_visual`
+(`is_residual_interior_visual`) più due campi su testo contenuto calcolati
+componendo `measure_primitive_pair` (Milestone 6), ispirati nel segnale (non
+nell'implementazione) alla classificazione legacy `_asset_is_box_like_text_region`.
+Soddisfa la precondizione di `State_Archive.md:133/894` ("osservate con la
+diagnostica prima"), che resta in vigore: nessun producer aperto qui. Implementato
+nel commit `<hash>`. Baseline verificata: Ruff verde, BasedPyright 0 errori/0
+warning/0 note, suite completa 1157 test OK (1150 preesistenti + 7 nuovi) e 7 skipped,
+`git diff --check` verde. Dettagli completi in `State.md`.
+
+Restano fuori scope: producer per visuali interne, wiring nel job, classificazione
+decorativo/contenuto, callout/box, elenchi.
 
 ## Migrazione e shadow mode
 

@@ -595,3 +595,35 @@ document-level. Nessuna modifica a `page_analysis_page_edge_visual.py`,
 `page_analysis_side_band.py`, `page_analysis_co_reference*.py`.
 
 **Milestone chiusa nel commit `27af1ef`.**
+
+## Milestone 25 — diagnostica pura per visuali interne (interior-visual-diagnostics) — completata
+
+Nuovo stage diagnostico `interior-visual-diagnostics` (`pymupdf_capture_dump.py`),
+modulo `page_analysis_interior_visual_diagnostics.py`. Per ogni primitivo visivo
+(immagine o drawing) descrive se soddisfa le soglie di `page_covering_visual`,
+quelle di `page_edge_visual`, o nessuna delle due (`is_residual_interior_visual`),
+più due campi su testo contenuto (`contained_text_primitive_count`,
+`contained_text_area_ratio`, calcolati componendo `measure_primitive_pair`,
+Milestone 6). Nessun `RegionCandidate`, nessun `PageAnalysis`, nessuno
+`structural_kind`, nessun wiring nel job.
+
+`State_Archive.md:133` (ripetuta a riga 894) vieta un producer per "visuali interne"
+senza prima osservarle con la diagnostica. La moratoria resta in vigore: questa
+milestone ne soddisfa la precondizione, non la supera — l'apertura di un eventuale
+producer resta rinviata a una ratifica dedicata futura, informata da quanto questo
+stage osserverà su manuali reali.
+
+I campi `contained_text_*` sono ispirati alla classificazione della pipeline legacy
+(`extractor.py`, `_asset_is_box_like_text_region`) solo nel segnale — testo
+contenuto in una visuale come indizio di box/callout — non nell'implementazione né
+nelle soglie numeriche legacy, tarate su un modello di dati diverso e non
+rivalidate. Nessun codice legacy importato o duplicato.
+
+Implementato nel commit `<hash>`. Baseline: Ruff verde, BasedPyright 0/0/0, 1157 test OK
+(1150 preesistenti + 7 nuovi), 7 skipped, `git diff --check` verde.
+
+Fuori scope: producer, wiring nel job, classificazione decorativo/contenuto, soglie
+legacy, callout/box (`layout.interior_visual_frame`, non-obiettivo Milestone 6,
+ancora non aperto), elenchi.
+
+**Milestone chiusa nel commit `<hash>`.**
