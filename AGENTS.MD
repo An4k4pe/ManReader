@@ -241,7 +241,7 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–27 sono completate.
+Le Milestone 1–28 sono completate.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti restano in shadow mode.
 
@@ -488,6 +488,22 @@ Ruff verde, BasedPyright 0 errori/0 warning/0 note, suite completa 1172 test OK
 Restano fuori scope: wiring nel job, due `structural_kind` separati, campo
 document-level su `RegionCandidate` ispirato a `content_digest`, limite di
 cardinalità cluster.
+
+## Milestone 28 - wiring del quarto producer nel job (embedded_visual) — completata
+
+Chiude il rinvio esplicito di Milestone 27. Wired `embedded_visual` accanto a
+`table_candidate`, `page_covering_visual`, `page_edge_visual`: nuova entry in
+`_PRODUCER_SPECS` (`producer_version="0.1"`, `configuration_id="embedded-visual-v1"`,
+`requires_pdfplumber=False`), nuovo ramo nel dispatcher `if`/`elif` esistente. Nessuna
+modifica al producer (Milestone 27), agli altri producer, alla cache o al binding
+documento. Test di simmetria `include_pdfplumber` esteso al quarto producer; nuovo
+test end-to-end con cache-hit verificato (bind/capture forzati ad `AssertionError`).
+Implementato nel commit `<94e846d>`. Baseline verificata: Ruff verde, BasedPyright 0
+errori/0 warning/0 note, suite completa 1173 test OK (1172 preesistenti + 1 nuovo) e 7
+skipped, `git diff --check` verde.
+
+Restano fuori scope: modifiche al producer, parametrizzazione di `cluster_margin`
+attraverso il runner.
 
 ## Migrazione e shadow mode
 

@@ -8,15 +8,13 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–27 sono completate. Tre producer Milestone 13+ sono wired nel job:
-`table_candidate` (Milestone 21, commit `93ee631`) e `page_covering_visual`
-(Milestone 23, commit `3bda611`), pageedge_visual (Milestone 24;
+Le Milestone 1–28 sono completate. Quattro producer Milestone 13+ sono wired nel job:
+`table_candidate` (Milestone 21, commit `93ee631`), `page_covering_visual`
+(Milestone 23, commit `3bda611`), `page_edge_visual` (Milestone 24) ed
+`embedded_visual` (Milestone 27, wired in Milestone 28).
 `run_job_page_analysis` ha una cache opportunistica non tracciata dal manifest
 (Milestone 22, commit `fce90e2`) e apre selettivamente il
 backend pdfplumber solo per i producer che lo richiedono (Milestone 23).
-Un quarto producer, `embedded_visual` (Milestone 27), è costruito standalone come i
-precedenti prima del wiring — non è invocato dal job, stesso schema già seguito da
-`table_candidate` prima di Milestone 21.
 Restano rinviate a milestone future non ancora aperte né numerate: persistenza tracciata del
 `PageAnalysis` prodotto, resume/batch multi-pagina, estensione di `CapturePageState`
 per un secondo artifact, un consumer document-level di ricorrenza per `content_digest`
@@ -732,3 +730,41 @@ Fuori scope: wiring nel job, due `structural_kind`, campo document-level su
 alta qualità (vedi appunto sopra).
 
 **Milestone chiusa nel commit `<1701544>`.**
+
+## Milestone 28 — wiring del quarto producer nel job (embedded_visual) — completata
+
+Chiude il rinvio esplicito di Milestone 27 ("wiring nel job, per scelta esplicita").
+Giro di Modalità P breve con revisione Chat B indipendente
+(`Proposta_Milestone28_EmbeddedVisualWiring_v1.md`, non nel repo).
+
+Wired `embedded_visual` (Milestone 27, `producer_version="0.1"`,
+`configuration_id="embedded-visual-v1"`) accanto a `table_candidate`,
+`page_covering_visual`, `page_edge_visual`, stesso pattern di Milestone 23/24: nuova
+entry in `_PRODUCER_SPECS` (`requires_pdfplumber=False`, nessun parametro
+`cluster_margin` esposto dal runner — il producer usa il proprio default), nuovo ramo
+nel dispatcher `if`/`elif` esistente. Nessuna modifica a
+`page_analysis_embedded_visual.py`, agli altri producer, a `job_page_analysis_cache.py`
+o a `pymupdf_pdfplumber_document_source_binding.py`.
+
+Punto di revisione Chat B verificato e adottato:
+`test_include_pdfplumber_is_symmetric_per_producer` esteso al quarto producer,
+`include_pdfplumber=False` confermato anche per `embedded_visual`. Un secondo punto
+della stessa revisione (presunto disallineamento di `State.md`/`AGENTS.MD` a
+Milestone 18) è stato verificato falso da Chat A con un clone diretto del branch
+`main` e scartato — causa più probabile: cache CDN di `raw.githubusercontent.com`
+usata da Chat B invece di un clone diretto.
+
+Nuovo test end-to-end `test_runs_embedded_visual_for_synthetic_interior_visual`:
+verifica `proposed_structural_kind == "layout.embedded_visual"` su un residuo
+interiore sintetico (immagine centrale, né covering né edge), verifica cache hit con
+`bind_pymupdf_pdfplumber_document_source`/`capture_pymupdf_page` forzati ad
+`AssertionError` se richiamati.
+
+Implementato nel commit `<94e846d>`. Baseline: Ruff verde, BasedPyright 0/0/0, 1173 test
+OK (1172 preesistenti + 1 nuovo — il secondo requisito era un'estensione di un test
+esistente, non una nuova funzione), 7 skipped, `git diff --check` verde.
+
+Fuori scope: modifiche al producer stesso; parametrizzazione di `cluster_margin`
+attraverso il runner.
+
+**Milestone chiusa nel commit `<94e846d>`.**
