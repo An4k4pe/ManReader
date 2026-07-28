@@ -241,7 +241,7 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–26 sono completate.
+Le Milestone 1–27 sono completate.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti restano in shadow mode.
 
@@ -464,6 +464,30 @@ skipped, `git diff --check` verde. Dettagli completi in `State.md`.
 
 Restano fuori scope: producer, wiring nel job, estensione a testo/immagini,
 ottimizzazione O(n²), soglie legacy come default definitivo.
+
+## Milestone 27 - producer per visuali interne (embedded_visual, no wiring) — completata
+
+Chiude la precondizione soddisfatta da Milestone 25/26 (`State_Archive.md:133`,
+ripetuta 894: "osservate con la diagnostica prima"). Nuovo modulo
+`page_analysis_embedded_visual.py`, `build_embedded_visual_page_analysis`, stesso
+pattern di `page_analysis_page_edge_visual.py`: riusa invariate
+`dump_interior_visual_diagnostics` (Milestone 25) e `dump_drawing_cluster_diagnostics`
+(Milestone 26) come funzioni pure. Un solo `structural_kind`, `layout.embedded_visual`,
+per raster e vettoriale (nessun consumer oggi dimostra la necessità di due kind
+separati, coerente con `State_Archive.md:915`). Punto trovato in revisione Chat B e
+risolto prima dell'implementazione:
+`dump_drawing_cluster_diagnostics` calcola `is_residual_interior_visual` anche per i
+singleton scartati dal pre-filtro di Milestone 26 (`excluded_reason` valorizzato); il
+producer filtra esplicitamente su `is_residual_interior_visual is True` e
+`excluded_reason is None`, altrimenti ogni frammento vettoriale marginale verrebbe
+promosso a candidate. Nessun campo nuovo su `RegionCandidate`, nessuna modifica ai
+moduli diagnostici riusati. Implementato nel commit `<hash>`. Baseline verificata:
+Ruff verde, BasedPyright 0 errori/0 warning/0 note, suite completa 1172 test OK
+(1164 preesistenti + 8 nuovi) e 7 skipped, `git diff --check` verde.
+
+Restano fuori scope: wiring nel job, due `structural_kind` separati, campo
+document-level su `RegionCandidate` ispirato a `content_digest`, limite di
+cardinalità cluster.
 
 ## Migrazione e shadow mode
 

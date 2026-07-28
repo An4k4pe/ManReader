@@ -8,12 +8,15 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–23 sono completate. Tre producer Milestone 13+ sono wired nel job:
+Le Milestone 1–27 sono completate. Tre producer Milestone 13+ sono wired nel job:
 `table_candidate` (Milestone 21, commit `93ee631`) e `page_covering_visual`
 (Milestone 23, commit `3bda611`), pageedge_visual (Milestone 24;
 `run_job_page_analysis` ha una cache opportunistica non tracciata dal manifest
 (Milestone 22, commit `fce90e2`) e apre selettivamente il
 backend pdfplumber solo per i producer che lo richiedono (Milestone 23).
+Un quarto producer, `embedded_visual` (Milestone 27), è costruito standalone come i
+precedenti prima del wiring — non è invocato dal job, stesso schema già seguito da
+`table_candidate` prima di Milestone 21.
 Restano rinviate a milestone future non ancora aperte né numerate: persistenza tracciata del
 `PageAnalysis` prodotto, resume/batch multi-pagina, estensione di `CapturePageState`
 per un secondo artifact, un consumer document-level di ricorrenza per `content_digest`
@@ -47,6 +50,30 @@ per il caso immagine. `DrawingPrimitive` non ha invece alcun campo di identità
 (`primitive_model.py`): non bloccante nei tre manuali testati, perché lo sfondo
 ricorrente è sempre risultato un'immagine raster; le candidate `drawing` erano rare,
 concentrate su coppie di pagine adiacenti, coerenti con spread illustrativi doppi.
+
+Appunto per una futura passata di raffinamento (non aperta, non numerata):
+il progetto originale (pipeline legacy) distingueva già immagini raster e vettoriali
+(`ImageBlock`/`VectorBlock`, `extractor.py`). Potrebbe essere utile, in un futuro
+non immediato, permettere di salvare le immagini raster estratte in alta qualità o
+di preferire un'estrazione vettoriale quando disponibile, invece della sola
+rasterizzazione attuale. Nessuna decisione presa, nessun impatto sul lavoro corrente.
+
+Appunto per una futura passata di raffinamento (non aperta, non numerata):
+la verifica su manuali reali di Milestone 26 (`dump_drawing_cluster_diagnostics`)
+mostra che `dispersion_ratio` basso ha due cause strutturalmente opposte,
+indistinguibili senza ispezione visiva. Su Kul p.169/p.167 un'unica illustrazione
+xilografica densa (fregio floreale di apertura capitolo) viene frammentata dal
+clustering in piu' cluster separati (margine 5pt insufficiente a riunirla): dispersion
+bassa per spazio negativo naturale dell'incisione, non per errore di fusione. Su DB
+p.125 (scheda personaggio) decine di piccole icone decorative non correlate (diamanti
+di spunta accanto a ogni abilita', fregi a nastro) vengono invece incatenate in un
+unico cluster nominale da 68 membri via transitivita' del union-find, coprendo quasi
+l'intera pagina: qui la dispersion bassa segnala un vero bridging fra elementi
+scollegati. Una soglia fissa uniforme su `dispersion_ratio` non basta a separare i due
+casi; un eventuale raffinamento futuro (parametro sul margine, limite sulla lunghezza
+della catena, o altro) andrebbe informato da altri esempi reali, non solo da questi
+due. Nessuna decisione presa, nessun impatto sul modulo Milestone 26 (resta
+diagnostica pura, corretta per lo scopo dichiarato).
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli. I nuovi contratti lavorano in shadow mode e non producono ancora decisioni editoriali, IR o output finale.
 
@@ -659,3 +686,49 @@ Fuori scope: producer, wiring nel job, estensione a testo/immagini, ottimizzazio
 O(n²), soglie legacy come default definitivo (restano punto di partenza esplicito).
 
 **Milestone chiusa nel commit `<f3e16cf>`.**
+
+## Milestone 27 — producer per visuali interne (embedded_visual, no wiring) — completata
+
+Chiude la precondizione soddisfatta da Milestone 25/26 (`State_Archive.md:133`,
+ripetuta 894: "osservate con la diagnostica prima"). Giro di Modalità P con revisione
+Chat B indipendente (documenti non inclusi nel repo:
+`Proposta_Milestone27_EmbeddedVisualProducer_v1.md`,
+`Revisione_ChatB_Milestone27_EmbeddedVisualProducer_v1.md`).
+
+Nuovo modulo `page_analysis_embedded_visual.py`, `build_embedded_visual_page_analysis`,
+stesso pattern di `page_analysis_page_edge_visual.py`: riusa invariate
+`dump_interior_visual_diagnostics` (Milestone 25) e `dump_drawing_cluster_diagnostics`
+(Milestone 26) come funzioni pure. Un solo `structural_kind`, `layout.embedded_visual`,
+per entrambi i tipi (opzione A del §4 della proposta, preferita a due kind separati:
+nessun consumer oggi dimostra la necessità di distinguerli, coerente con
+`State_Archive.md:915`).
+
+Blocco trovato in revisione Chat B, risolto prima dell'implementazione:
+`dump_drawing_cluster_diagnostics` calcola `is_residual_interior_visual` anche per i
+singleton scartati dal pre-filtro di Milestone 26 (`excluded_reason` valorizzato, es.
+`tiny`/`border_like`). Il producer filtra esplicitamente su
+`is_residual_interior_visual is True` **e** `excluded_reason is None`; senza questo
+secondo controllo ogni frammento vettoriale marginale verrebbe promosso a candidate,
+vanificando la stima di rumore contenuto della proposta (che copriva solo cluster
+multi-membro da chaining, non i singleton esclusi).
+
+Rinviati esplicitamente, non decisi in questa milestone: due `structural_kind`
+separati per raster/vettoriale (riapertura solo con un consumer reale che lo
+richieda); un campo su `RegionCandidate` che rispecchi `content_digest` per il caso
+raster (tocca un tipo condiviso da tutti i producer e dal validatore cross-model,
+decisione a sé); cardinalità massima di un cluster (rinviato a Resolution, invariante
+`State.md:108`); deduplica document-level per `content_digest` (lavoro di consumer
+futuro, già annotato dopo Milestone 23).
+
+Nessun wiring nel job in questa milestone, per scelta esplicita — stesso schema già
+seguito da `page_covering_visual`/`page_edge_visual`, costruiti standalone e wired
+solo in milestone dedicate successive (23-24).
+
+Implementato nel commit `<hash>`. Baseline: Ruff verde, BasedPyright 0/0/0, 1172 test
+OK (1164 preesistenti + 8 nuovi), 7 skipped, `git diff --check` verde.
+
+Fuori scope: wiring nel job, due `structural_kind`, campo document-level su
+`RegionCandidate`, limite di cardinalità cluster, estrazione raster/vettoriale in
+alta qualità (vedi appunto sopra).
+
+**Milestone chiusa nel commit `<1701544>`.**
