@@ -8,7 +8,7 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–28 sono completate. Quattro producer Milestone 13+ sono wired nel job:
+Le Milestone 1–29 sono completate. Quattro producer Milestone 13+ sono wired nel job:
 `table_candidate` (Milestone 21, commit `93ee631`), `page_covering_visual`
 (Milestone 23, commit `3bda611`), `page_edge_visual` (Milestone 24) ed
 `embedded_visual` (Milestone 27, wired in Milestone 28).
@@ -768,3 +768,72 @@ Fuori scope: modifiche al producer stesso; parametrizzazione di `cluster_margin`
 attraverso il runner.
 
 **Milestone chiusa nel commit `<94e846d>`.**
+
+## Milestone 29 — diagnostica esplorativa per riquadri di testo (box-like interior visual) — completata
+
+Nessun commit di codice in questa milestone: solo uno script esplorativo locale
+(`scripts/scan_interior_visual_frame_diagnostics.py`), non tracciato per scelta
+esplicita — stesso principio già usato per gli script `scan_*`/`verify_*` di
+Milestone 25/26. L'unico commit di questa milestone è l'aggiornamento di
+`State.md`/`AGENTS.MD`.
+
+Giro di Modalità P breve con revisione Chat B indipendente
+(`Proposta_Milestone29_InteriorVisualFrameDiagnostics_v1.md`, non nel repo). Blocco
+tecnico trovato in revisione e risolto prima dell'implementazione: `measure_primitive_pair`
+non accetta un bbox arbitrario (richiede `primitive_id` risolvibili tramite
+`_primitives_by_id`); il ramo vettoriale richiede una funzione locale di containment
+testo/bbox-unione, che duplica `_contains`
+(`page_analysis_primitive_pair_measurements.py:349`, containment stretto, nessuna
+tolleranza) — stesso principio di duplicazione locale già usato da Milestone 26
+(`State_Archive.md:143`).
+
+Script: una sola capture+normalize per pagina, `dump_interior_visual_diagnostics`
+(Milestone 25, ramo raster) e `dump_drawing_cluster_diagnostics` (Milestone 26, ramo
+vettoriale, filtrato su `excluded_reason is None` — stessa lezione di Milestone 27/28)
+eseguiti sulla stessa `NormalizedPrimitivePage`, filtro su area ratio nel range legacy
+(0,6%-28%, `extractor.py:_asset_is_box_like_text_region`).
+
+Eseguito su 4 manuali reali (Apo, Dag, DB, Fab), ispezione visiva mirata su un
+campione di pagine segnalate dall'utente, non solo teorica:
+
+- Segnale confermato su contenuto reale: box editoriali con bordo tratteggiato
+  (Apo p.86/p.131), due box statistica affiancati (DB p.99), banner di titolo
+  capitolo ricorrente (Fab, 5 pagine con lo stesso pattern esatto).
+- `contained_text_area_ratio` può superare 1.0 su pagine con testo fitto vicino a
+  loghi piccoli (Dag p.379, retro copertina; Fab, pattern sistematico su 5 pagine) —
+  non è un errore di containment, primitive di testo si sovrappongono fra loro; da
+  tenere presente per le soglie di un eventuale producer, non un difetto della
+  diagnostica.
+- Il rischio di falso positivo da bridging (`dispersion_ratio` basso + testo
+  contenuto alto, previsto in revisione Chat B) non si è materializzato nei casi
+  ispezionati su Dag (2/2 confermati box reali); 2 casi analoghi su DB non ancora
+  ispezionati visivamente.
+- **Sovrapposizione sistematica, non rara, con `table_candidate` (Milestone 20):**
+  tabelle con bordo decorativo (es. tabelle D6 di DB, più pagine) vengono lette dal
+  ramo vettoriale come "box" — stessa forma geometrica (rettangolo con testo
+  contenuto), origine diversa (`DrawingPrimitive` cluster vs pdfplumber
+  `text_lines`). Non e' rumore casuale: e' un secondo tipo strutturale reale che
+  condivide la stessa firma geometrica di un box editoriale. Rilevante per il design
+  di Milestone 30, non risolto qui.
+- Un pattern vettoriale ricorrente (Apo, 6 pagine) è una fascia laterale verticale
+  con testo, concettualmente più vicina a `layout.side_band` (Milestone 6) che a un
+  callout — stessa famiglia di questione già aperta per `side_band` × `page_edge_visual`
+  (nota Milestone 24), ora estesa anche a `side_band` × box vettoriale.
+- Confermato il caso noto di chaining (DB p.125, Milestone 26): 57 righe su 74 hanno
+  testo contenuto — griglia fitta di icone/etichette di scheda personaggio, genere
+  visivo diverso da un box editoriale, non falso allarme ma categoria attesa.
+
+Criterio di uscita (§6 della proposta) soddisfatto in forma riveduta: il segnale
+geometrico (visuale residua + testo contenuto nel range legacy) trova affidabilmente
+"testo incorniciato da una visuale" — categoria che include box editoriali, banner di
+titolo, fasce laterali e tabelle con bordo, non solo callout in senso stretto. Non
+distingue il sottotipo semantico, per costruzione (`RegionCandidate` non porta
+semantica) — la sovrapposizione con `table_candidate` è un fatto strutturale reale da
+progettare, non un fallimento della diagnostica.
+
+Fuori scope: producer, wiring nel job, distinzione box/tabella/fascia laterale,
+soglie di produzione definitive (il range legacy resta punto di partenza, non
+validato come soglia finale).
+
+**Milestone chiusa nel commit `<hash>` (solo aggiornamento `State.md`/`AGENTS.MD`,
+nessun codice).**

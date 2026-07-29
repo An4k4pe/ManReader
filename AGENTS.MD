@@ -505,6 +505,21 @@ skipped, `git diff --check` verde.
 Restano fuori scope: modifiche al producer, parametrizzazione di `cluster_margin`
 attraverso il runner.
 
+## Milestone 29 - diagnostica esplorativa per riquadri di testo (box-like interior visual) — completata
+
+Nessun commit di codice: script esplorativo locale non tracciato
+(`scripts/scan_interior_visual_frame_diagnostics.py`), stesso principio già usato per
+gli script diagnostici di Milestone 25/26. Eseguito su 4 manuali reali (Apo, Dag, DB,
+Fab). Segnale (visuale residua + testo contenuto nel range legacy 0,6%-28%) confermato
+su contenuto reale (box editoriali, banner di titolo, box statistici affiancati), con
+due limiti rilevanti per Milestone 30: sovrapposizione sistematica, non rara, con
+`table_candidate` (tabelle a bordo decorativo lette come box); un pattern vettoriale
+ricorrente più vicino a `layout.side_band` che a un callout. `contained_text_area_ratio`
+può legittimamente superare 1.0 su testo fitto sovrapposto (non un errore).
+
+Restano fuori scope: producer, wiring nel job, distinzione box/tabella/fascia
+laterale, soglie di produzione definitive.
+
 ## Migrazione e shadow mode
 
 Modalità transitorie:
