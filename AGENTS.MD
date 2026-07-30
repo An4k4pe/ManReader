@@ -241,7 +241,7 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–29 sono completate.
+Le Milestone 1–30 sono completate.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti restano in shadow mode.
 
@@ -581,3 +581,25 @@ Aggiornare:
 - `State.md` a fine milestone o cambio di fase;
 - `AGENTS.MD` quando cambiano regole permanenti, milestone o pipeline approvata;
 - workflow due-chat solo quando cambiano ruoli e modalità operative.
+
+## Milestone 30 - producer per riquadri di testo (layout.interior_visual_frame, no wiring) — completata
+
+Nuovo modulo `page_analysis_interior_visual_frame.py`, sottoinsieme più specifico di
+`embedded_visual` (Milestone 27): stesso pattern a due rami, riuso invariato delle
+diagnostiche Milestone 25/26, con due assi di filtro aggiuntivi —
+`contained_text_primitive_count > 0` e un range esplicito `min_area_ratio`/
+`max_area_ratio` (default 0,6%-28%, range legacy verificato su dati reali in
+Milestone 29). Un solo `structural_kind`, `layout.interior_visual_frame`. Relazione
+con `embedded_visual` = stesso precedente di `page_edge_visual`/`side_band`
+(Milestone 24): overlap strutturale accettato (`AGENTS.MD:157`), nessuna
+unificazione di contratto. Containment vettoriale via funzione locale portata dallo
+script committato di Milestone 29 (`_contains` duplicata: terza istanza reale nel
+repo, dopo Milestone 6 e Milestone 7, sotto la soglia per un helper condiviso
+secondo `State_Archive.md:143`). Nessun wiring nel job — milestone separata.
+Implementato nel commit `16eb91c`. Baseline verificata: Ruff verde, BasedPyright 0
+errori/0 warning/0 note, suite completa 1187 test OK (1173 preesistenti + 14 nuovi)
+e 7 skipped.
+
+Restano fuori scope: wiring nel job, distinzione box/tabella/fascia laterale
+(overlap noto con `table_candidate`/`side_band`, non risolto), deduplica
+document-level, soglie di area come default definitivo.

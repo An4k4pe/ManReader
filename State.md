@@ -8,7 +8,7 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–29 sono completate. Quattro producer Milestone 13+ sono wired nel job:
+Le Milestone 1–30 sono completate. Quattro producer Milestone 13+ sono wired nel job:
 `table_candidate` (Milestone 21, commit `93ee631`), `page_covering_visual`
 (Milestone 23, commit `3bda611`), `page_edge_visual` (Milestone 24) ed
 `embedded_visual` (Milestone 27, wired in Milestone 28).
@@ -846,3 +846,55 @@ validato come soglia finale).
 
 **Milestone chiusa nei commit `f1db066` (script `scan_interior_visual_frame_diagnostics.py`)
 e `f1db066` (aggiornamento `State.md`/`AGENTS.MD`).**
+
+## Milestone 30 — producer per riquadri di testo (layout.interior_visual_frame, no wiring) — completata
+
+Chiude la precondizione soddisfatta da Milestone 29 (diagnostica esplorativa,
+script committato `scripts/scan_interior_visual_frame_diagnostics.py`, verificabile
+su 4 manuali reali). Giro di Modalità P con revisione Chat B indipendente
+(`Proposta_Milestone30_InteriorVisualFrameProducer_v1.md`, non nel repo), due giri:
+il primo ha corretto un'analogia di design sbagliata (§5, sostituita con il
+precedente corretto `page_edge_visual`/`side_band`, Milestone 24), il conteggio
+delle duplicazioni di `_contains` (tre istanze reali committate, non due — trovata
+da Chat A una seconda duplicazione preesistente in
+`page_analysis_candidate_extent_relation_measurements.py:164`, Milestone 7, non
+citata dalla proposta originale) e l'esclusione intenzionale del tetto legacy
+`text_area_ratio <= 0.70`; il secondo (sulla chiusura di Milestone 29) ha bloccato
+temporaneamente questa milestone finché la base empirica non è stata resa
+verificabile (vedi Milestone 29, script committato dopo un primo errore di
+staging corretto).
+
+Nuovo modulo `page_analysis_interior_visual_frame.py`,
+`build_interior_visual_frame_page_analysis`: stesso pattern a due rami di
+`embedded_visual` (Milestone 27), riuso invariato delle diagnostiche Milestone 25/26.
+Sottoinsieme più specifico di `embedded_visual`: oltre a `is_residual_interior_visual`
+ed `excluded_reason is None` (ramo vettoriale), richiede `contained_text_primitive_count > 0`
+su entrambi i rami e un range esplicito `min_area_ratio`/`max_area_ratio` (default
+0,6%-28%, range legacy verificato su dati reali in Milestone 29, non validato oltre
+il punto più alto osservato — DB p.99, `0.630`). Un solo `structural_kind`,
+`layout.interior_visual_frame`. Containment testo sul ramo vettoriale calcolato con
+una funzione locale portata dallo script di Milestone 29 (`_union_bbox_contained_text`/
+`_contains`, containment stretto, nessuna tolleranza — `measure_primitive_pair` non
+utilizzabile su un bbox-unione arbitrario). Tre note esplicite in docstring: filtro
+non simmetrico rispetto a `embedded_visual`; esclusione intenzionale del tetto legacy
+0.70 (casi reali con `contained_text_area_ratio > 1.0` osservati in Milestone 29, non
+un errore); relazione con `embedded_visual` = stesso precedente di governance di
+`page_edge_visual`/`side_band` (overlap strutturale accettato, `AGENTS.MD:157`), non
+un'analogia strutturale/semantica.
+
+Nessuna modifica a `embedded_visual`, alle diagnostiche Milestone 25/26, a
+`page_analysis_primitive_pair_measurements.py`. Nessun wiring nel job — milestone
+separata, stesso schema di `embedded_visual` (Milestone 27 → wiring Milestone 28).
+
+Implementato nel commit `16eb91c`. Baseline: Ruff verde, BasedPyright 0/0/0, 1187
+test OK (1173 preesistenti + 14 nuovi), 7 skipped. Verificato da Chat A con clone
+fresco post-commit (HEAD `16eb91c`): costanti di provenance, tutti e tre i filtri e
+tutte e tre le note di docstring confermati presenti nel codice reale, non solo nel
+diff revisionato.
+
+Fuori scope: wiring nel job; distinzione box/tabella/fascia laterale (sovrapposizione
+nota e accettata con `table_candidate` e `layout.side_band`, non risolta);
+deduplica document-level; soglie di area come default definitivo (restano punto di
+partenza esplicito, come `cluster_margin`).
+
+**Milestone chiusa nel commit `16eb91c`.**
