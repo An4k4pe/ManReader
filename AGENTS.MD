@@ -241,7 +241,7 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–30 sono completate.
+Le Milestone 1–31 sono completate.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti restano in shadow mode.
 
@@ -603,3 +603,23 @@ e 7 skipped.
 Restano fuori scope: wiring nel job, distinzione box/tabella/fascia laterale
 (overlap noto con `table_candidate`/`side_band`, non risolto), deduplica
 document-level, soglie di area come default definitivo.
+
+## Milestone 31 - wiring del quinto producer nel job (interior_visual_frame) — completata
+
+Wired `interior_visual_frame` (Milestone 30) accanto a `table_candidate`,
+`page_covering_visual`, `page_edge_visual`, `embedded_visual`: nuova entry in
+`_PRODUCER_SPECS` (`producer_version="0.1"`, `configuration_id="interior-visual-frame-v1"`,
+`requires_pdfplumber=False`), nuovo ramo nel dispatcher `if`/`elif` esistente.
+Fixture di test dedicata (`_create_interior_visual_frame_job`, con testo inserito,
+a differenza di quella riusata per `embedded_visual`): `interior_visual_frame`
+richiede `contained_text_primitive_count > 0` su entrambi i rami, la fixture di
+Milestone 28 non lo forniva. Test di simmetria `include_pdfplumber` esteso a 5
+producer. Nessuna modifica al producer (Milestone 30), agli altri producer, alla
+cache o al binding documento. Implementato nel commit `57f8074`. Baseline
+verificata: Ruff verde, BasedPyright 0 errori/0 warning/0 note, suite completa 1188
+test OK (1187 preesistenti + 1 nuovo) e 7 skipped, `git diff --check` verde.
+
+Restano fuori scope: modifiche al producer; i fili già rinviati al consumer/
+Resolution (soglia side_band × page_edge_visual, overlap
+interior_visual_frame × table_candidate, dedup `content_digest`, raffinamento
+`dispersion_ratio`).

@@ -8,10 +8,11 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–30 sono completate. Quattro producer Milestone 13+ sono wired nel job:
+Le Milestone 1–31 sono completate. Cinque producer Milestone 13+ sono wired nel job:
 `table_candidate` (Milestone 21, commit `93ee631`), `page_covering_visual`
-(Milestone 23, commit `3bda611`), `page_edge_visual` (Milestone 24) ed
-`embedded_visual` (Milestone 27, wired in Milestone 28).
+(Milestone 23, commit `3bda611`), `page_edge_visual` (Milestone 24),
+`embedded_visual` (Milestone 27, wired in Milestone 28) ed `interior_visual_frame`
+(Milestone 30, wired in Milestone 31).
 `run_job_page_analysis` ha una cache opportunistica non tracciata dal manifest
 (Milestone 22, commit `fce90e2`) e apre selettivamente il
 backend pdfplumber solo per i producer che lo richiedono (Milestone 23).
@@ -898,3 +899,52 @@ deduplica document-level; soglie di area come default definitivo (restano punto 
 partenza esplicito, come `cluster_margin`).
 
 **Milestone chiusa nel commit `16eb91c`.**
+
+## Milestone 31 — wiring del quinto producer nel job (interior_visual_frame) — completata
+
+Chiude il rinvio esplicito di Milestone 30 ("nessun wiring nel job"). Giro di
+Modalità P breve con revisione Chat B indipendente
+(`Proposta_Milestone31_InteriorVisualFrameWiring_v1.md`, non nel repo).
+
+Wired `interior_visual_frame` (Milestone 30, `producer_version="0.1"`,
+`configuration_id="interior-visual-frame-v1"`) accanto a `table_candidate`,
+`page_covering_visual`, `page_edge_visual`, `embedded_visual` — stesso pattern di
+Milestone 23/24/28: nuova entry in `_PRODUCER_SPECS` (`requires_pdfplumber=False`,
+verificato indipendentemente da Chat B: nessun riferimento a pdfplumber nel
+producer né nelle due diagnostiche da cui dipende), nuovo ramo nel dispatcher
+`if`/`elif` esistente. Nessuna modifica a `page_analysis_interior_visual_frame.py`,
+agli altri quattro producer, a `job_page_analysis_cache.py` o al binding documento.
+
+Punto tecnico trovato in revisione, non anticipato dalla proposta: la fixture
+`_create_interior_visual_job` (riusata da Milestone 28 per `embedded_visual`) non
+inserisce testo — corretto per `embedded_visual`, che non lo richiede, ma
+insufficiente per `interior_visual_frame`, che richiede `contained_text_primitive_count > 0`
+su entrambi i rami. Nuova fixture dedicata `_create_interior_visual_frame_job`
+(immagine più `page.insert_text`), con bbox del testo verificato empiricamente
+prima di scrivere il test (`(130.0, 97.1, 139.3, 113.6)`, ampio margine dentro il
+bbox immagine `(100, 80, 200, 140)`) per evitare un fallimento di containment
+stretto per un pixel.
+
+Test end-to-end `test_runs_interior_visual_frame_for_synthetic_framed_text`:
+verifica `proposed_structural_kind == "layout.interior_visual_frame"` su un
+candidate realmente prodotto, cache hit con `bind_pymupdf_pdfplumber_document_source`/
+`capture_pymupdf_page` forzati ad `AssertionError` se richiamati. Test di simmetria
+`include_pdfplumber` esteso a 5 producer.
+
+Nota di processo: due incidenti git durante la chiusura, entrambi risolti senza
+perdita di dati — un `git commit --amend` su un commit già pushato (rejection
+non-fast-forward, il repo locale non aveva ancora `2a66f38` quando è iniziato il
+lavoro su questa milestone) risolto con `git rebase origin/main` (nessun conflitto,
+i due commit non toccano gli stessi file).
+
+Implementato nel commit `a1a3269` (rebased a `57f8074`). Baseline: Ruff verde,
+BasedPyright 0/0/0, 1188 test OK (1187 preesistenti + 1 nuovo — il secondo
+requisito era un'estensione di un test esistente), 7 skipped, `git diff --check`
+verde.
+
+Fuori scope: modifiche al producer stesso; i fili già esplicitamente rinviati al
+consumer/Resolution (soglia side_band × page_edge_visual, overlap
+interior_visual_frame × table_candidate, dedup document-level per `content_digest`,
+raffinamento `dispersion_ratio`) restano tali, non toccati da questa milestone.
+
+**Milestone chiusa nel commit `57f8074`.**
