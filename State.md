@@ -771,8 +771,6 @@ attraverso il runner.
 
 ## Milestone 29 — diagnostica esplorativa per riquadri di testo (box-like interior visual) — completata
 
-## Milestone 29 — diagnostica esplorativa per riquadri di testo (box-like interior visual) — completata
-
 `scripts/scan_interior_visual_frame_diagnostics.py` committato — a differenza della
 prima decisione presa (script non tracciato), corretta in revisione: M25/M26 hanno
 sempre committato il modulo/script che produce la base empirica citata in `State.md`,
@@ -846,5 +844,5 @@ Fuori scope: producer, wiring nel job, distinzione box/tabella/fascia laterale,
 soglie di produzione definitive (il range legacy resta punto di partenza, non
 validato come soglia finale).
 
-**Milestone chiusa nei commit `<hash>` (script `scan_interior_visual_frame_diagnostics.py`)
-e `<hash>` (aggiornamento `State.md`/`AGENTS.MD`).**
+**Milestone chiusa nei commit `f1db066` (script `scan_interior_visual_frame_diagnostics.py`)
+e `f1db066` (aggiornamento `State.md`/`AGENTS.MD`).**
