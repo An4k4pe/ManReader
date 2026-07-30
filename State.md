@@ -771,14 +771,20 @@ attraverso il runner.
 
 ## Milestone 29 — diagnostica esplorativa per riquadri di testo (box-like interior visual) — completata
 
-Nessun commit di codice in questa milestone: solo uno script esplorativo locale
-(`scripts/scan_interior_visual_frame_diagnostics.py`), non tracciato per scelta
-esplicita — stesso principio già usato per gli script `scan_*`/`verify_*` di
-Milestone 25/26. L'unico commit di questa milestone è l'aggiornamento di
-`State.md`/`AGENTS.MD`.
+## Milestone 29 — diagnostica esplorativa per riquadri di testo (box-like interior visual) — completata
+
+`scripts/scan_interior_visual_frame_diagnostics.py` committato — a differenza della
+prima decisione presa (script non tracciato), corretta in revisione: M25/M26 hanno
+sempre committato il modulo/script che produce la base empirica citata in `State.md`,
+non solo il risultato. Restano non tracciati solo gli script di scansione ad-hoc di
+altre milestone (`scan_interior_visual_diagnostics.py`,
+`scan_drawing_cluster_diagnostics.py`), diversi da questo caso perché qui lo script
+contiene l'unica implementazione esistente del containment vettoriale sul
+bbox-unione, poi riusata come riferimento in Milestone 30.
 
 Giro di Modalità P breve con revisione Chat B indipendente
-(`Proposta_Milestone29_InteriorVisualFrameDiagnostics_v1.md`, non nel repo). Blocco
+(`Proposta_Milestone29_InteriorVisualFrameDiagnostics_v1.md`, non nel repo; revisione
+fornita in chat, non salvata come file separato). Blocco
 tecnico trovato in revisione e risolto prima dell'implementazione: `measure_primitive_pair`
 non accetta un bbox arbitrario (richiede `primitive_id` risolvibili tramite
 `_primitives_by_id`); il ramo vettoriale richiede una funzione locale di containment
@@ -797,8 +803,13 @@ Eseguito su 4 manuali reali (Apo, Dag, DB, Fab), ispezione visiva mirata su un
 campione di pagine segnalate dall'utente, non solo teorica:
 
 - Segnale confermato su contenuto reale: box editoriali con bordo tratteggiato
-  (Apo p.86/p.131), due box statistica affiancati (DB p.99), banner di titolo
-  capitolo ricorrente (Fab, 5 pagine con lo stesso pattern esatto).
+  (Apo p.86/p.131), due box statistica affiancati (DB p.99, `page_area_ratio=0.630`),
+  banner di titolo capitolo ricorrente (Fab, 5 pagine con lo stesso pattern esatto,
+  `page_area_ratio≈0.03`). Altri casi confermati: Dag p.354 (`0.022`-`0.201` a
+  seconda del candidate), Apo p.90/p.135 (`0.101`/`0.062`). Il range legacy
+  (0,6%-28%) copre tutti i casi reali osservati, ma il campione non forza il limite
+  superiore (il caso più alto, DB p.99, è a 0,630, già nella fascia alta) — non
+  validato oltre quel punto.
 - `contained_text_area_ratio` può superare 1.0 su pagine con testo fitto vicino a
   loghi piccoli (Dag p.379, retro copertina; Fab, pattern sistematico su 5 pagine) —
   non è un errore di containment, primitive di testo si sovrappongono fra loro; da
@@ -835,5 +846,5 @@ Fuori scope: producer, wiring nel job, distinzione box/tabella/fascia laterale,
 soglie di produzione definitive (il range legacy resta punto di partenza, non
 validato come soglia finale).
 
-**Milestone chiusa nel commit `<hash>` (solo aggiornamento `State.md`/`AGENTS.MD`,
-nessun codice).**
+**Milestone chiusa nei commit `<hash>` (script `scan_interior_visual_frame_diagnostics.py`)
+e `<hash>` (aggiornamento `State.md`/`AGENTS.MD`).**

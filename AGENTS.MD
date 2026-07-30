@@ -507,9 +507,10 @@ attraverso il runner.
 
 ## Milestone 29 - diagnostica esplorativa per riquadri di testo (box-like interior visual) — completata
 
-Nessun commit di codice: script esplorativo locale non tracciato
-(`scripts/scan_interior_visual_frame_diagnostics.py`), stesso principio già usato per
-gli script diagnostici di Milestone 25/26. Eseguito su 4 manuali reali (Apo, Dag, DB,
+Script `scripts/scan_interior_visual_frame_diagnostics.py` committato (a differenza
+della prima decisione, corretta in revisione: la base empirica citata va resa
+verificabile, stesso standard già applicato ai moduli di Milestone 25/26). Eseguito
+su 4 manuali reali (Apo, Dag, DB,
 Fab). Segnale (visuale residua + testo contenuto nel range legacy 0,6%-28%) confermato
 su contenuto reale (box editoriali, banner di titolo, box statistici affiancati), con
 due limiti rilevanti per Milestone 30: sovrapposizione sistematica, non rara, con
