@@ -13,6 +13,7 @@ from job_page_analysis_cache import (
     write_page_analysis_cache,
 )
 from page_analysis_embedded_visual import build_embedded_visual_page_analysis
+from page_analysis_interior_visual_frame import build_interior_visual_frame_page_analysis
 from page_analysis_model import PageAnalysis
 from page_analysis_page_covering_visual import build_page_covering_visual_page_analysis
 from page_analysis_page_edge_visual import build_page_edge_visual_page_analysis
@@ -61,6 +62,12 @@ _PRODUCER_SPECS: dict[str, _ProducerSpec] = {
         internal_producer_name="page_analysis.embedded_visual",
         producer_version="0.1",
         configuration_id="embedded-visual-v1",
+        requires_pdfplumber=False,
+    ),
+    "interior_visual_frame": _ProducerSpec(
+        internal_producer_name="page_analysis.interior_visual_frame",
+        producer_version="0.1",
+        configuration_id="interior-visual-frame-v1",
         requires_pdfplumber=False,
     ),
 }
@@ -172,6 +179,11 @@ def run_job_page_analysis(
             )
         elif producer_name == "embedded_visual":
             analysis = build_embedded_visual_page_analysis(
+                primitive_page,
+                generation_id=generation_id,
+            )
+        elif producer_name == "interior_visual_frame":
+            analysis = build_interior_visual_frame_page_analysis(
                 primitive_page,
                 generation_id=generation_id,
             )
