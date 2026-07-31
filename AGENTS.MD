@@ -241,7 +241,7 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–32 sono completate.
+Le Milestone 1–33 sono completate.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti restano in shadow mode.
 
@@ -659,3 +659,37 @@ ultime due riscritture. Nessun test automatico committato per le funzioni dello
 script (diagnostico esplorativo, stesso standard di Milestone 25/26/29).
 
 **Milestone chiusa nel commit `935556d`.**
+
+## Milestone 33 - contratto per le bande di colonne (decisione architetturale, no build) — completata
+
+Prende la decisione lasciata aperta in chiusura di Milestone 32: struttura a
+colonne rappresentata come `RegionCandidate` minimale per banda
+(`proposed_structural_kind="layout.column_band"`) più una misura satellite
+pura non ancora scritta (`ColumnBandMeasurements`), stesso pattern di
+Milestone 7 (`measure_candidate_page_context`). Nessuna modifica a
+`RegionCandidate`/`PageAnalysis`: cardinalità multipla dei candidate già
+ammessa senza vincoli (`page_analysis_model.py:199-205`).
+
+Scartate: nuovo tipo di fatto page-global (nessun precedente nel repo, status
+epistemico ambiguo); più `RegionCandidate` senza misura satellite (nessun
+modo pulito di portare `column_count`/gap senza toccare `structural_kind` o
+estendere `RegionCandidate`).
+
+Ordine fra bande ricostruibile da `bbox.y0` (proprietà dell'algoritmo
+Milestone 32), non un campo esplicito — distinto dall'interpretazione della
+sequenza (transizione reale vs. eccezione locale annidata), non risolta qui.
+Riferimento fra candidate (banda vs. `table_candidate`) non passa da
+`RegionRelation` (vincolato a `LayoutRegion`, non a `RegionCandidate`) — servirà
+in Milestone 34 una funzione satellite nuova, nessun modulo esistente vede un
+candidato diverso da quello ricevuto in input.
+
+Quattro punti bloccanti rinviati a Milestone 34: trattamento del flicker
+per-riga rispetto all'invariante "Resolution è l'unico livello che può
+accettare, rifiutare o lasciare irrisolto un candidato" (`State.md:134`);
+sovrapposizione banda/`table_candidate`/`embedded_visual`; campi della misura
+satellite; `structural_kind` unico vs. distinzione corpo/struttura interna.
+
+Restano fuori scope: producer, wiring, misura satellite effettivamente
+scritta, soglie di produzione definitive.
+
+**Milestone chiusa nel commit `<hash>`.**

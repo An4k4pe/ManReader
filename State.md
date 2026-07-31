@@ -8,7 +8,7 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–32 sono completate. Cinque producer Milestone 13+ sono wired nel job:
+Le Milestone 1–33 sono completate. Cinque producer Milestone 13+ sono wired nel job:
 `table_candidate` (Milestone 21, commit `93ee631`), `page_covering_visual`
 (Milestone 23, commit `3bda611`), `page_edge_visual` (Milestone 24),
 `embedded_visual` (Milestone 27, wired in Milestone 28) ed `interior_visual_frame`
@@ -1050,3 +1050,67 @@ colonne, scelta fra le tre opzioni architetturali del paragrafo sopra,
 mitigazione dei cinque confound, soglie di produzione definitive.
 
 **Milestone chiusa nel commit `935556d`**
+
+## Milestone 33 — contratto per le bande di colonne (decisione architetturale, no build) — completata
+
+Giro di Modalità P con revisione Chat B indipendente su tre round successivi
+(documenti non inclusi nel repo: `Proposta_Milestone33_ColumnBandContract_v1/v2/v3.md`,
+`Milestone33_Chiusura_v1.md`), ogni punto verificato sul codice reale prima di
+essere integrato. Prende la decisione lasciata aperta in chiusura di Milestone
+32 su come rappresentare la struttura a bande di colonne. Nessun codice
+prodotto: solo documenti di decisione.
+
+**Decisione**: struttura a colonne rappresentata come una `RegionCandidate`
+minimale per banda (`proposed_structural_kind="layout.column_band"`, bbox =
+estensione y della banda × larghezza pagina, `primitive_ids` = le primitive
+della banda) più una misura satellite pura non ancora scritta
+(`ColumnBandMeasurements`/`measure_column_band(...)`), stesso pattern già
+stabilito da `measure_candidate_page_context` (Milestone 7,
+`page_analysis_candidate_page_context_measurements.py`). Nessuna modifica a
+`RegionCandidate` o `PageAnalysis`: `candidates` ammette già cardinalità
+multipla per pagina senza vincoli (`page_analysis_model.py:199-205`, pattern
+già in uso da `side_band`/`table_candidate`).
+
+Scartate esplicitamente, con motivazione verificata: un nuovo tipo di fatto
+page-global strutturato (nessun precedente nel repo per un fatto che sia esso
+stesso una sequenza ordinata di sotto-fatti, status epistemico ambiguo dato
+che deriva da soglie non ratificate); più `RegionCandidate` senza misura
+satellite (nessun modo pulito di portare `column_count`/gap senza toccare
+`structural_kind` con un pattern non usato altrove, o estendere
+`RegionCandidate` stesso — decisione a sé, precedente Milestone 27).
+
+Due punti verificati durante la revisione, risolti senza modifiche di
+schema: l'ordine fra bande è ricostruibile ordinando i futuri `RegionCandidate`
+per `bbox.y0`, proprietà garantita dall'algoritmo committato in Milestone 32
+(`_cluster_rows`/`_segment_column_bands`, righe ordinate per `y0`, bande come
+intervalli riga consecutivi non sovrapposti) — non un campo esplicito
+necessario, e distinto dall'**interpretazione** della sequenza (transizione
+reale 2→1→2 vs. eccezione locale annidata 2→3→2), non risolta qui; il
+riferimento fra due candidate (es. banda vs. `table_candidate` sovrapposti)
+non passa da `RegionRelation` (esiste già nello schema ma vincolato a
+`LayoutRegion`, non a `RegionCandidate`, `page_analysis_model.py:167-182,
+238-241`) — richiederà in Milestone 34 una funzione satellite nuova con due
+`RegionCandidate` in input, verificato che nessun modulo esistente
+(`page_analysis_candidate_page_context_measurements.py`,
+`page_analysis_candidate_extent_relation_measurements.py`) può vedere un
+candidato diverso da quello ricevuto in input.
+
+Quattro decisioni esplicitamente rinviate a Milestone 34 (producer),
+marcate come bloccanti per quella milestone, non come dettagli: trattamento
+del flicker per-riga rispetto all'invariante `State.md:134` ("Resolution è
+l'unico livello che può accettare, rifiutare o lasciare irrisolto un
+candidato") — escludere dalla proposta (compatibile, pattern
+`excluded_reason`/Milestone 26) vs. fondere bande adiacenti (decisione
+strutturale, non compatibile, competenza di Resolution); gestione della
+sovrapposizione banda/`table_candidate`/`embedded_visual` (DB.pdf,
+`column_count` fino a 8-9); campi esatti della misura satellite
+`ColumnBandMeasurements`, non schizzati qui; `proposed_structural_kind`
+unico vs. distinzione già a livello di structural_kind fra bande "corpo" e
+"struttura interna" (rischio di anticipare classificazione semantica in un
+campo dichiarato strutturale, `AGENTS.MD:156`).
+
+Fuori scope: producer, wiring, `RegionCandidate` o misura satellite
+effettivamente scritti, soglie di produzione definitive
+(`bin_width`/`min_gap_width`/`min_support_ratio`, invariate da Milestone 32).
+
+**Milestone chiusa nel commit `<hash>`.**
