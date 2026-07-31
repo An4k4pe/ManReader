@@ -241,7 +241,7 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–31 sono completate.
+Le Milestone 1–32 sono completate.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti restano in shadow mode.
 
@@ -623,3 +623,39 @@ Restano fuori scope: modifiche al producer; i fili già rinviati al consumer/
 Resolution (soglia side_band × page_edge_visual, overlap
 interior_visual_frame × table_candidate, dedup `content_digest`, raffinamento
 `dispersion_ratio`).
+
+## Milestone 32 - diagnostica esplorativa per struttura colonne (column-structure-diagnostics) — completata
+
+Chiude la moratoria "colonne" di Milestone 7, stessa famiglia di divieto
+"clustering" sbloccata con lo stesso schema di Milestone 26 (`State_Archive.md`,
+righe 117/135/160-161/228/894/921-926/962). Script
+`scripts/scan_column_structure_diagnostics.py` committato nel commit `935556d`:
+segmenta le righe di una pagina (overlap verticale delle bbox) in bande
+consecutive con conteggio locale di colonne stabile, riportando i gap orizzontali
+persistenti per banda. Tre iterazioni (whole-page → persistenza per riga →
+bande), ciascuna motivata da un fallimento empirico su DB.pdf/Lan.pdf/Apo.pdf,
+non da preferenza. Nessun producer, nessun `RegionCandidate`, nessun wiring.
+
+Cinque confound osservati oltre al segnale di corpo a due colonne reale:
+struttura tabellare con colonne interne (sovrapposizione nota con
+`table_candidate`), side band di testo, intestazione/piè di pagina a posizione y
+fissa (supporto sempre 0.0 o 1.0 per costruzione su bande a una riga), flicker
+del conteggio colonne per riga isolata (granularità per-riga, non per finestra).
+
+Decisione presa in chiusura: né `RegionCandidate` singolo né un fatto
+page-global scalare descrivono da soli il fenomeno — è una sequenza di regioni
+lungo l'asse verticale della pagina. Tre opzioni per una futura milestone di
+design dedicata, nessuna scelta qui: nuovo tipo di fatto page-global strutturato;
+più `RegionCandidate` per pagina (già ammesso dal contratto esistente, nessun
+vincolo di cardinalità in `page_analysis_model.py:107-118`); una combinazione
+delle due.
+
+Restano fuori scope: producer, wiring, scelta architetturale fra le tre opzioni,
+mitigazione dei cinque confound, soglie di produzione definitive
+(`bin_width`/`min_gap_width`/`min_support_ratio`, stesso status di
+`cluster_margin`). Verifica Ruff/BasedPyright/test sull'ambiente reale (Python
+3.14) da completare come azione dell'utente, non ripetuta esplicitamente dopo le
+ultime due riscritture. Nessun test automatico committato per le funzioni dello
+script (diagnostico esplorativo, stesso standard di Milestone 25/26/29).
+
+**Milestone chiusa nel commit `935556d`.**

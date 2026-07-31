@@ -8,7 +8,7 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–31 sono completate. Cinque producer Milestone 13+ sono wired nel job:
+Le Milestone 1–32 sono completate. Cinque producer Milestone 13+ sono wired nel job:
 `table_candidate` (Milestone 21, commit `93ee631`), `page_covering_visual`
 (Milestone 23, commit `3bda611`), `page_edge_visual` (Milestone 24),
 `embedded_visual` (Milestone 27, wired in Milestone 28) ed `interior_visual_frame`
@@ -948,3 +948,105 @@ interior_visual_frame × table_candidate, dedup document-level per `content_dige
 raffinamento `dispersion_ratio`) restano tali, non toccati da questa milestone.
 
 **Milestone chiusa nel commit `57f8074`.**
+
+## Milestone 32 — diagnostica esplorativa per struttura colonne (column-structure-diagnostics) — completata
+
+Chiude la moratoria "colonne" mai affrontata da Milestone 7 (`State_Archive.md:175,
+234, 290, 962`) e appartenente alla stessa famiglia di divieto "clustering"
+sbloccata con lo stesso schema di cautela in Milestone 26 (`State_Archive.md:117,
+135, 160-161, 228, 894, 921-926, 962`, sempre "salvo una futura decisione
+architetturale dedicata"). Giro di Modalità P con revisione Chat B indipendente su
+tre round successivi (documenti non inclusi nel repo:
+`Proposta_Milestone32_ColumnStructureDiagnostics_v1/v2/v3.md`,
+`Milestone32_Chiusura_FaseDiagnostica_v1/v2.md`).
+
+`scripts/scan_column_structure_diagnostics.py` committato nel commit `935556d`,
+stesso standard fissato in Milestone 29 (la base empirica citata in una proposta
+resta verificabile nel repo). Nessun nuovo contratto pubblico, nessun
+`RegionCandidate`, nessun `PageAnalysis`, nessun wiring nel job.
+
+Segnale osservato: bande consecutive di righe (raggruppamento per overlap
+verticale delle bbox, stessa approssimazione di `same_baseline_*`,
+`State_Archive.md:139`) con conteggio locale di colonne stabile — determinato dai
+gap orizzontali persistenti su una quota di righe (default 60%) all'interno di
+ciascuna banda. Tre iterazioni, ciascuna motivata da un fallimento empirico reale,
+non da preferenza:
+
+1. whole-page: un istogramma unico su tutta l'altezza pagina, verificato fallire
+   quasi ovunque su DB.pdf (`gap_count=0` su pagine con centinaia di primitive) —
+   un solo elemento a piena larghezza (titolo, bordo tabella) cancella il gap per
+   l'intera pagina nell'aggregazione OR;
+2. persistenza per riga: recupera il segnale su DB.pdf, ma resta a livello di
+   intera pagina — non descrive le pagine miste (due colonne interrotte da
+   elementi a piena larghezza, poi due colonne di nuovo);
+3. bande a conteggio colonne stabile (versione committata): segmenta le righe in
+   bande consecutive con lo stesso conteggio locale di colonne, calcola la
+   persistenza per banda separatamente. Verificato su un'immagine reale fornita
+   dall'utente (corpo a due colonne → tabella a piena larghezza → titolo a piena
+   larghezza → due colonne) e su casi sintetici, riprodotti indipendentemente da
+   entrambe le Chat sul codice committato: sequenza 2→1→2 rilevata correttamente;
+   un box con due sotto-colonne annidato in una colonna di corpo dà 2→3→2, con il
+   gap originale del corpo ancora presente nella banda a 3 colonne — distinzione
+   geometrica fra le due situazioni, non un'interpretazione del codice.
+
+Eseguito su tre manuali reali con impaginazioni diverse (DB.pdf a due colonne con
+tabelle, Lan.pdf a due colonne pulito, Apo.pdf mono-colonna con side band),
+risultati ispezionati via CSV. Cinque confound osservati, distinti dal segnale di
+corpo a due colonne reale:
+
+- struttura tabellare/statblock con colonne interne (DB.pdf, `column_count` fino
+  a 8-9) — coerente con la sovrapposizione già nota fra questo segnale e
+  `table_candidate` (Milestone 29);
+- side band di testo (Apo.pdf) — un gap persistente su un manuale confermato
+  mono-colonna nel corpo;
+- intestazione/piè di pagina ricorrente a posizione y fissa (Apo.pdf, DB.pdf) —
+  una banda finale di una sola riga, sempre alla stessa y pagina dopo pagina; per
+  costruzione una banda a una riga ha supporto sempre esattamente 0.0 o 1.0
+  (proprietà matematica di `_persistent_gaps_for_rows`, non osservazione soggetta
+  a rumore), quindi non distinguibile dal segnale reale guardando solo il
+  supporto;
+- flicker del conteggio colonne per riga isolata (trovato in revisione Chat B,
+  verificato da Chat A sul codice reale): il conteggio è calcolato riga per riga,
+  non su finestra — una singola riga sbilanciata dentro una regione a due colonne
+  genuina spezza la sequenza (es. `[2,1,2,1,2]` invece di `[2]`).
+
+Nessuna delle soglie (`bin_width`, `min_gap_width`, `min_support_ratio`) è
+ratificata come default di produzione — stesso status di `cluster_margin`
+(Milestone 26).
+
+**Decisione architetturale presa in chiusura** (§1/§4 della proposta): né
+`RegionCandidate` singolo né un fatto page-global scalare (analogo a
+`CandidatePageContextMeasurements`, verificato più debole del previsto: misura
+per-candidate, non page-global) descrivono da soli il fenomeno osservato — è
+intrinsecamente una sequenza di regioni lungo l'asse verticale della pagina, non
+un valore singolo né una proposta singola. Tre opzioni concrete, nessuna scelta
+qui, per una futura milestone di progettazione dedicata (non numerata): un nuovo
+tipo di fatto page-global strutturato (sequenza di bande, senza precedente
+diretto nel repo); più istanze di `RegionCandidate` per pagina, una per banda —
+il contratto lo permette già senza modifiche (nessun vincolo di cardinalità in
+`page_analysis_model.py:107-118`, pattern già in uso per `side_band`/
+`table_candidate`); una combinazione delle due. Quella milestone dovrà anche
+specificare come distinguere una transizione reale (2→1→2) da un'eccezione
+locale annidata (2→3→2) e dai confound di rumore (intestazioni/piè di pagina,
+flicker per-riga).
+
+Verificato in sandbox (Python 3.10, target dichiarato in `pyproject.toml` 3.14):
+Ruff pulito, BasedPyright 0/0/0 con `--pythonversion 3.14`, controllo di
+supporto non sostitutivo. Esecuzione funzionale confermata sull'ambiente reale
+dell'utente su tre manuali e tre round di CSV; verifica Ruff/BasedPyright
+esplicita sull'ambiente reale eseguita solo sulla prima versione dello script
+(whole-page), non ripetuta esplicitamente dopo le riscritture v2/v3 — da fare
+come parte della chiusura effettiva, non eseguita in questa sede.
+
+Nessun test automatico committato per le funzioni dello script (verificato,
+`tests/` non contiene file relativi a colonne): le verifiche sintetiche citate
+sopra sono riproducibili solo estraendo manualmente le funzioni pure, come fatto
+da entrambe le Chat in questo giro. Non bloccante per uno script diagnostico
+esplorativo, stesso standard di Milestone 25/26/29, ma va detto esplicitamente,
+non lasciato implicito.
+
+Fuori scope: producer, wiring nel job, `RegionCandidate` o `structural_kind` per
+colonne, scelta fra le tre opzioni architetturali del paragrafo sopra,
+mitigazione dei cinque confound, soglie di produzione definitive.
+
+**Milestone chiusa nel commit `935556d`**
