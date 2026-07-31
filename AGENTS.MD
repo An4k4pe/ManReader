@@ -679,9 +679,14 @@ Ordine fra bande ricostruibile da `bbox.y0` (proprietà dell'algoritmo
 Milestone 32), non un campo esplicito — distinto dall'interpretazione della
 sequenza (transizione reale vs. eccezione locale annidata), non risolta qui.
 Riferimento fra candidate (banda vs. `table_candidate`) non passa da
-`RegionRelation` (vincolato a `LayoutRegion`, non a `RegionCandidate`) — servirà
-in Milestone 34 una funzione satellite nuova, nessun modulo esistente vede un
-candidato diverso da quello ricevuto in input.
+`RegionRelation` (vincolato a `LayoutRegion`, non a `RegionCandidate`). I
+moduli satellite di Milestone 7 non vedono un candidato diverso da quello
+ricevuto in input, ma il sottosistema Milestone 13-19 (chiuso,
+`page_analysis_co_reference*.py`) fornisce già misure geometriche pure fra
+due candidate anche di producer diversi sulla stessa pagina
+(`measure_co_referenced_page_candidate_pair`). Non serve una funzione nuova
+in Milestone 34: serve il producer `column_band` e una politica di decisione
+(Resolution).
 
 Quattro punti bloccanti rinviati a Milestone 34: trattamento del flicker
 per-riga rispetto all'invariante "Resolution è l'unico livello che può
@@ -692,4 +697,4 @@ satellite; `structural_kind` unico vs. distinzione corpo/struttura interna.
 Restano fuori scope: producer, wiring, misura satellite effettivamente
 scritta, soglie di produzione definitive.
 
-**Milestone chiusa nel commit `<hash>`.**
+**Milestone chiusa nel commit `e18a4a5`.**

@@ -1085,15 +1085,23 @@ per `bbox.y0`, proprietà garantita dall'algoritmo committato in Milestone 32
 (`_cluster_rows`/`_segment_column_bands`, righe ordinate per `y0`, bande come
 intervalli riga consecutivi non sovrapposti) — non un campo esplicito
 necessario, e distinto dall'**interpretazione** della sequenza (transizione
-reale 2→1→2 vs. eccezione locale annidata 2→3→2), non risolta qui; il
-riferimento fra due candidate (es. banda vs. `table_candidate` sovrapposti)
+reale 2→1→2 vs. eccezione locale annidata 2→3→2), non risolta qui;
+il riferimento fra due candidate (es. banda vs. `table_candidate` sovrapposti)
 non passa da `RegionRelation` (esiste già nello schema ma vincolato a
 `LayoutRegion`, non a `RegionCandidate`, `page_analysis_model.py:167-182,
-238-241`) — richiederà in Milestone 34 una funzione satellite nuova con due
-`RegionCandidate` in input, verificato che nessun modulo esistente
+238-241`). I moduli satellite di Milestone 7
 (`page_analysis_candidate_page_context_measurements.py`,
-`page_analysis_candidate_extent_relation_measurements.py`) può vedere un
-candidato diverso da quello ricevuto in input.
+`page_analysis_candidate_extent_relation_measurements.py`) non vedono un
+candidato diverso da quello ricevuto in input, ma il sottosistema Milestone
+13-19 (`page_analysis_co_reference*.py`, chiuso) fornisce già questo:
+`CoReferencedPageAnalyses` lega più `PageAnalysis` per la stessa pagina (una
+per producer), `CoReferencedPageCandidateReference` identifica un candidato
+specifico in uno di quegli stream, `measure_co_referenced_page_candidate_pair`
+calcola gap/overlap/delta puri fra due candidate anche di producer diversi.
+**Correzione rispetto alla chiusura originale**: non serve una funzione
+satellite nuova in Milestone 34 — serve che il producer `column_band` esista
+ed emetta il proprio stream, e una politica che usi quella misura per
+decidere (materia di Resolution, non risolta da questa correzione).
 
 Quattro decisioni esplicitamente rinviate a Milestone 34 (producer),
 marcate come bloccanti per quella milestone, non come dettagli: trattamento
@@ -1113,4 +1121,4 @@ Fuori scope: producer, wiring, `RegionCandidate` o misura satellite
 effettivamente scritti, soglie di produzione definitive
 (`bin_width`/`min_gap_width`/`min_support_ratio`, invariate da Milestone 32).
 
-**Milestone chiusa nel commit `<hash>`.**
+**Milestone chiusa nel commit `e18a4a5`.**
