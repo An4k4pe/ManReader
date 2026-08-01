@@ -1122,3 +1122,36 @@ effettivamente scritti, soglie di produzione definitive
 (`bin_width`/`min_gap_width`/`min_support_ratio`, invariate da Milestone 32).
 
 **Milestone chiusa nel commit `e18a4a5`.**
+
+## Milestone 34 — Resolution: design (Modalità P) e prima regola (deduplicazione IVF/EV) — completata
+
+Design in `Proposta_ResolutionDesign_v3.md` (non nel repo, come da prassi già in uso per
+Milestone 33 — `Proposta_Milestone33_ColumnBandContract_v1/v2/v3.md`), due giri di revisione
+indipendente Chat B integrati (v1→v2, v2→v3), ogni citazione verificata prima di integrare.
+
+**E1** (riapertura del sottosistema Milestone 13-19 per una misura pura di ratio candidato×
+candidato, dichiarata bloccante in `Proposta_ResolutionDesign_v3.md` §10) è stata sbloccata in
+sede di discussione diretta Chat A/utente, non messa per iscritto in un documento dedicato.
+L'aggiornamento di questo file era stato sospeso in attesa dei risultati di testing e non è stato
+fatto in tempo reale — sanato ora, retroattivamente, con questa voce.
+
+**Decisione registrata** (non presa qui, solo trascritta): la duplicazione esatta
+`interior_visual_frame`/`embedded_visual` è un caso di Resolution per applicazione del precedente
+già ratificato in Milestone 24 (`page_edge_visual`/`side_band`) e confermato in Milestone 30
+(docstring di `page_analysis_interior_visual_frame.py:23-29`, `AGENTS.MD:157-158`). Nessuna
+modifica ai due producer.
+
+**Commit**: `32a3389` (test di sottoinsieme IVF⊆EV, precondizione tecnica del prototipo, non
+lavoro separato — `Proposta_ResolutionDesign_v3.md` §8.2.1), `cc89248`
+(`resolution_model.py`/`resolution_page_candidates.py`, prima regola: identità esatta di
+primitive fra IVF ed EV → accetta il più specifico, `reason_token="superseded_by_more_specific"`),
+`9368a5c` (riapertura Milestone 13-19: `page_analysis_co_reference_candidate_overlap_ratio_measurements.py`,
+overlap_area / min(area1, area2) — E1 soddisfatta), `ba94a34` (script standalone
+`scripts/prototype_resolve_page_candidates_real_pages.py`, esecuzione su pagine reali non ancora
+revisionata).
+
+Fuori scope, invariato dal documento: `§8.2.2` (layout.table × IVF/EV, tabelle a bordo decorativo)
+resta da fare — E1 sblocca il sottosistema di misura, non fornisce ancora evidenza sufficiente per
+una regola su quella coppia (vedi Milestone 35).
+
+**Milestone chiusa nei commit `32a3389`..`ba94a34`.**

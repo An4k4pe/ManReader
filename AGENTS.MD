@@ -241,7 +241,7 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–33 sono completate.
+Le Milestone 1–34 sono completate.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti restano in shadow mode.
 
@@ -684,11 +684,11 @@ moduli satellite di Milestone 7 non vedono un candidato diverso da quello
 ricevuto in input, ma il sottosistema Milestone 13-19 (chiuso,
 `page_analysis_co_reference*.py`) fornisce già misure geometriche pure fra
 due candidate anche di producer diversi sulla stessa pagina
-(`measure_co_referenced_page_candidate_pair`). Non serve una funzione nuova
-in Milestone 34: serve il producer `column_band` e una politica di decisione
+(`measure_co_referenced_page_candidate_pair`). ...Non serve una funzione nuova
+in Milestone 36: serve il producer `column_band` e una politica di decisione
 (Resolution).
 
-Quattro punti bloccanti rinviati a Milestone 34: trattamento del flicker
+Quattro punti bloccanti rinviati a Milestone 36: trattamento del flicker
 per-riga rispetto all'invariante "Resolution è l'unico livello che può
 accettare, rifiutare o lasciare irrisolto un candidato" (`State.md:134`);
 sovrapposizione banda/`table_candidate`/`embedded_visual`; campi della misura
@@ -698,3 +698,37 @@ Restano fuori scope: producer, wiring, misura satellite effettivamente
 scritta, soglie di produzione definitive.
 
 **Milestone chiusa nel commit `e18a4a5`.**
+
+## Milestone 34 - Resolution: design (Modalità P) e prima regola (deduplicazione IVF/EV) — completata
+
+Design in `Proposta_ResolutionDesign_v3.md` (non nel repo, stessa prassi di
+Milestone 33), due giri di revisione Chat B integrati, ogni citazione
+verificata prima di integrare. E1 (riapertura Milestone 13-19 per una misura
+pura di ratio candidato×candidato, dichiarata bloccante nel documento) è
+stata sbloccata in discussione diretta Chat A/utente, non messa per iscritto
+in un documento dedicato: l'aggiornamento di questo file era stato sospeso
+in attesa di testing e non fatto in tempo reale, sanato ora retroattivamente.
+
+Decisione registrata, non presa qui: la duplicazione esatta
+`interior_visual_frame`/`embedded_visual` è un caso di Resolution per
+applicazione del precedente già ratificato in Milestone 24
+(`page_edge_visual`/`side_band`) e confermato in Milestone 30 (docstring di
+`page_analysis_interior_visual_frame.py:23-29`, `AGENTS.MD:157-158`).
+Nessuna modifica ai due producer.
+
+Commit: `32a3389` (test di sottoinsieme IVF⊆EV, precondizione tecnica del
+prototipo — `Proposta_ResolutionDesign_v3.md` §8.2.1), `cc89248`
+(`resolution_model.py`/`resolution_page_candidates.py`, prima regola:
+identità esatta di primitive fra IVF ed EV → accetta il più specifico,
+`reason_token="superseded_by_more_specific"`), `9368a5c` (riapertura
+Milestone 13-19: `page_analysis_co_reference_candidate_overlap_ratio_measurements.py`,
+overlap_area / min(area1, area2) — E1 soddisfatta), `ba94a34` (script
+standalone `scripts/prototype_resolve_page_candidates_real_pages.py`,
+esecuzione su pagine reali non ancora revisionata).
+
+Fuori scope, invariato dal documento: `§8.2.2` (`layout.table` × IVF/EV,
+tabelle a bordo decorativo) resta da fare — E1 sblocca il sottosistema di
+misura, non fornisce ancora evidenza sufficiente per una regola su quella
+coppia (vedi Milestone 35).
+
+**Milestone chiusa nei commit `32a3389`..`ba94a34`.**
