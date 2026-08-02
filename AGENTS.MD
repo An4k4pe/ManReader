@@ -241,7 +241,7 @@ Finché la nuova pipeline non è attiva, restano non-regressione:
 
 ## Stato delle milestone
 
-Le Milestone 1–34 sono completate.
+Le Milestone 1–35 sono completate.
 
 La pipeline legacy, IR, Markdown ed EPUB restano autorevoli; i nuovi contratti restano in shadow mode.
 
@@ -732,3 +732,16 @@ misura, non fornisce ancora evidenza sufficiente per una regola su quella
 coppia (vedi Milestone 35).
 
 **Milestone chiusa nei commit `32a3389`..`ba94a34`.**
+
+## Milestone 35 - diagnostica di clustering vettoriale: filtro mancante, colore, frequenza — completata
+
+Design in `Proposta_Milestone35_ClusteringColorDiagnostics_v1..v10.md` e `Chiusura_Milestone35.md`
+(non nel repo), sette giri di revisione Chat B. Premessa di origine (quattro pagine Lancer lette
+come pannelli decorativi impilati) falsificata per ispezione visiva diretta: tre sono box di
+regole/stat-block, una è sfondo di tabella. Le quattro misure previste (area/testo/colore) non
+discriminano su 80 cluster target in 7 manuali; `dispersion_ratio` esclusa come soglia operativa
+dopo verifica sul controesempio Kul p.169/167. Nessuna milestone di clustering per colore si apre.
+Test di fattibilità sul rilevatore di callout della pipeline legacy (`ir_builder.py`): 7/9 casi
+corretti, candidato per un futuro producer, non deciso qui.
+
+**Milestone chiusa in `Chiusura_Milestone35.md`.**

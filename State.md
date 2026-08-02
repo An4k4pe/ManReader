@@ -8,7 +8,7 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
-Le Milestone 1–33 sono completate. Cinque producer Milestone 13+ sono wired nel job:
+Le Milestone 1–35 sono completate. Cinque producer Milestone 13+ sono wired nel job:
 `table_candidate` (Milestone 21, commit `93ee631`), `page_covering_visual`
 (Milestone 23, commit `3bda611`), `page_edge_visual` (Milestone 24),
 `embedded_visual` (Milestone 27, wired in Milestone 28) ed `interior_visual_frame`
@@ -1155,3 +1155,45 @@ resta da fare — E1 sblocca il sottosistema di misura, non fornisce ancora evid
 una regola su quella coppia (vedi Milestone 35).
 
 **Milestone chiusa nei commit `32a3389`..`ba94a34`.**
+
+## Milestone 35 — diagnostica di clustering vettoriale: filtro mancante, colore, frequenza — completata
+
+Design in `Proposta_Milestone35_ClusteringColorDiagnostics_v1.md`..`v10.md` e
+`Chiusura_Milestone35.md` (non nel repo, stessa prassi di Milestone 33/34), sette giri di
+revisione Chat B integrati, ogni citazione verificata prima di integrare.
+
+**Esito**: la premessa che ha originato la milestone (quattro pagine Lancer con un cluster
+`embedded_visual` privo di gemello `interior_visual_frame`, lette come "pannelli decorativi
+impilati") è stata **falsificata per ispezione visiva diretta**, non dalle quattro misure (i)-(iv)
+originariamente previste: tre delle quattro pagine sono box di regole/stat-block a sfondo colorato,
+la quarta è lo sfondo a righe di una tabella dati reale — nessuna è un pannello decorativo. Le
+misure (i)-(iv), eseguite comunque sui 7 manuali disponibili (80 cluster target), non discriminano:
+criterio 3 (assenza di testo come causa) 0/80; criterio 1 (79/80) soddisfatto alla lettera ma non
+discriminante — un caso confermato falso (Dag p.24, scheda personaggio) passa gli stessi filtri
+numerici di un caso confermato vero (Kul p.42, cornice decorativa). **Nessuna milestone di
+progettazione di un criterio di clustering per colore si apre.**
+
+`dispersion_ratio` (Milestone 26) esclusa come soglia operativa: il gap osservato su etichette
+corrette (modulo/tabella ≤2.324, decorativo ≥2.860) reggeva solo su n=2 dal lato decorativo, stesso
+manuale; verificato sul controesempio già noto di `State.md` (Kul p.169/167, illustrazione
+xilografica frammentata dal clustering) — 72 cluster vettoriali reali su quelle pagine,
+`dispersion_ratio` 0.051–1.062, tutti bassi quanto i moduli UI. Il segnale ha due cause
+strutturalmente opposte per valori bassi, non solo teoricamente (nota pre-esistente) ma ora
+confermato empiricamente.
+
+Test di fattibilità (domanda dell'utente, indipendente da Chat B): il rilevatore di callout della
+pipeline legacy (`ir_builder.py`, `_merge_callout_blocks`, pattern testuale titolo maiuscolo breve +
+corpo ≥40 caratteri) separa correttamente 7 casi su 9 dell'oracolo (pannelli decorativi genuini vs.
+callout/moduli), con falso negativo spiegato su moduli a campi vuoti (nessun paragrafo di corpo per
+costruzione). Non un discriminante pronto — un candidato per un futuro producer, non deciso qui.
+
+Bug trovato e corretto in corso di lavoro, non specifico di questa milestone: `cluster_id`/
+`primitive_id` (`primitive_normalizer.py:141`) non sono univoci nel manuale, solo nella pagina
+(`page_analysis_model.py:262`) — qualunque aggregazione cross-pagina che usi `cluster_id` da solo
+come chiave rischia di fondere sotto-cluster di pagine diverse. Nota per futuri consumer.
+
+Fuori scope, invariato: nessuna regola di Resolution su `layout.table`×`layout.embedded_visual`/
+`layout.interior_visual_frame` (`Proposta_ResolutionDesign_v3.md` §8.2.2) — questa milestone
+forniva evidenza, non l'ha trovata a supporto di una regola specifica basata su colore/clustering.
+
+**Milestone chiusa in `Chiusura_Milestone35.md`.**
