@@ -212,6 +212,11 @@ Per ogni task:
 11. Aggiungere test sintetici per nuovi contratti o regole.
 12. Usare benchmark reali per verificare la generalizzazione quando il comportamento diventa attivo.
 13. Mostrare diff, test e `git status --short` finali.
+14. Se una proposta (Modalità P) asserisce cosa mostrano visivamente delle pagine di un
+    manuale, ispezionare quelle pagine prima di progettare la diagnostica attorno a
+    quell'assunzione, non dopo (lezione di Milestone 35: la premessa d'origine, mai
+    verificata visivamente, si è rivelata fattualmente sbagliata dopo sette giri di
+    revisione basati solo sui numeri).
 
 Verifiche minime per un commit di codice:
 
@@ -581,6 +586,11 @@ Aggiornare:
 - `State.md` a fine milestone o cambio di fase;
 - `AGENTS.MD` quando cambiano regole permanenti, milestone o pipeline approvata;
 - workflow due-chat solo quando cambiano ruoli e modalità operative.
+- - qualunque script/modulo che produce un numero o esempio citato in `State.md` va
+    committato nel repo insieme all'aggiornamento — non basta che il risultato sia
+    riportato nel testo (regola già praticata da Milestone 29, resa esplicita qui dopo
+    la sanatoria di Milestone 35, `ecb5b72`, per tre script rimasti non tracciati da
+    Milestone 24/26).
 
 ## Milestone 30 - producer per riquadri di testo (layout.interior_visual_frame, no wiring) — completata
 
