@@ -65,9 +65,16 @@ def inspect(clusters_path: Path, subclusters_path: Path) -> dict[str, Any]:
         and int(row["member_count"]) >= 2
     ]
 
-    sub_by_parent_axis: dict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
+    # Chiave (page_index, cluster_id, role): cluster_id da solo NON e' univoco nel manuale --
+    # primitive_id (quindi cluster_id, il primo primitive_id del cluster) riparte da p0001 a ogni
+    # pagina (primitive_normalizer.py:141, _primitive_id per-pagina). Senza page_index nella
+    # chiave, cluster con lo stesso cluster_id su pagine diverse si fondono nello stesso bucket
+    # -- bug trovato per ispezione diretta dall'utente (Dag pag. 24/113/361, stesso
+    # "primitive:drawing:drawing:p0003"), non dallo script. Stessa correzione applicata a
+    # summarize_milestone35_measures.py.
+    sub_by_parent_axis: dict[tuple[str, str, str], list[dict[str, str]]] = defaultdict(list)
     for row in subclusters:
-        sub_by_parent_axis[(row["cluster_id"], row["role"])].append(row)
+        sub_by_parent_axis[(row["page_index"], row["cluster_id"], row["role"])].append(row)
 
     # D1: axis redundancy
     identical_nonempty = 0
@@ -78,9 +85,10 @@ def inspect(clusters_path: Path, subclusters_path: Path) -> dict[str, Any]:
     negatives: list[dict[str, Any]] = []
 
     for row in target:
+        pidx = row["page_index"]
         cid = row["cluster_id"]
-        fill_subs = sub_by_parent_axis.get((cid, "subcluster_fill"), [])
-        stroke_subs = sub_by_parent_axis.get((cid, "subcluster_stroke"), [])
+        fill_subs = sub_by_parent_axis.get((pidx, cid, "subcluster_fill"), [])
+        stroke_subs = sub_by_parent_axis.get((pidx, cid, "subcluster_stroke"), [])
         fill_pass_bboxes = frozenset(_bbox_key(s) for s in fill_subs if _passes(s))
         stroke_pass_bboxes = frozenset(_bbox_key(s) for s in stroke_subs if _passes(s))
 

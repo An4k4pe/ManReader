@@ -72,18 +72,25 @@ def summarize(clusters_path: Path, subclusters_path: Path) -> dict[str, Any]:
     no_text = sum(1 for row in target if row["text_filter_result"] == "no_text")
     other_text = len(target) - has_text - no_text  # n/a, should be 0 in this stratum
 
-    sub_by_parent_axis: dict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
+    # Chiave (page_index, cluster_id, role): cluster_id da solo NON e' univoco nel manuale --
+    # primitive_id (quindi cluster_id, il primo primitive_id del cluster) riparte da p0001 a ogni
+    # pagina (primitive_normalizer.py:141, _primitive_id per-pagina). Senza page_index nella
+    # chiave, cluster con lo stesso cluster_id su pagine diverse si fondono nello stesso bucket
+    # -- bug trovato per ispezione diretta dall'utente (Dag pag. 24/113/361, stesso
+    # "primitive:drawing:drawing:p0003"), non dallo script.
+    sub_by_parent_axis: dict[tuple[str, str, str], list[dict[str, str]]] = defaultdict(list)
     for row in subclusters:
-        sub_by_parent_axis[(row["cluster_id"], row["role"])].append(row)
+        sub_by_parent_axis[(row["page_index"], row["cluster_id"], row["role"])].append(row)
 
     supported_fill = 0
     supported_stroke = 0
     supported_either = 0
     passing_subcluster_examples: list[dict[str, str]] = []
     for row in target:
+        pidx = row["page_index"]
         cid = row["cluster_id"]
-        fill_subs = sub_by_parent_axis.get((cid, "subcluster_fill"), [])
-        stroke_subs = sub_by_parent_axis.get((cid, "subcluster_stroke"), [])
+        fill_subs = sub_by_parent_axis.get((pidx, cid, "subcluster_fill"), [])
+        stroke_subs = sub_by_parent_axis.get((pidx, cid, "subcluster_stroke"), [])
 
         def _passes(sub: dict[str, str]) -> bool:
             return (
