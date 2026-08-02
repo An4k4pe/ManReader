@@ -1,0 +1,10 @@
+manual,page_index,cluster_id,label,label_source,member_count,dispersion_ratio,avg_stroke_width,is_closed_share
+Dag,24,primitive:drawing:drawing:p0003,modulo_ui_statblock,ispezione visiva diretta (scheda personaggio esempio),79,1.425603050342426,0.7810392017458,0.0
+Kul,0,primitive:drawing:drawing:p0001,pannello_decorativo_copertina,ispezione visiva diretta (copertina del libro, illustrazione ornamentale con poco testo),37,2.8603449287566525,n/a,0.0
+Kul,42,primitive:drawing:drawing:p0006,pannello_decorativo,ispezione visiva diretta (cornice ornamentale con illustrazione, "La Prudenza"),1528,7.377083011495029,n/a,0.0
+Lan,36,primitive:drawing:drawing:p0006,modulo_ui_statblock,ispezione visiva diretta (riquadro rosso statistiche mech RAIJIN, p.37 stampata 35),15,2.324314477813498,1.3320000171661377,0.0
+Lan,113,primitive:drawing:drawing:p0003,modulo_ui_lista,ispezione visiva diretta (colonna voci compendio con intestazioni rosse, p.114 stampata 112),12,0.964035956356747,n/a,n/a
+Lan,118,primitive:drawing:drawing:p0000,tabella_zebra,ispezione visiva diretta (righe alternate bianco/nero di una tabella armi, p.119 stampata 117 -- confermato il pattern zebra ipotizzato, ma e' sfondo di tabella, non pannello decorativo),6,1.3473810119066374,1.667499989271164,0.0
+Lan,130,primitive:drawing:drawing:p0010,modulo_ui_regole,ispezione visiva diretta (box regole arancione PNU Classe Sekhmet, p.131 stampata 129),8,0.9806807025863222,4.0,0.0
+DB,124,primitive:drawing:drawing:p0000,modulo_ui_statblock,ispezione visiva diretta (scheda personaggio Dragonbane vuota -- coerente con State.md Milestone 26, p.125),86,0.48160047932372674,n/a,0.0
+DB,124,primitive:drawing:drawing:p0025,modulo_ui_statblock,ispezione visiva diretta (scheda personaggio Dragonbane vuota -- coerente con State.md Milestone 26, p.125),68,0.23110789206182242,n/a,0.0
