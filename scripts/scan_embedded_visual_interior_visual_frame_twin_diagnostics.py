@@ -42,6 +42,20 @@ page_analysis_primitive_pair_measurements.py:349, page_analysis_candidate_extent
 Known limitation, not fixed here: fill_color/stroke_color equality is exact float-tuple identity,
 not perceptual color matching -- distinct_fill_colors counts distinct stored values, not distinct
 colors a human would see.
+
+Chat B round 6 (Proposta_Milestone35_ClusteringColorDiagnostics_v8.md, B1): three signals already
+captured elsewhere in the project were absent from this CSV and had never been checked as
+candidate discriminators between "decorative panel" and "UI module" -- dispersion_ratio (public
+in dump_drawing_cluster_diagnostics since Milestone 26, member_area_sum / union_area,
+State.md already documents it as informative on Kul p.169/DB p.125), stroke_width and is_closed
+(DrawingPrimitive fields, primitive_model.py, captured but never aggregated per cluster). Added
+here as three new columns on vector "original" rows only (raster has no member list in the same
+sense; subcluster rows are out of scope for this specific check, which targets the 7 known-or-
+inspected cases, all "original" rows): dispersion_ratio (read straight from
+dump_drawing_cluster_diagnostics's own entry, not recomputed), avg_stroke_width (mean over
+members with stroke_width is not None, "n/a" if none), is_closed_share (fraction True over
+members with is_closed is not None, "n/a" if none -- None is excluded from the denominator, not
+treated as False, same declared-not-silent principle as the color None-handling above).
 """
 
 from __future__ import annotations
@@ -102,6 +116,9 @@ _CSV_FIELDS = [
     "distinct_fill_colors",
     "distinct_stroke_colors",
     "none_fill_color_share",
+    "dispersion_ratio",
+    "avg_stroke_width",
+    "is_closed_share",
     "bbox_x0",
     "bbox_y0",
     "bbox_x1",
@@ -268,6 +285,9 @@ def _row(
     distinct_fill_colors: int | str,
     distinct_stroke_colors: int | str,
     none_fill_color_share: float | str,
+    dispersion_ratio: float | str = "n/a",
+    avg_stroke_width: float | str = "n/a",
+    is_closed_share: float | str = "n/a",
     bbox: BBox | None,
 ) -> dict[str, Any]:
     return {
@@ -289,6 +309,9 @@ def _row(
         "distinct_fill_colors": distinct_fill_colors,
         "distinct_stroke_colors": distinct_stroke_colors,
         "none_fill_color_share": none_fill_color_share,
+        "dispersion_ratio": dispersion_ratio,
+        "avg_stroke_width": avg_stroke_width,
+        "is_closed_share": is_closed_share,
         "bbox_x0": bbox[0] if bbox else "",
         "bbox_y0": bbox[1] if bbox else "",
         "bbox_x1": bbox[2] if bbox else "",
@@ -390,6 +413,15 @@ def _scan_page(
             if members
             else 0.0
         )
+        dispersion_ratio = cast(float | None, entry["dispersion_ratio"]) if entry else None
+        known_stroke_widths = [m.stroke_width for m in members if m.stroke_width is not None]
+        avg_stroke_width = (
+            sum(known_stroke_widths) / len(known_stroke_widths) if known_stroke_widths else None
+        )
+        known_is_closed = [m.is_closed for m in members if m.is_closed is not None]
+        is_closed_share = (
+            sum(1 for c in known_is_closed if c) / len(known_is_closed) if known_is_closed else None
+        )
 
         # Riga "original" emessa se manca il gemello (misura i) O se il cluster ha >=2 membri
         # (misura ii, che vale per ogni cluster multi-membro indipendentemente dal gemello) --
@@ -412,6 +444,9 @@ def _scan_page(
                     distinct_fill_colors=distinct_fill,
                     distinct_stroke_colors=distinct_stroke,
                     none_fill_color_share=none_fill_share,
+                    dispersion_ratio=dispersion_ratio if dispersion_ratio is not None else "n/a",
+                    avg_stroke_width=avg_stroke_width if avg_stroke_width is not None else "n/a",
+                    is_closed_share=is_closed_share if is_closed_share is not None else "n/a",
                     bbox=candidate.bbox,
                 )
             )
@@ -462,8 +497,14 @@ def _scan_page(
 
 
 def scan(
-    pdf_path: Path, *, cluster_margin: float
+    pdf_path: Path,
+    *,
+    cluster_margin: float,
+    only_page_indices: frozenset[int] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """only_page_indices: 0-based, restricts the scan to a specific subset of pages -- for a
+    targeted re-run (Chat B round 6, §D) rather than a full re-scan of the manual. None (default)
+    scans every page, same behavior as before this parameter existed."""
     pdf_bytes = pdf_path.read_bytes()
     verified_bytes = inspect_verified_bytes(pdf_bytes)
     source_id = verified_bytes.sha256
@@ -474,6 +515,8 @@ def scan(
         page_count = fitz_document.page_count
         for page_number in range(1, page_count + 1):
             page_index = page_number - 1
+            if only_page_indices is not None and page_index not in only_page_indices:
+                continue
             page = fitz_document.load_page(page_index)
             if page.rotation != 0 or page.mediabox != page.cropbox:
                 continue
@@ -516,12 +559,27 @@ def parse_args() -> argparse.Namespace:
         "(misura iv, cluster_id come chiave esterna verso il primo file)",
     )
     parser.add_argument("--cluster-margin", type=float, default=5.0)
+    parser.add_argument(
+        "--pages",
+        type=str,
+        default="",
+        help="comma-separated 0-based page_index values -- restricts the scan to these pages "
+        "only (targeted re-run), e.g. --pages 24,113 for the two Dag oracle pages. "
+        "Empty (default) scans every page.",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    cluster_rows, subcluster_rows = scan(args.pdf_path, cluster_margin=args.cluster_margin)
+    only_page_indices = (
+        frozenset(int(p.strip()) for p in args.pages.split(",") if p.strip())
+        if args.pages
+        else None
+    )
+    cluster_rows, subcluster_rows = scan(
+        args.pdf_path, cluster_margin=args.cluster_margin, only_page_indices=only_page_indices
+    )
     cluster_path = args.output_csv_prefix.with_name(args.output_csv_prefix.name + "_clusters.csv")
     subcluster_path = args.output_csv_prefix.with_name(
         args.output_csv_prefix.name + "_subclusters.csv"
