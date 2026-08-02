@@ -586,11 +586,12 @@ Aggiornare:
 - `State.md` a fine milestone o cambio di fase;
 - `AGENTS.MD` quando cambiano regole permanenti, milestone o pipeline approvata;
 - workflow due-chat solo quando cambiano ruoli e modalità operative.
-- - qualunque script/modulo che produce un numero o esempio citato in `State.md` va
-    committato nel repo insieme all'aggiornamento — non basta che il risultato sia
-    riportato nel testo (regola già praticata da Milestone 29, resa esplicita qui dopo
-    la sanatoria di Milestone 35, `ecb5b72`, per tre script rimasti non tracciati da
-    Milestone 24/26).
+
+Regola di processo: qualunque script/modulo che produce un numero o esempio
+citato in `State.md` va committato nel repo insieme all'aggiornamento — non
+basta che il risultato sia riportato nel testo (regola già praticata da
+Milestone 29, resa esplicita qui dopo la sanatoria di Milestone 35,
+`ecb5b72`, per tre script rimasti non tracciati da Milestone 24/26).
 
 ## Milestone 30 - producer per riquadri di testo (layout.interior_visual_frame, no wiring) — completata
 
@@ -695,10 +696,11 @@ ricevuto in input, ma il sottosistema Milestone 13-19 (chiuso,
 `page_analysis_co_reference*.py`) fornisce già misure geometriche pure fra
 due candidate anche di producer diversi sulla stessa pagina
 (`measure_co_referenced_page_candidate_pair`). ...Non serve una funzione nuova
-in Milestone 36: serve il producer `column_band` e una politica di decisione
-(Resolution).
+nella futura milestone del producer: serve il producer `column_band` e una
+politica di decisione (Resolution).
 
-Quattro punti bloccanti rinviati a Milestone 36: trattamento del flicker
+Quattro punti bloccanti rinviati alla futura milestone del producer
+`column_band` (non ancora aperta né numerata): trattamento del flicker
 per-riga rispetto all'invariante "Resolution è l'unico livello che può
 accettare, rifiutare o lasciare irrisolto un candidato" (`State.md:134`);
 sovrapposizione banda/`table_candidate`/`embedded_visual`; campi della misura

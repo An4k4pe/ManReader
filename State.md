@@ -819,13 +819,15 @@ Eseguito su 4 manuali reali (Apo, Dag, DB, Fab), ispezione visiva mirata su un
 campione di pagine segnalate dall'utente, non solo teorica:
 
 - Segnale confermato su contenuto reale: box editoriali con bordo tratteggiato
-  (Apo p.86/p.131), due box statistica affiancati (DB p.99, `page_area_ratio=0.630`),
+  (Apo p.86/p.131), due box statistica affiancati (DB p.99, `page_area_ratio=0.5023`),
   banner di titolo capitolo ricorrente (Fab, 5 pagine con lo stesso pattern esatto,
   `page_area_ratio≈0.03`). Altri casi confermati: Dag p.354 (`0.022`-`0.201` a
-  seconda del candidate), Apo p.90/p.135 (`0.101`/`0.062`). Il range legacy
-  (0,6%-28%) copre tutti i casi reali osservati, ma il campione non forza il limite
-  superiore (il caso più alto, DB p.99, è a 0,630, già nella fascia alta) — non
-  validato oltre quel punto.
+  seconda del candidate), Apo p.90/p.135 (`0.101`/`0.062`). Il range legacy (0,6%-28%)
+  NON è validato come tetto da questa milestone: lo scan lo accetta come parametro
+  CLI (--max-area-ratio), quindi "tutti i casi osservati rientrano nel range" è vero
+  per costruzione quando il filtro è attivo, ed è comunque contraddetto da DB p.99,
+  che misura 0.5023 ed è un caso confermato vero fuori dal range. Il tetto resta
+  ereditato da extractor.py:_asset_is_box_like_text_region, mai validato in proprio.
 - `contained_text_area_ratio` può superare 1.0 su pagine con testo fitto vicino a
   loghi piccoli (Dag p.379, retro copertina; Fab, pattern sistematico su 5 pagine) —
   non è un errore di containment, primitive di testo si sovrappongono fra loro; da
@@ -889,7 +891,7 @@ Sottoinsieme più specifico di `embedded_visual`: oltre a `is_residual_interior_
 ed `excluded_reason is None` (ramo vettoriale), richiede `contained_text_primitive_count > 0`
 su entrambi i rami e un range esplicito `min_area_ratio`/`max_area_ratio` (default
 0,6%-28%, range legacy verificato su dati reali in Milestone 29, non validato oltre
-il punto più alto osservato — DB p.99, `0.630`). Un solo `structural_kind`,
+il punto più alto osservato — DB p.99, `0.5023`). Un solo `structural_kind`,
 `layout.interior_visual_frame`. Containment testo sul ramo vettoriale calcolato con
 una funzione locale portata dallo script di Milestone 29 (`_union_bbox_contained_text`/
 `_contains`, containment stretto, nessuna tolleranza — `measure_primitive_pair` non
@@ -1116,13 +1118,15 @@ per producer), `CoReferencedPageCandidateReference` identifica un candidato
 specifico in uno di quegli stream, `measure_co_referenced_page_candidate_pair`
 calcola gap/overlap/delta puri fra due candidate anche di producer diversi.
 **Correzione rispetto alla chiusura originale**: non serve una funzione
-satellite nuova in Milestone 34 — serve che il producer `column_band` esista
-ed emetta il proprio stream, e una politica che usi quella misura per
-decidere (materia di Resolution, non risolta da questa correzione).
+satellite nuova nella futura milestone del producer — serve che il producer
+`column_band` esista ed emetta il proprio stream, e una politica che usi
+quella misura per decidere (materia di Resolution, non risolta da questa
+correzione).
 
-Quattro decisioni esplicitamente rinviate a Milestone 34 (producer),
-marcate come bloccanti per quella milestone, non come dettagli: trattamento
-del flicker per-riga rispetto all'invariante `State.md:134` ("Resolution è
+Quattro decisioni esplicitamente rinviate alla futura milestone del producer
+`column_band` (non ancora aperta né numerata), marcate come bloccanti per
+quella milestone, non come dettagli: trattamento del flicker per-riga
+rispetto all'invariante `State.md:134` ("Resolution è
 l'unico livello che può accettare, rifiutare o lasciare irrisolto un
 candidato") — escludere dalla proposta (compatibile, pattern
 `excluded_reason`/Milestone 26) vs. fondere bande adiacenti (decisione
@@ -1244,3 +1248,34 @@ progettare una diagnostica attorno a un'assunzione sul contenuto delle pagine) �
 discussione separata.
 
 **Milestone chiusa in `2fda096`.**
+
+**Riconsiderazione del tetto d'area (`_DEFAULT_MAX_AREA_RATIO`, 0.28) — scartata su
+evidenza.** L'opzione C della proposta v1, scartata al primo giro senza riesame, è
+stata riesaminata puntualmente dopo la chiusura, senza scrivere codice, rieseguendo
+`scripts/scan_interior_visual_frame_diagnostics.py` (Milestone 29) con
+`--min-area-ratio 0.28 --max-area-ratio 0.70` su tutti e sette i manuali. I quattro
+casi d'origine sono confermati e riproducibili (Lan p.114 `0.2832`, p.37 `0.2851`,
+p.131 `0.2979`, p.119 `0.5890`), ma la separazione che suggerivano non esiste nella
+popolazione: 407 righe con testo contenuto cadono fra `0.283` e `0.589` sui sette
+manuali (dag 139, fab 91, lan 50, vil 44, db 43, apo 37, kul 3), con distribuzione
+continua e senza salti (35/31/42/102/47/56/74/29/24/10 per fascia da `0.28` a `0.70`).
+Anche la fetta `0.2832`–`0.2979`, che contiene tre dei quattro casi, contiene almeno
+altre quattro pagine Lancer mai citate (p.163 `0.2836`, p.59 `0.2919`, p.295 `0.2932`,
+p.329 `0.2975`): i "quattro casi con separazione ampia" erano quattro di almeno sette
+nella stessa fascia, dello stesso manuale. Non esiste quindi un valore di
+`max_area_ratio` che ammetta i box confermati ed escluda il resto, e nessun valore
+sarebbe meno arbitrario di `0.28`. Il volume non è l'argomento: su DB il tetto attuale
+produce 966 candidate (2552 righe nel range, 120 pagine) e la fascia alta ne
+aggiungerebbe 51, +5%. L'argomento è l'assenza di separazione. `dispersion_ratio` non
+separa neppure qui (p.119, caso da escludere, `1.3473`, in mezzo a p.160 `1.2991`,
+p.164 `1.2268`, p.168 `1.1243`), coerentemente con la conclusione già registrata sopra.
+Osservazione non promossa a criterio, n=4: `contained_text_area_ratio` va nella
+direzione opposta all'intuizione (i due box `0.7637`/`0.7009`, il terzo `0.4528`, la
+tabella zebra da escludere la più bassa, `0.2967`; mediana della popolazione `0.1638`).
+Asimmetria strutturale da tenere presente: Apo, Fab e Vil non hanno alcuna riga
+vettoriale nella fascia (0 su 37/114/57), Lan 39, Dag 30, DB 7, Kul 2 — un eventuale
+tetto futuro non potrebbe essere unico per i due rami. Nota di processo: la premessa
+era vera sui quattro casi ispezionati e falsa sulla popolazione, stesso schema di
+errore della premessa d'origine di questa milestone nella sua variante statistica;
+è emersa al primo giro di Modalità P, prima di qualunque riga di codice, per il costo
+di sette esecuzioni dello script già committato.

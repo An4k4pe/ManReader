@@ -18,7 +18,8 @@ permissive legacy variant (extractor.py:_asset_is_box_like_text_region,
 tolerance=3.0 OR overlap_ratio>=0.90) -- kept for consistency between the two
 branches of the same diagnostic, not reimplemented here.
 
-This script is intentionally not committed to the repository.
+Committed as of Milestone 29 (f1db066): the empirical base cited in State.md
+must be reproducible, same standard as the Milestone 25/26 modules.
 """
 
 from __future__ import annotations
