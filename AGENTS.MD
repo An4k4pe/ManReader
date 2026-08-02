@@ -744,4 +744,4 @@ dopo verifica sul controesempio Kul p.169/167. Nessuna milestone di clustering p
 Test di fattibilità sul rilevatore di callout della pipeline legacy (`ir_builder.py`): 7/9 casi
 corretti, candidato per un futuro producer, non deciso qui.
 
-**Milestone chiusa in `Chiusura_Milestone35.md`.**
+**Milestone chiusa in `2fda096`.**
