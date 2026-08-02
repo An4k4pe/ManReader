@@ -50,6 +50,13 @@ per il caso immagine. `DrawingPrimitive` non ha invece alcun campo di identità
 ricorrente è sempre risultato un'immagine raster; le candidate `drawing` erano rare,
 concentrate su coppie di pagine adiacenti, coerenti con spread illustrativi doppi.
 
+**Sanatoria (Milestone 35, retroattiva)**: gli script che hanno prodotto la verifica sopra
+(`verify_page_covering_visual_content_digest_recurrence.py`, tre manuali) e la sua
+controparte per `page_edge_visual` (`verify_page_edge_visual_content_digest_recurrence.py`,
+stesso approccio, i suoi numeri non sono riportati in questa nota) non erano stati
+committati all'epoca — trovati non tracciati durante il riordino di Milestone 35,
+committati ora in `ecb5b72`.
+
 Appunto per una futura passata di raffinamento (non aperta, non numerata):
 il progetto originale (pipeline legacy) distingueva già immagini raster e vettoriali
 (`ImageBlock`/`VectorBlock`, `extractor.py`). Potrebbe essere utile, in un futuro
@@ -620,6 +627,11 @@ design); quarto producer; classificazione decorative/structural; consumer
 document-level. Nessuna modifica a `page_analysis_page_edge_visual.py`,
 `page_analysis_side_band.py`, `page_analysis_co_reference*.py`.
 
+**Sanatoria (Milestone 35, retroattiva)**: lo script che ha prodotto i numeri sopra
+(`scan_side_band_vs_edge_visual_co_occurrence.py`/`_aggregated.py`) non era stato
+committato all'epoca — trovato non tracciato durante il riordino di Milestone 35,
+committato ora in `ecb5b72`.
+
 **Milestone chiusa nel commit `27af1ef`.**
 
 ## Milestone 25 — diagnostica pura per visuali interne (interior-visual-diagnostics) — completata
@@ -683,6 +695,11 @@ Implementato nel commit `<f3e16cf>`. Baseline: Ruff verde, BasedPyright 0/0/0, 1
 
 Fuori scope: producer, wiring nel job, estensione a testo/immagini, ottimizzazione
 O(n²), soglie legacy come default definitivo (restano punto di partenza esplicito).
+
+**Sanatoria (Milestone 35, retroattiva)**: lo script dietro la nota successiva su
+`dispersion_ratio` (Kul p.169/167, DB p.125) non era stato committato all'epoca —
+trovato non tracciato durante il riordino di Milestone 35, committato ora in
+`ecb5b72` (`scan_drawing_cluster_diagnostics.py`).
 
 **Milestone chiusa nel commit `<f3e16cf>`.**
 
