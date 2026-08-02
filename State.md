@@ -1158,34 +1158,61 @@ una regola su quella coppia (vedi Milestone 35).
 
 ## Milestone 35 — diagnostica di clustering vettoriale: filtro mancante, colore, frequenza — completata
 
-Design in `Proposta_Milestone35_ClusteringColorDiagnostics_v1.md`..`v10.md` e
+Artefatto di origine: `3e10304` (diagnostica esplorativa `scan_table_candidate_visual_area_coverage.py`,
+mai attribuito prima — assente sia dalla chiusura di Milestone 34 sia dalle prime versioni di
+questa). Design in `Proposta_Milestone35_ClusteringColorDiagnostics_v1.md`..`v10.md` e
 `Chiusura_Milestone35.md` (non nel repo, stessa prassi di Milestone 33/34), sette giri di
-revisione Chat B integrati, ogni citazione verificata prima di integrare.
+revisione Chat B integrati, ogni citazione verificata prima di integrare. Commit:
+`610031c` (`scan_table_candidate_visual_area_coverage.py`), `d50eaee`
+(`scan_embedded_visual_interior_visual_frame_twin_diagnostics.py`,
+`summarize_milestone35_measures.py`), `c3742e1` (`inspect_milestone35_population_structure.py`),
+`615db35` (fix chiave di join), `af821e7` (colonne `dispersion_ratio`/`avg_stroke_width`/
+`is_closed_share`, opzione `--pages`), `63d4c25` (oracolo, rigenerato con `csv.writer` dopo
+malformazione — v. nota sotto), `0a185a4`/`230c7fe` (test callout), `2fda096` (chiusura).
 
 **Esito**: la premessa che ha originato la milestone (quattro pagine Lancer con un cluster
 `embedded_visual` privo di gemello `interior_visual_frame`, lette come "pannelli decorativi
 impilati") è stata **falsificata per ispezione visiva diretta**, non dalle quattro misure (i)-(iv)
-originariamente previste: tre delle quattro pagine sono box di regole/stat-block a sfondo colorato,
-la quarta è lo sfondo a righe di una tabella dati reale — nessuna è un pannello decorativo. Le
-misure (i)-(iv), eseguite comunque sui 7 manuali disponibili (80 cluster target), non discriminano:
-criterio 3 (assenza di testo come causa) 0/80; criterio 1 (79/80) soddisfatto alla lettera ma non
-discriminante — un caso confermato falso (Dag p.24, scheda personaggio) passa gli stessi filtri
-numerici di un caso confermato vero (Kul p.42, cornice decorativa). **Nessuna milestone di
-progettazione di un criterio di clustering per colore si apre.**
+originariamente previste — nessuno dei tre esiti previsti in §Criteri di chiusura si è verificato
+alla lettera; la milestone chiude per falsificazione della premessa per via esterna alle misure, un
+quarto esito non contemplato dai criteri originali, non da ricondurre a uno dei tre (in particolare:
+non equivale all'esito 2, che richiedeva sotto-cluster color-partizionati fuori range o senza
+testo — non osservato, criterio 1 è risultato 79/80 positivo). Tre delle quattro pagine sono box di
+regole/stat-block a sfondo colorato, la quarta è lo sfondo a righe di una tabella dati reale —
+nessuna è un pannello decorativo. Le misure (i)-(iv), eseguite comunque sui 7 manuali disponibili
+(80 cluster target), non discriminano: criterio 3 (assenza di testo come causa) 0/80; criterio 1
+(79/80) soddisfatto alla lettera ma non discriminante — un caso confermato falso (Dag p.24, scheda
+personaggio) passa gli stessi filtri numerici di un caso confermato vero (Kul p.42, cornice
+decorativa).
 
-`dispersion_ratio` (Milestone 26) esclusa come soglia operativa: il gap osservato su etichette
-corrette (modulo/tabella ≤2.324, decorativo ≥2.860) reggeva solo su n=2 dal lato decorativo, stesso
-manuale; verificato sul controesempio già noto di `State.md` (Kul p.169/167, illustrazione
-xilografica frammentata dal clustering) — 72 cluster vettoriali reali su quelle pagine,
-`dispersion_ratio` 0.051–1.062, tutti bassi quanto i moduli UI. Il segnale ha due cause
-strutturalmente opposte per valori bassi, non solo teoricamente (nota pre-esistente) ma ora
-confermato empiricamente.
+**Nessuna milestone di progettazione di un criterio di clustering per colore si apre**: oltre alla
+non-discriminazione sopra, D5 quantifica il rischio già segnalato per pag. 119 (fondo zebra) — un
+futuro criterio di clustering per colore, applicato senza eccezioni, produrrebbe 4-12 sotto-
+candidati spuri per cluster sulle quattro pagine di origine (p.37 7 fill/7 stroke; p.114 8/12; p.119
+5/4; p.131 4/7), la ragione concreta per cui la linea non viene aperta, non solo la decisione.
+
+`dispersion_ratio` (Milestone 26): il gap osservato su etichette corrette (modulo/tabella ≤2.324,
+decorativo ≥2.860) reggeva solo su n=2 dal lato decorativo, stesso manuale — verificato sul
+controesempio già noto di `State.md` (Kul, illustrazione xilografica frammentata dal clustering;
+indice 0-based 166/168, offset dedotto per tentativi con verifica visiva del contenuto, non
+documentato in precedenza — analogo all'offset già noto per Lan, +2 pagine di frontespizio non
+numerate). 72 cluster vettoriali reali su quelle pagine, `dispersion_ratio` 0.051–1.062 (mediana
+0.773), tutti bassi quanto i moduli UI — **ma nessuno di questi 72 è nella fascia `above_max` che
+questa milestone indaga** (0/150 righe totali, raster incluso). Il controesempio dimostra quindi che
+`dispersion_ratio` basso ha due cause opposte su cluster piccoli/frammentati, non che il segnale
+fallisca specificamente nella fascia d'uso dei cluster fuori tetto d'area — distinzione che non
+cambia la conclusione operativa (n=2 era comunque insufficiente per una soglia) ma cambia lo stato
+epistemico: il segnale non è escluso nella fascia rilevante, resta non provato.
 
 Test di fattibilità (domanda dell'utente, indipendente da Chat B): il rilevatore di callout della
 pipeline legacy (`ir_builder.py`, `_merge_callout_blocks`, pattern testuale titolo maiuscolo breve +
-corpo ≥40 caratteri) separa correttamente 7 casi su 9 dell'oracolo (pannelli decorativi genuini vs.
-callout/moduli), con falso negativo spiegato su moduli a campi vuoti (nessun paragrafo di corpo per
-costruzione). Non un discriminante pronto — un candidato per un futuro producer, non deciso qui.
+corpo ≥40 caratteri, riprodotto localmente solo nella logica stringa) separa 7 casi su 9
+dell'oracolo secondo la mappatura `modulo_ui_*`/`tabella_zebra` → pattern atteso presente,
+`pannello_decorativo*` → pattern atteso assente. **Concordanza valutata post-hoc sullo stesso
+insieme di 9 casi**, dopo rimozione di un fallback (concatenazione testo del bbox) che produceva un
+falso positivo su Kul p.0 — non una stima fuori campione. Falso negativo (DB p.124 ×2) spiegato
+strutturalmente: modulo a campi vuoti, nessun paragrafo di corpo per costruzione. Non un
+discriminante pronto — un candidato per un futuro producer, non deciso qui.
 
 Bug trovato e corretto in corso di lavoro, non specifico di questa milestone: `cluster_id`/
 `primitive_id` (`primitive_normalizer.py:141`) non sono univoci nel manuale, solo nella pagina
@@ -1195,5 +1222,8 @@ come chiave rischia di fondere sotto-cluster di pagine diverse. Nota per futuri 
 Fuori scope, invariato: nessuna regola di Resolution su `layout.table`×`layout.embedded_visual`/
 `layout.interior_visual_frame` (`Proposta_ResolutionDesign_v3.md` §8.2.2) — questa milestone
 forniva evidenza, non l'ha trovata a supporto di una regola specifica basata su colore/clustering.
+Non decisa: proposta di regola di processo per `AGENTS.MD` (ispezione visiva preventiva prima di
+progettare una diagnostica attorno a un'assunzione sul contenuto delle pagine) — rimandata a
+discussione separata.
 
-**Milestone chiusa in `Chiusura_Milestone35.md`.**
+**Milestone chiusa in `2fda096`.**
