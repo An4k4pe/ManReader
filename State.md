@@ -581,11 +581,16 @@ casi. Narrowing esplicito su `plumber_pdf` (`AssertionError` se `None` nel ramo
 Implementato nel commit `3bda611`. Baseline: Ruff verde, BasedPyright 0/0/0, 1149 test OK
 (1146 + 3 nuovi), 7 skipped, `git diff --check` verde.
 
-Verifica reale su tre manuali (Dag/Vil/DB, 11 pagine campione più scansione completa
-379/272/126 pagine): wiring corretto su tutte, nessun rifiuto da guardie. La scansione
-per `content_digest` conferma che il producer non distingue sfondi ripetuti da
-illustrazioni uniche (comportamento già dichiarato non-obiettivo in Milestone 6, non una
-regressione). Dettaglio e possibile seguito nell'appunto sotto.
+Verifica reale su tre manuali (Dag/Vil/DB, 11 pagine campione più scansione
+completa 379/272/126 pagine): wiring corretto su tutte, nessun rifiuto da guardie.
+Le 11 pagine campione sono prodotte da
+`scripts/verify_page_covering_visual_real_pages.py` (etichette e pagine fissate in
+`_PAGES_TO_CHECK`), committato in sanatoria dopo ce03aa7; la scansione completa e
+la quella per `content_digest` vengono invece da
+`verify_page_covering_visual_content_digest_recurrence.py`, gia' sanato in
+`ecb5b72`. La scansione per `content_digest` conferma che il producer non distingue sfondi
+ripetuti da illustrazioni uniche (comportamento già dichiarato non-obiettivo in Milestone 6,
+non una regressione). Dettaglio e possibile seguito nell'appunto sotto.
 
 Fuori scope: CLI dedicata; terzo producer; classificazione decorative/structural;
 consumer document-level di ricorrenza. Nessuna modifica a
@@ -827,7 +832,7 @@ campione di pagine segnalate dall'utente, non solo teorica:
   CLI (--max-area-ratio), quindi "tutti i casi osservati rientrano nel range" è vero
   per costruzione quando il filtro è attivo, ed è comunque contraddetto da DB p.99,
   che misura 0.5023 ed è un caso confermato vero fuori dal range. Il tetto resta
-  ereditato da extractor.py:_asset_is_box_like_text_region, mai validato in proprio.
+  ereditato da extractor.py:\_asset_is_box_like_text_region, mai validato in proprio.
 - `contained_text_area_ratio` può superare 1.0 su pagine con testo fitto vicino a
   loghi piccoli (Dag p.379, retro copertina; Fab, pattern sistematico su 5 pagine) —
   non è un errore di containment, primitive di testo si sovrappongono fra loro; da

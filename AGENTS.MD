@@ -592,6 +592,11 @@ citato in `State.md` va committato nel repo insieme all'aggiornamento — non
 basta che il risultato sia riportato nel testo (regola già praticata da
 Milestone 29, resa esplicita qui dopo la sanatoria di Milestone 35,
 `ecb5b72`, per tre script rimasti non tracciati da Milestone 24/26).
+Gli script sanati sotto questa regola possono contenere etichette di
+manuale e numeri di pagina fissati: sono il verbale di cosa e' stato verificato, non
+una soluzione, e rimuoverli distruggerebbe la riproducibilita' che la regola cerca.
+L'eccezione vale per gli script diagnostici committati in sanatoria, non per il codice
+di produzione, dove il divieto di §Regole operative punto 7 resta pieno.
 
 ## Milestone 30 - producer per riquadri di testo (layout.interior_visual_frame, no wiring) — completata
 
