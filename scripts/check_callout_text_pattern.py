@@ -132,8 +132,13 @@ def check_region(primitive_page: NormalizedPrimitivePage, *, bbox: BBox) -> dict
         "title_like_lines": title_candidates[:5],
         "body_like_lines_individual": [text[:80] for text in body_candidates[:3]],
         "combined_text_is_body_like": combined_is_body_like,
-        "has_title_and_body_pattern": bool(title_candidates)
-        and (bool(body_candidates) or combined_is_body_like),
+        # Richiede una riga di corpo INDIVIDUALE distinta dal titolo, non il blob
+        # concatenato di tutto il bbox: concatenare tutto elimina il vincolo implicito
+        # in ir_builder.py che titolo e corpo siano una coppia coerente (garantito li'
+        # da _title_tied_to_region, non riprodotto qui). Correzione rispetto alla prima
+        # versione di questo script, dopo il falso positivo su Kul p.0 (autore di
+        # copertina + testo non correlato nello stesso bbox letto come "corpo").
+        "has_title_and_body_pattern": bool(title_candidates) and bool(body_candidates),
     }
 
 
