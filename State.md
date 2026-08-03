@@ -586,7 +586,7 @@ completa 379/272/126 pagine): wiring corretto su tutte, nessun rifiuto da guardi
 Le 11 pagine campione sono prodotte da
 `scripts/verify_page_covering_visual_real_pages.py` (etichette e pagine fissate in
 `_PAGES_TO_CHECK`), committato in sanatoria dopo ce03aa7; la scansione completa e
-la quella per `content_digest` vengono invece da
+quella per `content_digest` vengono invece da
 `verify_page_covering_visual_content_digest_recurrence.py`, gia' sanato in
 `ecb5b72`. La scansione per `content_digest` conferma che il producer non distingue sfondi
 ripetuti da illustrazioni uniche (comportamento già dichiarato non-obiettivo in Milestone 6,
@@ -832,7 +832,7 @@ campione di pagine segnalate dall'utente, non solo teorica:
   CLI (--max-area-ratio), quindi "tutti i casi osservati rientrano nel range" è vero
   per costruzione quando il filtro è attivo, ed è comunque contraddetto da DB p.99,
   che misura 0.5023 ed è un caso confermato vero fuori dal range. Il tetto resta
-  ereditato da extractor.py:\_asset_is_box_like_text_region, mai validato in proprio.
+  ereditato da extractor.py: \_asset_is_box_like_text_region, mai validato in proprio.
 - `contained_text_area_ratio` può superare 1.0 su pagine con testo fitto vicino a
   loghi piccoli (Dag p.379, retro copertina; Fab, pattern sistematico su 5 pagine) —
   non è un errore di containment, primitive di testo si sovrappongono fra loro; da
@@ -1173,14 +1173,21 @@ lavoro separato — `Proposta_ResolutionDesign_v3.md` §8.2.1), `cc89248`
 primitive fra IVF ed EV → accetta il più specifico, `reason_token="superseded_by_more_specific"`),
 `9368a5c` (riapertura Milestone 13-19: `page_analysis_co_reference_candidate_overlap_ratio_measurements.py`,
 overlap_area / min(area1, area2) — E1 soddisfatta), `ba94a34` (script standalone
-`scripts/prototype_resolve_page_candidates_real_pages.py`, esecuzione su pagine reali non ancora
-revisionata).
+`scripts/prototype_resolve_page_candidates_real_pages.py`). Esecuzione revisionata dopo
+`f658027` su DB.pdf p.125/48/14/28/110/99/73: `PASS` su tutte e sette, 841 esiti totali,
+140 `accepted` / 140 `rejected` (`superseded_by_more_specific`) / 561 `unresolved`. Ogni
+candidate `interior_visual_frame` trova il gemello `embedded_visual` a insieme di primitive
+identico e nessuna resta irrisolta — conferma su pagine reali dell'invariante IVF ⊆ EV che
+`32a3389` asserisce solo su fixture sintetiche. Tutti i 561 `unresolved` sono
+`embedded_visual`; controllo negativo p.73 (nessuna IVF) interamente `unresolved`, come
+atteso. Incrocio indipendente: p.125 dà IVF=57, coincidente con il "57 righe su 74 hanno
+testo contenuto" già registrato in Milestone 29 per altra via.
 
 Fuori scope, invariato dal documento: `§8.2.2` (layout.table × IVF/EV, tabelle a bordo decorativo)
 resta da fare — E1 sblocca il sottosistema di misura, non fornisce ancora evidenza sufficiente per
 una regola su quella coppia (vedi Milestone 35).
 
-**Milestone chiusa nei commit `32a3389`..`ba94a34`.**
+**Milestone chiusa nei commit `32a3389`..280 pagine, PASS su tutte, IVF ⊆ EV confermato su dati reali, tutti gli unresolved sono embedded_visual).**
 
 ## Milestone 35 — diagnostica di clustering vettoriale: filtro mancante, colore, frequenza — completata
 
@@ -1284,3 +1291,5 @@ era vera sui quattro casi ispezionati e falsa sulla popolazione, stesso schema d
 errore della premessa d'origine di questa milestone nella sua variante statistica;
 è emersa al primo giro di Modalità P, prima di qualunque riga di codice, per il costo
 di sette esecuzioni dello script già committato.
+
+Massa irrisolta di embedded_visual: ripetizione geometrica e identità di contenuto — entrambe scartate su evidenza. Campione casuale riproducibile di 280 pagine (40 per manuale, 7 manuali, seed 20260802, scripts/sample_resolution_prototype_pages.py): 3917 candidate embedded_visual irrisolte, di cui 2671 (68,2%) in gruppi di almeno 3 bbox identiche, IC95 bootstrap per pagina 60,6–73,7%. L'aggregato si dissolve alla disaggregazione: Kul 93,6% (1570 irrisolte), Fab 72,1% (1353), DB 27,8% (756), Vil 23,1% (52), Lan 8,9% (45), Dag e Apo 0,0% (90 e 51). Kul ha 11 sole forme distinte e la dominante 284.9×5.2 compare 27 volte per pagina su 26 pagine su 40: da sola Kul vale il 55% della massa "ripetuta" del campione. L'ispezione visiva (regola 14) mostra che la firma unifica cose opposte: su Kul è il fondo a righe della pagina, su Fab sono le icone degli oggetti nelle tabelle di equipaggiamento — contenuto da preservare, non arredamento — e sulla stessa pagina di Fab convivono icone e filetti di riga con firma di ripetizione identica. ImageOccurrencePrimitive.content_digest è stato testato come discriminante alternativo (scripts/inspect_image_content_digest_recurrence.py) e non separa: Kul 284.9×5.2 dà 1 digest su 27 occorrenze e 108 occorrenze su 4/4 pagine, le icone Fab 20.9×20.9 danno 12 digest su 12 occorrenze come atteso, ma i filetti Fab 56.0×1.0 danno 21 digest su 27 occorrenze e 231.0×1.0 ne danno 9 su 9 — arredamento che non condivide identità. Le fasce di tabella di DB sono raster e danno 2 digest su 4 occorrenze a p.33, 4 su 4 a p.53. Nessuna milestone si apre. Resta valido, e rafforzato da una seconda conferma indipendente dopo Milestone 23, il solo uso stretto già annotato in §Stato operativo: un consumer document-level per content_digest limitato all'arte raster ripetuta identica. La lacuna di identità su DrawingPrimitive non è stata esercitata: tutti i casi osservati erano raster.
