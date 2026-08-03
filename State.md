@@ -1317,13 +1317,35 @@ reale: `intrinsic_width`/`intrinsic_height` sono già sul contratto di
 Ipotesi in verifica, non ratificata: filetti e immagini non differiscono per taglia ma
 per **forma**. Il lato minore dei filetti varia da 1 a 14 px fra editori (DrM/DrW/Fab
 1px, BiD/BoB 3px, Dag 6px, SV/Vil 10px, Kul 11px, Apo/DB 12px, Wil 14px), quindi non è
-stabile; il rapporto d'aspetto lo è di più. Ispezione visiva con provino a contatto su
-Fab, Vil e Wil: tutto ciò che la regione lato≤16px e aspetto≥4 cattura è arredamento —
-bordi di cella degli stat block (Fab), riga rossa sotto i titoli (Vil), filetti e
-angoli di cornice (Wil). Criterio corretto ma **incompleto**: lascia indietro
-arredamento quadrato (angoli 16×16 di Wil), che è il verso giusto in cui sbagliare.
-Una previsione di Chat A su Wil è risultata sbagliata e corretta dal provino:
-l'asset 38×16 px non erano i numeri dei passaggi ma il bordo della cornice accanto.
+stabile; il rapporto d'aspetto lo è di più. Ispezione visiva con provino a contatto su Fab, Vil e Wil, **limitata ai 24 digest più
+frequenti della regione** per ciascun manuale: sono tutti arredamento — bordi di cella
+degli stat block (Fab), riga rossa sotto i titoli (Vil), filetti e angoli di cornice
+(Wil). La selezione è però **viziata**:
+`scripts/render_image_asset_contact_sheet.py` ordina per occorrenze decrescenti prima
+di troncare a `--limit`, quindi ha guardato la sotto-popolazione in cui l'arredamento è
+dominante per costruzione, mentre i digest della regione presenti su una sola pagina —
+i candidati a contenuto, già contati da `inspect_image_shape_axis.py` come
+`region_single` — non sono stati guardati. L'osservazione non misura la precisione
+della regione ma solo quella dei suoi elementi più frequenti. Difetto trovato dalla
+revisione indipendente Chat B, non da Chat A. Una previsione di Chat A su Wil era
+inoltre risultata sbagliata e corretta dal provino: l'asset 38×16 px non erano i numeri
+dei passaggi ma il bordo della cornice accanto.
+
+Secondo difetto della misura sui 16 manuali: le pagine con `rotation != 0` o
+`mediabox != cropbox` sono escluse senza contatore da `inspect_image_shape_axis.py` e
+da `render_image_asset_contact_sheet.py`, a differenza di
+`inspect_document_image_asset_inventory.py` che le conta. L'entità dell'esclusione non
+è nota.
+
+La revisione Chat B ha dato verdetto **non ratificare, non aprire milestone**, con tre
+misure richieste prima di qualunque proposta: densità lungo l'asse aspetto e ricerca di
+una valle stabile fra editori; provino ricampionato in modo stratificato con
+sovracampionamento dei `region_single`; confronto fra aspetto intrinseco e aspetto di
+collocazione. Vincolo architetturale emerso dalla stessa revisione, valido comunque:
+una regola di forma in Resolution dovrebbe girare **dopo** le regole relazionali, non
+prima, perché i bordi di cella che classificherebbe come arredamento sono anche
+l'evidenza geometrica su cui devono lavorare `§8.2.2` e il contenimento
+`interior_visual_frame ⊃ embedded_visual`.
 
 Limiti dichiarati: 3 manuali ispezionati visivamente su 16 misurati; un solo caso
 confermato di contenuto protetto dal criterio (le icone di Fab); i 22 digest singoletti
