@@ -33,14 +33,13 @@ from pathlib import Path
 
 import fitz
 
-from job_capture_page_runner import capture_job_page
-from job_initializer import initialize_job
-from job_page_analysis_runner import run_job_page_analysis
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from job_capture_page_runner import capture_job_page  # noqa: E402
+from job_initializer import initialize_job  # noqa: E402
+from job_page_analysis_runner import run_job_page_analysis  # noqa: E402
 
 _PAGES_TO_CHECK: dict[str, tuple[int, ...]] = {
     "dag": (27, 55, 73),
