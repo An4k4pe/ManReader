@@ -1302,14 +1302,14 @@ toccato. La pipeline nuova conta **collocazioni** (`ImageOccurrencePrimitive` è
 occorrenza) mentre la pipeline legacy conta **immagini** (`get_images` per xref più
 `rects[0]`, più deduplica MD5 document-scoped in `_extract_images`): il divario è di
 uno o due ordini di grandezza. Raggruppando per `content_digest` — campo già presente
-e popolato via `get_image_info(hashes=True)`, zero mancanti su 12.308 occorrenze
+e popolato via `get_image_info(hashes=True)`, zero mancanti su 27.437 occorrenze
 misurate — Kul passa da 8774 occorrenze a 107 asset distinti (collasso 82×), DB da
 3534 a 991 (3,6×), Fab da 15129 a 4411 (3,4×). Il collasso è quindi forte su un
 manuale su tre e non è il meccanismo dominante.
 
 Il filtro raster del legacy (`config.min_image_width/height = 80` px, unico scarto
 applicato a `_extract_images`) è **inutilizzabile** sotto l'obiettivo "ogni immagine
-diventa una nota": su Fab elimina 258 digest da 16×16 px che sono le icone degli
+diventa una nota": su Fab elimina 258 digest con dimensione intrinseca 16×16 px che sono le icone degli
 oggetti nelle tabelle equipaggiamento, cioè contenuto. L'asse dimensionale resta però
 reale: `intrinsic_width`/`intrinsic_height` sono già sul contratto di
 `ImageOccurrencePrimitive` e nessun producer li guarda.

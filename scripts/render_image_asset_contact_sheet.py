@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import io
+import random
 import sys
 from pathlib import Path
 from typing import cast
@@ -91,6 +92,8 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--aspect-min", type=float, default=0.0)
     parser.add_argument("--aspect-max", type=float, default=float("inf"))
     parser.add_argument("--limit", type=int, default=24, help="Assets rendered. Default 24.")
+    parser.add_argument("--sample", choices=("random", "frequency"), default="random")
+    parser.add_argument("--seed", type=str, default="20260803")
     parser.add_argument("--columns", type=int, default=4)
     parser.add_argument(
         "--context-pt",
@@ -205,7 +208,11 @@ def main(argv: list[str] | None = None) -> int:
             for asset in assets.values()
             if minor_min <= asset.minor <= minor_max and aspect_min <= asset.aspect <= aspect_max
         ]
-        selected.sort(key=lambda asset: -asset.occurrences)
+        if cast(str, args.sample) == "frequency":
+            selected.sort(key=lambda asset: -asset.occurrences)
+        else:
+            selected.sort(key=lambda asset: asset.digest)
+            random.Random(cast(str, args.seed)).shuffle(selected)
         selected = selected[:limit]
 
         if not selected:

@@ -1,54 +1,48 @@
-"""Density of image assets along the aspect axis, and search for a stable valley.
+"""Cross-manual distribution of image assets on the shape axis (minor side x aspect).
 
-Diagnostico soltanto: nessun producer, nessuna soglia ratificata, nessuna
-decisione.
+Diagnostico soltanto: nessun producer, nessuna `PageAnalysis`, nessuna soglia
+ratificata, nessuna decisione. Descrive una distribuzione e mostra esempi da
+guardare; non classifica.
 
-Domanda, registrata prima dell'esecuzione: fra le immagini con lato minore
-piccolo, la distribuzione del rapporto d'aspetto ha una VALLE di densita' fra
-il modo "quadrato" e il modo "allungato", e quella valle cade nello stesso
-posto su editori diversi?
+Contesto: il filtro raster del legacy (`config.min_image_width/height = 80`)
+scarta per taglia assoluta ed e' risultato inutilizzabile sotto l'obiettivo
+"ogni immagine diventa una nota": su Fab elimina 237 icone di contenuto da
+16x16 px. L'ipotesi da verificare e' che filetti e immagini non differiscano
+per taglia ma per FORMA -- un'immagine con lato minore di pochi pixel e
+rapporto d'aspetto estremo e' una riga, non un'illustrazione -- e soprattutto
+che questa separazione sia STABILE fra manuali diversi, che e' il punto su cui
+il tetto d'area ha fallito.
 
-Perche' conta. Il tetto d'area (`_DEFAULT_MAX_AREA_RATIO = 0.28`) e' stato
-falsificato mostrando che la distribuzione e' continua: 407 righe fra 0,283 e
-0,589 senza salti. Dell'asse forma finora e' stata misurata solo la PREVALENZA
-(quota di occorrenze in una fascia scelta a mano, da 0% a 96% a seconda del
-manuale), che e' una quantita' diversa e non dice nulla sulla separabilita'.
-Questo script misura la separazione. Se la distribuzione e' continua come
-quella dell'area, il criterio di forma muore per la stessa ragione e la linea
-si chiude; se esiste una valle e cade allo stesso posto su molti editori,
-quella e' la differenza sostanziale rispetto a una soglia scelta sul massimo
-campionario.
+Misura per ogni manuale, raggruppando le occorrenze per `content_digest`:
 
-Criteri dichiarati prima di guardare i risultati:
+  - distribuzione congiunta lato-minore-in-pixel x rapporto d'aspetto
+  - quota di occorrenze e di digest nella regione candidata a "riga"
+  - fra quelli in regione, quanti compaiono su una sola pagina (che NON prova
+    che siano contenuto, ma segnala i casi da guardare per primi)
+  - esempi con pagina e bbox, per l'ispezione visiva richiesta da
+    `AGENTS.MD` §Regole operative punto 14
 
-  - VALLE presente se la densita' minima fra i due modi piu' alti scende a
-    `--valley-max-ratio` (default 0,50) o meno del piu' basso dei due modi;
-  - STABILE se le posizioni delle valli dei manuali che ne hanno una stanno
-    entro un fattore 2 fra la minima e la massima;
-  - CADUTA se la maggioranza dei manuali con campione sufficiente risulta
-    unimodale, oppure se le posizioni delle valli si distribuiscono su piu' di
-    un fattore 4.
-
-Il peso primario e' per DIGEST, non per occorrenze: un solo filetto ripetuto
-mille volte non deve creare un modo. La versione pesata per occorrenze e'
-riportata a fianco come controllo, non come misura principale.
-
-Le pagine escluse dalle precondizioni (`rotation != 0`, `mediabox != cropbox`)
-sono contate e riportate, non saltate in silenzio: le due diagnostiche
-precedenti sull'asse forma le scartavano senza contatore e l'entita'
-dell'esclusione non era nota.
+`--max-minor-px` e `--min-aspect` sono parametri esplorativi, non una regola:
+servono a leggere la stessa fetta di distribuzione su manuali diversi e a
+vedere se resta la stessa. Il rapporto d'aspetto e' calcolato sulle dimensioni
+intrinseche dell'immagine (proprieta' dell'asset), non sul bbox di
+collocazione, che puo' essere deformato.
 
 Uso, dalla radice del repository:
 
-    python3 scripts/inspect_aspect_density_valley.py --pdf-dir ./ --json-output ~/valley.json
+    python3 scripts/inspect_image_shape_axis.py \
+        --pdf kul=Kul.pdf --pdf fab=Fab.pdf --pdf db=DB.pdf \
+        --json-output /tmp/shape_axis.json
+
+    python3 scripts/inspect_image_shape_axis.py --pdf-dir ~/manuali --samples 8
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import math
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import cast
 
@@ -61,19 +55,22 @@ if str(PROJECT_ROOT) not in sys.path:
 from primitive_normalizer import normalize_backend_page_capture  # noqa: E402
 from pymupdf_capture import capture_pymupdf_page  # noqa: E402
 
+_MINOR_EDGES = (2, 4, 8, 16, 32, 64, 128)
+_ASPECT_EDGES = (1.5, 2.0, 4.0, 8.0, 16.0, 32.0)
+
 
 def _parse_labelled_path(value: str) -> tuple[str, Path]:
     label, separator, raw_path = value.partition("=")
     if not separator or not label or not raw_path:
-        raise argparse.ArgumentTypeError("expected LABEL=PATH")
+        raise argparse.ArgumentTypeError("expected LABEL=PATH, for example kul=/path/Kul.pdf")
     return label, Path(raw_path)
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Measure the density of image assets along log2(aspect) for thin images "
-            "and look for a density valley, per manual."
+            "Describe the joint distribution of image assets over minor side (pixels) "
+            "and aspect ratio, per manual, and print boundary examples to inspect."
         ),
     )
     parser.add_argument(
@@ -84,140 +81,195 @@ def build_argument_parser() -> argparse.ArgumentParser:
         metavar="LABEL=PATH",
         help="A PDF to inspect. Repeatable.",
     )
-    parser.add_argument("--pdf-dir", type=Path, help="Every *.pdf inside is inspected.")
     parser.add_argument(
-        "--minor-max",
-        type=int,
-        default=16,
-        help="Only assets with minor side at or below this. Default 16.",
+        "--pdf-dir",
+        type=Path,
+        help="Directory: every *.pdf inside is inspected, label = file stem.",
     )
     parser.add_argument(
-        "--bins-per-octave",
+        "--max-minor-px",
         type=int,
         default=4,
-        help="Histogram resolution on log2(aspect). Default 4.",
+        help="Exploratory: minor side at or below this is 'thin'. Default 4.",
     )
     parser.add_argument(
-        "--max-octaves",
-        type=int,
-        default=10,
-        help="Aspect range covered: 1 to 2**N. Default 10 (up to 1024).",
-    )
-    parser.add_argument(
-        "--min-digests",
-        type=int,
-        default=40,
-        help="Manuals below this count in band are reported as insufficient.",
-    )
-    parser.add_argument(
-        "--valley-max-ratio",
+        "--min-aspect",
         type=float,
-        default=0.50,
-        help="Valley if min between modes <= this fraction of the lower mode.",
+        default=4.0,
+        help="Exploratory: aspect ratio at or above this is 'long'. Default 4.0.",
     )
-    parser.add_argument("--json-output", type=Path)
+    parser.add_argument(
+        "--samples", type=int, default=5, help="Boundary examples printed per manual. Default 5."
+    )
+    parser.add_argument(
+        "--json-output", type=Path, help="Optional JSON dump of the per-asset rows."
+    )
     return parser
 
 
-def _collect(pdf_path: Path, minor_max: int) -> tuple[list[tuple[float, int]], int, int, int]:
-    """Return (aspect, occurrences) per digest in band, plus counters."""
+class _Asset:
+    __slots__ = ("digest", "occurrences", "pages", "minor", "major", "bbox", "first_page")
 
-    seen: dict[str, tuple[float, int]] = {}
-    skipped = 0
-    total_pages = 0
-    total_images = 0
+    def __init__(
+        self, digest: str, minor: int, major: int, bbox: tuple[float, float], first_page: int
+    ) -> None:
+        self.digest = digest
+        self.occurrences = 0
+        self.pages: set[int] = set()
+        self.minor = minor
+        self.major = major
+        self.bbox = bbox
+        self.first_page = first_page
+
+    @property
+    def aspect(self) -> float:
+        return self.major / self.minor if self.minor else float("inf")
+
+
+def _collect(pdf_path: Path) -> tuple[dict[str, _Asset], int, int, int]:
+    assets: dict[str, _Asset] = {}
+    total = 0
+    missing = 0
     with fitz.open(pdf_path) as document:
         page_count = int(document.page_count)
         for page_number in range(1, page_count + 1):
-            total_pages += 1
             page = document.load_page(page_number - 1)
             if page.rotation != 0 or page.mediabox != page.cropbox:
-                skipped += 1
                 continue
             primitive_page = normalize_backend_page_capture(
                 capture_pymupdf_page(
                     page,
                     source_id="diagnostic-source",
                     page_id=f"page:{page_number:04d}",
-                    capture_id=f"diagnostic:valley:page:{page_number:04d}",
+                    capture_id=f"diagnostic:shape:page:{page_number:04d}",
                 )
             )
             for image in primitive_page.image_primitives:
-                total_images += 1
+                total += 1
                 digest = image.content_digest
-                width = image.intrinsic_width
-                height = image.intrinsic_height
-                if digest is None or width is None or height is None:
+                if (
+                    digest is None
+                    or image.intrinsic_width is None
+                    or image.intrinsic_height is None
+                ):
+                    missing += 1
                     continue
-                minor = min(width, height)
-                major = max(width, height)
-                if minor <= 0 or minor > minor_max:
-                    continue
-                aspect = major / minor
-                previous = seen.get(digest)
-                seen[digest] = (aspect, (previous[1] if previous else 0) + 1)
-    return list(seen.values()), skipped, total_pages, total_images
+                asset = assets.get(digest)
+                if asset is None:
+                    x0, y0, x1, y1 = image.bbox
+                    asset = _Asset(
+                        digest=digest,
+                        minor=min(image.intrinsic_width, image.intrinsic_height),
+                        major=max(image.intrinsic_width, image.intrinsic_height),
+                        bbox=(round(x1 - x0, 1), round(y1 - y0, 1)),
+                        first_page=page_number,
+                    )
+                    assets[digest] = asset
+                asset.occurrences += 1
+                asset.pages.add(page_number)
+    return assets, total, missing, page_count
 
 
-def _histogram(
-    values: list[float], weights: list[int], bins_per_octave: int, max_octaves: int
-) -> list[float]:
-    bin_count = bins_per_octave * max_octaves
-    out = [0.0] * bin_count
-    for value, weight in zip(values, weights, strict=True):
-        if value < 1.0:
-            index = 0
-        else:
-            index = int(math.log2(value) * bins_per_octave)
-        out[min(max(index, 0), bin_count - 1)] += weight
+def _bucket(value: float, edges: tuple[float, ...] | tuple[int, ...]) -> int:
+    for index, edge in enumerate(edges):
+        if value <= edge:
+            return index
+    return len(edges)
+
+
+def _labels(edges: tuple[float, ...] | tuple[int, ...], integer: bool) -> list[str]:
+    out: list[str] = []
+    previous: float | int = 0
+    for edge in edges:
+        out.append(f"<={edge:g}" if previous == 0 else f"{previous:g}-{edge:g}")
+        previous = edge
+    out.append(f">{previous:g}")
     return out
 
 
-def _smooth(counts: list[float]) -> list[float]:
-    out: list[float] = []
-    for index in range(len(counts)):
-        window = counts[max(0, index - 1) : index + 2]
-        out.append(sum(window) / len(window))
-    return out
+def _report(
+    label: str,
+    assets: dict[str, _Asset],
+    total: int,
+    missing: int,
+    page_count: int,
+    max_minor: int,
+    min_aspect: float,
+    samples: int,
+) -> dict[str, object]:
+    values = list(assets.values())
+    distinct = len(values)
+    grid: Counter[tuple[int, int]] = Counter()
+    occ_grid: Counter[tuple[int, int]] = Counter()
+    for asset in values:
+        key = (_bucket(asset.minor, _MINOR_EDGES), _bucket(asset.aspect, _ASPECT_EDGES))
+        grid[key] += 1
+        occ_grid[key] += asset.occurrences
 
+    in_region = [a for a in values if a.minor <= max_minor and a.aspect >= min_aspect]
+    region_occ = sum(a.occurrences for a in in_region)
+    region_single = [a for a in in_region if len(a.pages) == 1]
+    outside_thin = [a for a in values if a.minor <= max_minor and a.aspect < min_aspect]
 
-def _bin_aspect(index: int, bins_per_octave: int) -> float:
-    return float(2 ** ((index + 0.5) / bins_per_octave))
+    print(f"\n=== {label}  ({page_count} pagine)")
+    print(f"    occorrenze {total}   digest {distinct}   senza dati {missing}")
+    print(f"    regione lato<={max_minor}px e aspetto>={min_aspect:g}:")
+    print(
+        f"       digest {len(in_region)} ({100 * len(in_region) / distinct if distinct else 0:.0f}%)"
+        f"   occorrenze {region_occ} ({100 * region_occ / total if total else 0:.0f}%)"
+        f"   di cui su 1 pagina: {len(region_single)}"
+    )
+    print(
+        f"    sottili ma NON allungate (lato<={max_minor}px, aspetto<{min_aspect:g}): "
+        f"{len(outside_thin)} digest"
+    )
 
+    minor_labels = _labels(_MINOR_EDGES, True)
+    aspect_labels = _labels(_ASPECT_EDGES, False)
+    print("\n    digest per lato minore (righe) x aspetto (colonne):")
+    print("       " + "".join(f"{name:>9}" for name in ["lato\\asp", *aspect_labels]))
+    for row_index, row_name in enumerate(minor_labels):
+        cells = "".join(
+            f"{grid.get((row_index, col_index), 0):>9}" for col_index in range(len(aspect_labels))
+        )
+        print(f"       {row_name:>9}{cells}")
 
-def _find_valley(counts: list[float], bins_per_octave: int, max_ratio: float) -> dict[str, object]:
-    smoothed = _smooth(counts)
-    peaks = [
-        index
-        for index in range(len(smoothed))
-        if smoothed[index] > 0
-        and smoothed[index] >= smoothed[max(0, index - 1)]
-        and smoothed[index] >= smoothed[min(len(smoothed) - 1, index + 1)]
-    ]
-    if len(peaks) < 2:
-        return {"valley": None, "reason": "unimodale o senza secondo modo"}
-    peaks.sort(key=lambda index: -smoothed[index])
-    first, second = sorted(peaks[:2])
-    if second - first < 2:
-        return {"valley": None, "reason": "modi adiacenti, nessuno spazio per una valle"}
-    interior = range(first + 1, second)
-    valley_index = min(interior, key=lambda index: smoothed[index])
-    lower_mode = min(smoothed[first], smoothed[second])
-    depth = smoothed[valley_index] / lower_mode if lower_mode else 1.0
+    boundary = sorted(
+        (a for a in values if a.minor <= max_minor * 4 and a.aspect >= min_aspect / 2),
+        key=lambda a: -a.occurrences,
+    )
+    if boundary:
+        print("\n    esempi al confine, da guardare (pagina, bbox pt, pixel, aspetto):")
+        for asset in boundary[:samples]:
+            print(
+                f"       p.{asset.first_page:<5} {asset.bbox[0]}x{asset.bbox[1]} pt"
+                f"   {asset.major}x{asset.minor} px   asp {asset.aspect:.1f}"
+                f"   occ {asset.occurrences} su {len(asset.pages)} pagine"
+            )
+
     return {
-        "valley": depth <= max_ratio,
-        "valley_aspect": round(_bin_aspect(valley_index, bins_per_octave), 2),
-        "depth_ratio": round(depth, 3),
-        "mode_low_aspect": round(_bin_aspect(first, bins_per_octave), 2),
-        "mode_high_aspect": round(_bin_aspect(second, bins_per_octave), 2),
-        "reason": "",
+        "label": label,
+        "page_count": page_count,
+        "occurrences": total,
+        "distinct": distinct,
+        "region_digests": len(in_region),
+        "region_occurrences": region_occ,
+        "region_single_page": len(region_single),
+        "thin_not_long": len(outside_thin),
+        "assets": [
+            {
+                "digest": a.digest,
+                "occurrences": a.occurrences,
+                "pages": len(a.pages),
+                "first_page": a.first_page,
+                "bbox": list(a.bbox),
+                "minor_px": a.minor,
+                "major_px": a.major,
+                "aspect": round(a.aspect, 2),
+            }
+            for a in sorted(values, key=lambda a: -a.occurrences)
+        ],
     }
-
-
-def _bar(value: float, peak: float, width: int = 34) -> str:
-    if peak <= 0:
-        return ""
-    return "#" * max(0, int(round(width * value / peak)))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -235,118 +287,47 @@ def main(argv: list[str] | None = None) -> int:
         print("at least one --pdf LABEL=PATH or --pdf-dir is required", file=sys.stderr)
         return 1
 
-    minor_max = cast(int, args.minor_max)
-    bins_per_octave = cast(int, args.bins_per_octave)
-    max_octaves = cast(int, args.max_octaves)
-    min_digests = cast(int, args.min_digests)
-    valley_max_ratio = cast(float, args.valley_max_ratio)
+    max_minor = cast(int, args.max_minor_px)
+    min_aspect = cast(float, args.min_aspect)
+    samples = cast(int, args.samples)
 
-    results: list[dict[str, object]] = []
+    summaries: list[dict[str, object]] = []
     for label, pdf_path in targets:
         if not pdf_path.is_file():
             print(f"[{label}] file non trovato: {pdf_path} - saltato", file=sys.stderr)
             continue
         try:
-            rows, skipped, total_pages, total_images = _collect(pdf_path, minor_max)
+            assets, total, missing, page_count = _collect(pdf_path)
         except Exception as exc:  # noqa: BLE001
             print(f"[{label}] errore: {type(exc).__name__}: {exc}", file=sys.stderr)
             continue
+        summaries.append(
+            _report(label, assets, total, missing, page_count, max_minor, min_aspect, samples)
+        )
 
-        aspects = [aspect for aspect, _ in rows]
-        occurrences = [count for _, count in rows]
-        digest_hist = _histogram(aspects, [1] * len(aspects), bins_per_octave, max_octaves)
-        occ_hist = _histogram(aspects, occurrences, bins_per_octave, max_octaves)
-
+    if summaries:
         print(
-            f"\n=== {label}   {total_pages} pagine ({skipped} escluse da precondizioni)"
-            f"   {total_images} occorrenze immagine"
+            f"\n\n=== confronto fra manuali (regione lato<={max_minor}px e aspetto>={min_aspect:g})"
         )
-        print(f"    digest con lato minore <= {minor_max} px: {len(rows)}")
-        if len(rows) < min_digests:
-            print(f"    CAMPIONE INSUFFICIENTE (< {min_digests}), non analizzato")
-            results.append(
-                {
-                    "label": label,
-                    "digests_in_band": len(rows),
-                    "sufficient": False,
-                    "skipped_pages": skipped,
-                }
-            )
-            continue
-
-        detection = _find_valley(digest_hist, bins_per_octave, valley_max_ratio)
-        peak = max(digest_hist)
-        print("    densita' per digest lungo l'aspetto (barra = digest, [occ] = occorrenze):")
-        for index, value in enumerate(digest_hist):
-            if value == 0 and occ_hist[index] == 0:
-                continue
-            low = _bin_aspect(index, bins_per_octave) / (2 ** (0.5 / bins_per_octave))
-            high = low * (2 ** (1 / bins_per_octave))
-            marker = ""
-            if detection.get("valley") is not None and detection.get("valley_aspect") is not None:
-                valley_aspect = cast(float, detection["valley_aspect"])
-                if low <= valley_aspect < high:
-                    marker = "  <== valle" if detection["valley"] else "  <== minimo (non valle)"
-            print(
-                f"       {low:>7.2f}-{high:<7.2f} {int(value):>5} {_bar(value, peak):<35}"
-                f"[{int(occ_hist[index]):>6}]{marker}"
-            )
-        if detection["valley"] is None:
-            print(f"    NESSUNA VALLE: {detection['reason']}")
-        else:
-            verdict = "VALLE" if detection["valley"] else "minimo troppo poco profondo"
-            print(
-                f"    {verdict}: aspetto {detection['valley_aspect']}, "
-                f"profondita' {detection['depth_ratio']} del modo piu' basso "
-                f"(soglia {valley_max_ratio}); modi a {detection['mode_low_aspect']} "
-                f"e {detection['mode_high_aspect']}"
-            )
-
-        results.append(
-            {
-                "label": label,
-                "digests_in_band": len(rows),
-                "sufficient": True,
-                "skipped_pages": skipped,
-                "total_pages": total_pages,
-                "digest_histogram": digest_hist,
-                "occurrence_histogram": occ_hist,
-                **detection,
-            }
-        )
-
-    usable = [r for r in results if r.get("sufficient") and r.get("valley") is True]
-    analysed = [r for r in results if r.get("sufficient")]
-    print("\n\n=== esito contro i criteri dichiarati")
-    print(f"    manuali con campione sufficiente: {len(analysed)}")
-    print(f"    manuali con una valle:            {len(usable)}")
-    if usable:
-        positions = [cast(float, r["valley_aspect"]) for r in usable]
-        spread = max(positions) / min(positions) if min(positions) > 0 else float("inf")
         print(
-            "    posizioni delle valli: "
-            + ", ".join(f"{cast(str, r['label'])}={r['valley_aspect']}" for r in usable)
+            f"{'manuale':>14}{'pagine':>8}{'occorr':>9}{'digest':>8}"
+            f"{'occ in reg':>12}{'%':>6}{'dig in reg':>12}{'1 pagina':>10}"
         )
-        print(f"    dispersione (max/min): {spread:.2f}x")
-        if spread <= 2.0:
-            print("    STABILE secondo il criterio dichiarato (entro un fattore 2)")
-        elif spread > 4.0:
-            print("    CADUTA: dispersione oltre il fattore 4")
-        else:
-            print("    intermedio: fra 2x e 4x, non stabile e non caduto")
-    if analysed and len(usable) * 2 < len(analysed):
-        print("    CADUTA: la maggioranza dei manuali analizzati non ha una valle")
+        for summary in summaries:
+            occurrences = cast(int, summary["occurrences"])
+            region = cast(int, summary["region_occurrences"])
+            print(
+                f"{summary['label']:>14}{summary['page_count']:>8}{occurrences:>9}"
+                f"{summary['distinct']:>8}{region:>12}"
+                f"{100 * region / occurrences if occurrences else 0:>5.0f}%"
+                f"{summary['region_digests']:>12}{summary['region_single_page']:>10}"
+            )
 
     json_output = cast(Path | None, args.json_output)
     if json_output is not None:
         json_output.write_text(
             json.dumps(
-                {
-                    "minor_max": minor_max,
-                    "bins_per_octave": bins_per_octave,
-                    "valley_max_ratio": valley_max_ratio,
-                    "manuals": results,
-                },
+                {"max_minor_px": max_minor, "min_aspect": min_aspect, "manuals": summaries},
                 ensure_ascii=False,
                 sort_keys=True,
                 indent=2,
