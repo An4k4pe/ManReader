@@ -1327,15 +1327,38 @@ la dimensione in pixel intrinseci è una proprietà di come l'editore ha esporta
 non dell'oggetto sulla pagina.
 
 Riformulazione: lato minore in PUNTI diviso il corpo del testo, incrociato con il rapporto
-d'aspetto (`scripts/inspect_image_typographic_shape.py`, 16 manuali). Il corpo è stimabile
-page-local dalla moda delle `font_size` della pagina stessa, quindi il criterio resta
-funzione pura di una singola `NormalizedPrimitivePage`: nessun passaggio documentale,
-nessuna interferenza con la cache di Milestone 22, con l'ordine di esecuzione o con la
-persistenza rinviata da Milestone 21. Su questo asse le due cose che il filtro legacy a
-80 px confondeva finiscono in regioni diverse: le icone degli oggetti di Fab sono 2,09
-corpi con aspetto 1,0, i suoi filetti ≤0,2 corpi con aspetto ≥8 (2407 asset, 7930
-occorrenze). Il fondo rigato di Kul, che in punti assoluti sembrava anomalo a 5,2 pt,
-normalizzato è 0,65 corpi con aspetto 52 e si siede con gli altri (8210 occorrenze).
+d'aspetto (`scripts/inspect_image_typographic_shape.py`, 16 manuali). Il corpo è stimato
+dalla moda delle `font_size` della pagina stessa, quindi il criterio resta funzione pura di
+una singola `NormalizedPrimitivePage`: nessun passaggio documentale, nessuna interferenza
+con la cache di Milestone 22, con l'ordine di esecuzione o con la persistenza rinviata da
+Milestone 21. La prima versione dello script stimava però il corpo accumulando le
+`font_size` su tutto il documento, cioè normalizzava sul corpo del MANUALE mentre
+l'argomento che sosteneva è pagina-locale — difetto trovato dalla revisione Chat B, non da
+Chat A, e dello stesso genere di quello che aveva ucciso l'asse in pixel: un riferimento
+sbagliato scambiato per quello giusto, annidato stavolta dentro l'argomento con cui quel
+tipo di errore veniva respinto. Corretto e rimisurato. **Effetto pratico piccolo**: la
+dispersione del corpo dentro un manuale è al massimo 1,12× fra p10 e p90, e su sette
+manuali su sedici è esattamente 1,00, quindi le due normalizzazioni danno quasi lo stesso
+risultato. Sulla mappa page-local le due cose che il filtro legacy a 80 px confondeva
+restano in regioni diverse: le icone degli oggetti di Fab sono intorno a 2 corpi con
+aspetto 1,0, i suoi filetti ≤0,2 corpi con aspetto ≥8 (2126 asset, 6712 occorrenze); il
+fondo rigato di Kul, che in punti assoluti sembrava anomalo a 5,2 pt, normalizzato sta
+nella fascia banda con aspetto 52 e 8210 occorrenze.
+
+Due cose emerse solo dalla versione corretta. La prima: i cali osservati rispetto alla
+mappa documentale non sono riclassificazioni ma **esclusioni**. Le immagini su pagine dove
+il corpo non è stimabile (meno di 20 primitive testuali) prima ricevevano comunque una
+regione usando il corpo del manuale, adesso non ne ricevono nessuna — e sono una quota non
+trascurabile: Lan 69 occorrenze su 157 (44%), DIE 96 su 377 (25%), Vil 104 su 663 (16%),
+BoB 113 su 750 (15%), DB 264 su 3534 (7%), Fab 35 su 15129 (0,2%). Le pagine senza testo di
+corpo sono le tavole a piena pagina, cioè proprio dove stanno le illustrazioni grandi: non
+è che il corpo di pagina sia una stima peggiore, è che su una classe intera di pagine non
+esiste. Limite dell'impostazione page-local non previsto da nessuno dei tre. La seconda:
+l'unico spostamento non spiegato da esclusioni è su Fab, circa 280 asset passati da
+`filetto` a `banda`, tutti sul confine `0,2 corpi` scelto a mano; Fab ha corpo che oscilla
+fra 9 e 10 punti e le cose vicine a un confine arbitrario migrano appena il denominatore si
+muove. Conferma diretta del rilievo Chat B sui confini: la struttura grossa della mappa è
+robusta, i suoi bordi non sono difendibili come numeri, solo come descrizione di zone.
 
 A cosa serve, misurato invece che supposto
 (`scripts/inspect_page_local_lines_vs_tables.py`, 40 pagine per manuale, seed 20260803):
