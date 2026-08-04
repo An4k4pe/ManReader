@@ -1314,42 +1314,76 @@ oggetti nelle tabelle equipaggiamento, cioè contenuto. L'asse dimensionale rest
 reale: `intrinsic_width`/`intrinsic_height` sono già sul contratto di
 `ImageOccurrencePrimitive` e nessun producer li guarda.
 
-Ipotesi in verifica, non ratificata: filetti e immagini non differiscono per taglia ma
-per **forma**. Il lato minore dei filetti varia da 1 a 14 px fra editori (DrM/DrW/Fab
-1px, BiD/BoB 3px, Dag 6px, SV/Vil 10px, Kul 11px, Apo/DB 12px, Wil 14px), quindi non è
-stabile; il rapporto d'aspetto lo è di più. Ispezione visiva con provino a contatto su Fab, Vil e Wil, **limitata ai 24 digest più
-frequenti della regione** per ciascun manuale: sono tutti arredamento — bordi di cella
-degli stat block (Fab), riga rossa sotto i titoli (Vil), filetti e angoli di cornice
-(Wil). La selezione è però **viziata**:
-`scripts/render_image_asset_contact_sheet.py` ordina per occorrenze decrescenti prima
-di troncare a `--limit`, quindi ha guardato la sotto-popolazione in cui l'arredamento è
-dominante per costruzione, mentre i digest della regione presenti su una sola pagina —
-i candidati a contenuto, già contati da `inspect_image_shape_axis.py` come
-`region_single` — non sono stati guardati. L'osservazione non misura la precisione
-della regione ma solo quella dei suoi elementi più frequenti. Difetto trovato dalla
-revisione indipendente Chat B, non da Chat A. Una previsione di Chat A su Wil era
-inoltre risultata sbagliata e corretta dal provino: l'asset 38×16 px non erano i numeri
-dei passaggi ma il bordo della cornice accanto.
+Ipotesi verificata e falsificata, poi riformulata. La prima formulazione — filetti e
+immagini si distinguono per forma, con lato minore in PIXEL ≤16 e aspetto ≥4 — è stata
+falsificata secondo un criterio registrato prima dell'esecuzione, l'esistenza di una valle
+di densità stabile fra editori (`scripts/inspect_aspect_density_valley.py`): quattro
+manuali su sei analizzabili hanno una valle, a 1,83 / 3,67 / 29,34 / 83,0, dispersione 45×
+contro una soglia di caduta di 4×. Sull'asse del lato minore, su tutti gli asset senza
+prefiltro, dieci manuali su sedici hanno una valle, da 1,5 a 558 px, dispersione 362×. Le
+valli non sono nemmeno lo stesso fenomeno: due sono bin vuoti in dati radi, una cade fra
+due picchi entrambi quadrati. Difetto di impostazione trovato dall'utente e non da Chat A:
+la dimensione in pixel intrinseci è una proprietà di come l'editore ha esportato il file,
+non dell'oggetto sulla pagina.
 
-Secondo difetto della misura sui 16 manuali: le pagine con `rotation != 0` o
-`mediabox != cropbox` sono escluse senza contatore da `inspect_image_shape_axis.py` e
-da `render_image_asset_contact_sheet.py`, a differenza di
-`inspect_document_image_asset_inventory.py` che le conta. L'entità dell'esclusione non
-è nota.
+Riformulazione: lato minore in PUNTI diviso il corpo del testo, incrociato con il rapporto
+d'aspetto (`scripts/inspect_image_typographic_shape.py`, 16 manuali). Il corpo è stimabile
+page-local dalla moda delle `font_size` della pagina stessa, quindi il criterio resta
+funzione pura di una singola `NormalizedPrimitivePage`: nessun passaggio documentale,
+nessuna interferenza con la cache di Milestone 22, con l'ordine di esecuzione o con la
+persistenza rinviata da Milestone 21. Su questo asse le due cose che il filtro legacy a
+80 px confondeva finiscono in regioni diverse: le icone degli oggetti di Fab sono 2,09
+corpi con aspetto 1,0, i suoi filetti ≤0,2 corpi con aspetto ≥8 (2407 asset, 7930
+occorrenze). Il fondo rigato di Kul, che in punti assoluti sembrava anomalo a 5,2 pt,
+normalizzato è 0,65 corpi con aspetto 52 e si siede con gli altri (8210 occorrenze).
 
-La revisione Chat B ha dato verdetto **non ratificare, non aprire milestone**, con tre
-misure richieste prima di qualunque proposta: densità lungo l'asse aspetto e ricerca di
-una valle stabile fra editori; provino ricampionato in modo stratificato con
-sovracampionamento dei `region_single`; confronto fra aspetto intrinseco e aspetto di
-collocazione. Vincolo architetturale emerso dalla stessa revisione, valido comunque:
-una regola di forma in Resolution dovrebbe girare **dopo** le regole relazionali, non
-prima, perché i bordi di cella che classificherebbe come arredamento sono anche
-l'evidenza geometrica su cui devono lavorare `§8.2.2` e il contenimento
-`interior_visual_frame ⊃ embedded_visual`.
+A cosa serve, misurato invece che supposto
+(`scripts/inspect_page_local_lines_vs_tables.py`, 40 pagine per manuale, seed 20260803):
+le linee non scoprono tabelle, le CONFERMANO. Quota di linee e bande che cade dentro un
+`table_candidate` della stessa pagina: Fab 738/982 (75%), DB 12/16 (75%), DrW 92/151
+(61%), DrM 31/53 (58%). Controllo negativo su Kul: 1252 linee, zero `table_candidate` su
+40 pagine, tutte fuori — il fondo rigato non è struttura di tabella e il criterio da solo
+non lo sa. Conclusione operativa: **una linea è evidenza di tabella solo dove esiste altra
+evidenza di tabella.** È il caso `§8.2.2` lasciato aperto da Milestone 34, e una regola di
+corroborazione fra producer, non una proprietà d'oggetto — sesta conferma consecutiva che
+il segnale è relazionale.
 
-Limiti dichiarati: 3 manuali ispezionati visivamente su 16 misurati; un solo caso
-confermato di contenuto protetto dal criterio (le icone di Fab); i 22 digest singoletti
-del bucket "sottile ma non allungato" di Wil non sono stati guardati. Nessuna milestone
-è aperta, nessuna soglia è ratificata, nessun producer o contratto è stato modificato.
+Verifica visiva con provino a contatto e campionamento casuale su DrW e Kul, 48 celle:
+tutto arredamento, nessun contenuto. Filetti sotto i titoli, righe di guida dell'indice,
+campi da compilare della scheda, barre di margine, fondo rigato.
+`scripts/render_image_asset_contact_sheet.py` è stato corretto: ordinava per frequenza e
+mostrava quindi solo arredamento per costruzione, difetto trovato dalla revisione Chat B e
+non da Chat A. L'ispezione precedente su Fab, Vil e Wil era limitata ai 24 digest più
+frequenti per manuale e non misurava la precisione della regione ma solo quella dei suoi
+elementi più frequenti; una previsione di Chat A su Wil era risultata sbagliata e corretta
+dal provino (l'asset 38×16 px non erano i numeri dei passaggi ma il bordo della cornice).
+
+Limiti dichiarati. Dal 2% al 22% delle pagine non ha un corpo stimabile (meno di 20
+primitive testuali) e lì il criterio non si applica: su DB sono 124 immagini, circa il 12%
+delle sue occorrenze. La corroborazione al 58-75% include gli indici, che pdfplumber con
+la strategia `text_lines` legge legittimamente come tabelle: quanto pesino non è stato
+separato. Le regioni "bollino" e "sottile" restano miste e la forma lì non decide: gli
+angoli di cornice di Wil hanno la stessa firma di un'icona di contenuto. Il rilevatore di
+valli è stato cambiato dopo il fallimento del primo, quindi quel passaggio è post-hoc e
+vale una tacca meno di uno pre-registrato. Le pagine con `rotation != 0` o
+`mediabox != cropbox` erano escluse senza contatore dalle prime due diagnostiche: la
+misura successiva le ha contate e sono **zero** su tutti e sedici i manuali. Anomalia
+annotata e non indagata: su SV il producer `table_candidate` ha scartato due candidate con
+bbox fuori dai limiti di pagina (`y0 = -7,01` su pagina alta 652).
+
+La revisione Chat B aveva dato verdetto **non ratificare, non aprire milestone**, con tre
+misure richieste: la prima è stata eseguita e ha falsificato la formulazione in pixel; le
+altre due (provino stratificato, aspetto intrinseco contro aspetto di collocazione)
+decadono con essa e restano da rifare se la formulazione tipografica verrà proposta.
+Vincolo architetturale emerso dalla stessa revisione e tuttora valido: una regola di forma
+in Resolution dovrebbe girare **dopo** le regole relazionali, non prima, perché i bordi
+che classificherebbe come arredamento sono anche l'evidenza geometrica su cui devono
+lavorare `§8.2.2` e il contenimento `interior_visual_frame ⊃ embedded_visual`. Nessuna
+milestone è aperta, nessuna soglia è ratificata, nessun producer o contratto è stato
+modificato.
+
 Script: `scripts/inspect_document_image_asset_inventory.py`,
-`scripts/inspect_image_shape_axis.py`, `scripts/render_image_asset_contact_sheet.py`.
+`scripts/inspect_image_shape_axis.py`, `scripts/inspect_aspect_density_valley.py`,
+`scripts/inspect_image_typographic_shape.py`,
+`scripts/inspect_page_local_lines_vs_tables.py`,
+`scripts/render_image_asset_contact_sheet.py`.

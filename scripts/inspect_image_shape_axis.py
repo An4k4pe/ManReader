@@ -7,7 +7,8 @@ guardare; non classifica.
 Contesto: il filtro raster del legacy (`config.min_image_width/height = 80`)
 scarta per taglia assoluta ed e' risultato inutilizzabile sotto l'obiettivo
 "ogni immagine diventa una nota": su Fab elimina 237 icone di contenuto da
-16x16 px. L'ipotesi da verificare e' che filetti e immagini non differiscano
+16x16 px258 digest di contenuto con intrinseco 16x16 px.
+L'ipotesi da verificare e' che filetti e immagini non differiscano
 per taglia ma per FORMA -- un'immagine con lato minore di pochi pixel e
 rapporto d'aspetto estremo e' una riga, non un'illustrazione -- e soprattutto
 che questa separazione sia STABILE fra manuali diversi, che e' il punto su cui
