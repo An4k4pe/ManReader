@@ -1434,3 +1434,34 @@ Script: `scripts/inspect_document_image_asset_inventory.py`,
 `scripts/inspect_image_typographic_shape.py`,
 `scripts/inspect_page_local_lines_vs_tables.py`,
 `scripts/render_image_asset_contact_sheet.py`.
+
+Falsi negativi, misurati (`scripts/render_image_asset_contact_sheet.py`, ora capace di
+filtrare sullo spessore relativo e non solo sui pixel, campionamento casuale con seed).
+Il criterio sbaglia **solo per difetto e solo su arredamento**: in 72 celle ispezionate su
+tre manuali non è comparso un solo contenuto catturato, mentre molto arredamento sfugge.
+La causa è la richiesta di aspetto ≥8, che lascia passare le cose sottili ma corte.
+
+Su Fab la regione "bollino" (38 asset) contiene due popolazioni distinte: le icone dei tipi
+di danno e degli oggetti, `13×12` fino a `16×16` px, 1,06–1,44 corpi, 21-38 occorrenze
+ciascuna — contenuto, correttamente risparmiato; e granelli degeneri, `1×1` px a 0,11 corpi
+con 60 occorrenze, `4×2` px a 0,22 con 40 — arredamento, non catturato. La regione
+"sottile" (351 asset) è quasi tutta a 0,22 corpi: schegge di bordo di cella con aspetto fra
+2 e 8, arredamento, non catturato. Un caso isolato e notevole: `83×12` px, 1,20 corpi, è la
+frase "I confini sono un inganno della mente" composta **come immagine**, cioè testo che
+diventa asset. Su Wil il complemento (108 asset) è interamente arredamento: angoli e
+segmenti delle cornici, 0,33–1,26 corpi.
+
+La correzione ovvia — rilassare l'aspetto tenendo un limite di spessore — funziona dentro
+Fab, dove l'arredamento sfuggito sta a 0,11–0,35 corpi e il contenuto a 1,06–1,44, due
+popolazioni nettamente separate. **Non funziona fra manuali**: su Wil l'arredamento sfuggito
+sta a 0,33–1,26 corpi, cioè esattamente dove su Fab sta il contenuto. Un limite tarato su
+Fab cancellerebbe le icone dei tipi di danno se applicato a Wil. Settima occorrenza dello
+stesso schema: separa dentro un manuale, non fra manuali.
+
+Bilancio del criterio di forma, completo su entrambi i lati: precisione alta (72 celle
+casuali su tre manuali, nessun contenuto catturato); copertura parziale e non quantificata
+globalmente (su Fab sfuggono almeno 389 asset fra bollino e sottile, su Wil 108, quasi tutti
+arredamento); modo di fallire conservativo, cioè quello giusto, perché lascia rumore invece
+di cancellare contenuto; non estendibile con una soglia unica. Le tre misure chieste dalla
+revisione Chat B sono state eseguite tutte: la prima ha falsificato l'asse in pixel, la
+seconda ha ritirato la corroborazione delle tabelle, la terza è questa.
