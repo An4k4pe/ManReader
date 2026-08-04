@@ -1361,15 +1361,39 @@ muove. Conferma diretta del rilievo Chat B sui confini: la struttura grossa dell
 robusta, i suoi bordi non sono difendibili come numeri, solo come descrizione di zone.
 
 A cosa serve, misurato invece che supposto
-(`scripts/inspect_page_local_lines_vs_tables.py`, 40 pagine per manuale, seed 20260803):
-le linee non scoprono tabelle, le CONFERMANO. Quota di linee e bande che cade dentro un
-`table_candidate` della stessa pagina: Fab 738/982 (75%), DB 12/16 (75%), DrW 92/151
-(61%), DrM 31/53 (58%). Controllo negativo su Kul: 1252 linee, zero `table_candidate` su
-40 pagine, tutte fuori — il fondo rigato non è struttura di tabella e il criterio da solo
-non lo sa. Conclusione operativa: **una linea è evidenza di tabella solo dove esiste altra
-evidenza di tabella.** È il caso `§8.2.2` lasciato aperto da Milestone 34, e una regola di
-corroborazione fra producer, non una proprietà d'oggetto — sesta conferma consecutiva che
-il segnale è relazionale.
+(`scripts/inspect_page_local_lines_vs_tables.py`, 40 pagine per manuale, seed 20260803).
+Prima misura: la quota di linee e bande che cade per almeno metà della propria area dentro
+un `table_candidate` della stessa pagina — Fab 738/982 (75%), DrW 92/151 (61%), DrM 31/53
+(58%), DB 12/16 (75%). Letta da sola sembrava dire che le linee confermano le tabelle.
+**Non lo dice.** Il controllo di permutazione (ogni linea ricollocata a caso sulla stessa
+pagina, venti ripetizioni, stesso calcolo) mostra che l'atteso per caso è alto: Fab 50%,
+DrM 49%, DB 46%, DrW 33%. L'arricchimento reale è quindi Fab 1,5×, DrW 2,0×, DrM 1,4×,
+e nessuno raggiunge il 3× registrato come soglia prima dell'esecuzione. Quattro manuali
+sono addirittura sotto 1, e Wil sta a 0,2× — le sue linee cadono dentro le tabelle MENO
+del caso, essendo bordi e cornici sistematicamente dove le tabelle non sono. Il censimento
+completo di DB (126 pagine, nessun campionamento) corregge il suo dato da 75% con 2,7× su
+16 linee a 60% con 1,3× su 120: l'aneddoto era rumore. **L'affermazione che le linee
+corroborino le tabelle è ritirata**; resta un arricchimento debole ma reale, dell'ordine
+di 1,5× su 982 linee, che è troppo poco per fondarci una regola di Resolution.
+
+Avvertenza generale, che è la cosa più utile emersa da questa misura e vale oltre questo
+giro: l'atteso per caso è così alto perché i `table_candidate` sono enormi, coprendo da un
+terzo a due terzi dell'area delle pagine dove compaiono. **Qualunque misura di
+contenimento geometrico contro `table_candidate` è quindi quasi priva di informazione se
+non accompagnata dal tasso di base.** Vale anche per `§8.2.2`, la relazione
+`layout.table` × IVF/EV lasciata aperta da Milestone 34, che è esattamente una misura di
+contenimento contro quelle stesse candidate. Il repository conteneva già l'avvertimento,
+nella docstring di `scan_table_candidate_visual_area_coverage.py` ("a tiny box fully inside
+a huge table candidate gives overlap_ratio near 1.0"), e Chat A ci è cascata lo stesso: il
+rilievo è arrivato dalla revisione Chat B.
+
+Quello che questa misura NON tocca: la capacità del criterio di forma di identificare le
+linee, che poggia sulla mappa tipografica su 16 manuali e sulle 48 celle di provino a
+campionamento casuale (DrW e Kul, nessun falso positivo osservato). Il tasso di base
+riguarda l'uso delle linee a valle, non il loro riconoscimento. Controllo negativo su Kul
+invariato: 1252 linee, zero `table_candidate` su 40 pagine — il fondo rigato non è
+struttura di tabella, e per quel manuale il controllo di permutazione non ha nulla contro
+cui girare.
 
 Verifica visiva con provino a contatto e campionamento casuale su DrW e Kul, 48 celle:
 tutto arredamento, nessun contenuto. Filetti sotto i titoli, righe di guida dell'indice,

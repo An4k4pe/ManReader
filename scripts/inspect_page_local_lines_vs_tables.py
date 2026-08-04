@@ -93,6 +93,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pdf-dir", type=Path, help="Every *.pdf inside is inspected.")
     parser.add_argument("--pages-per-pdf", type=int, default=40)
     parser.add_argument("--seed", type=str, default="20260803")
+    parser.add_argument("--permutations", type=int, default=20)
     parser.add_argument(
         "--min-text-primitives",
         type=int,
@@ -138,8 +139,37 @@ def _region(ratio: float, aspect: float) -> str:
     return "grande"
 
 
+def _permutation_control(
+    lines: list[BBox],
+    tables: list[BBox],
+    width: float,
+    height: float,
+    rounds: int,
+    generator: random.Random,
+) -> tuple[int, float]:
+    """Osservato e atteso sotto ricollocazione casuale sulla stessa pagina."""
+    observed = 0
+    for box in lines:
+        area = _area(box)
+        if area > 0 and sum(_overlap(box, t) for t in tables) / area >= 0.5:
+            observed += 1
+    hits = 0
+    for _ in range(rounds):
+        for box in lines:
+            box_width = box[2] - box[0]
+            box_height = box[3] - box[1]
+            x = generator.uniform(0.0, max(0.0, width - box_width))
+            y = generator.uniform(0.0, max(0.0, height - box_height))
+            moved = (x, y, x + box_width, y + box_height)
+            area = box_width * box_height
+            if area > 0 and sum(_overlap(moved, t) for t in tables) / area >= 0.5:
+                hits += 1
+    expected = hits / (rounds * len(lines)) if lines else 0.0
+    return observed, expected
+
+
 def _process(
-    label: str, pdf_path: Path, pages_per_pdf: int, seed: str, min_text: int
+    label: str, pdf_path: Path, pages_per_pdf: int, seed: str, min_text: int, permutations: int
 ) -> dict[str, object]:
     stats: Counter[str] = Counter()
     coverage_buckets: Counter[str] = Counter()
@@ -190,6 +220,7 @@ def _process(
             stats["table_candidate"] += len(table_boxes)
 
             page_lines = 0
+            page_line_boxes: list[BBox] = []
             page_lines_covered = 0
             for image in primitive_page.image_primitives:
                 x0, y0, x1, y1 = image.bbox
@@ -204,6 +235,7 @@ def _process(
                 if region not in ("linea", "banda"):
                     continue
                 page_lines += 1
+                page_line_boxes.append(image.bbox)
                 area = _area(image.bbox)
                 covered = sum(_overlap(image.bbox, box) for box in table_boxes)
                 share = covered / area if area > 0 else 0.0
@@ -214,6 +246,18 @@ def _process(
                     coverage_buckets["0-0.5"] += 1
                 else:
                     coverage_buckets["0"] += 1
+            if page_line_boxes and table_boxes:
+                observed, expected = _permutation_control(
+                    page_line_boxes,
+                    table_boxes,
+                    float(page.rect.width),
+                    float(page.rect.height),
+                    permutations,
+                    generator,
+                )
+                stats["perm_linee"] += len(page_line_boxes)
+                stats["perm_osservate"] += observed
+                stats["perm_attese_x1000"] += int(round(expected * len(page_line_boxes) * 1000))
             if page_lines and not table_boxes:
                 pages_with_lines_no_table += 1
                 lines_on_tableless_pages += page_lines
@@ -253,6 +297,15 @@ def _print(result: dict[str, object]) -> None:
             f"parziale {coverage.get('0-0.5', 0)}, "
             f"fuori {coverage.get('0', 0)}"
         )
+    perm = stats.get("perm_linee", 0)
+    if perm:
+        observed = stats.get("perm_osservate", 0) / perm
+        expected = stats.get("perm_attese_x1000", 0) / 1000 / perm
+        lift = observed / expected if expected > 0 else float("inf")
+        print(
+            f"    controllo di permutazione: osservato {100 * observed:.0f}%, "
+            f"atteso a caso {100 * expected:.0f}%, arricchimento {lift:.1f}x"
+        )
     print(
         f"    table_candidate trovati: {stats.get('table_candidate', 0)}"
         f"   pagine con linee ma nessuna tabella: "
@@ -279,6 +332,7 @@ def main(argv: list[str] | None = None) -> int:
     pages_per_pdf = cast(int, args.pages_per_pdf)
     seed = cast(str, args.seed)
     min_text = cast(int, args.min_text_primitives)
+    permutations = cast(int, args.permutations)
 
     results: list[dict[str, object]] = []
     for label, pdf_path in targets:
@@ -287,7 +341,7 @@ def main(argv: list[str] | None = None) -> int:
             continue
         print(f"[{label}] in corso...", file=sys.stderr)
         try:
-            result = _process(label, pdf_path, pages_per_pdf, seed, min_text)
+            result = _process(label, pdf_path, pages_per_pdf, seed, min_text, permutations)
         except Exception as exc:  # noqa: BLE001
             print(f"[{label}] errore: {type(exc).__name__}: {exc}", file=sys.stderr)
             continue
