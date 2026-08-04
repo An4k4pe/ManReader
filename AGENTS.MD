@@ -217,6 +217,15 @@ Per ogni task:
     quell'assunzione, non dopo (lezione di Milestone 35: la premessa d'origine, mai
     verificata visivamente, si è rivelata fattualmente sbagliata dopo sette giri di
     revisione basati solo sui numeri).
+15. Prima di eseguire una misura che deve decidere se una linea di lavoro prosegue,
+    registrare per iscritto il criterio di falsificazione — statistica, soglia, ambito,
+    esclusioni — e il modello nullo con la sua debolezza dichiarata. Il criterio deve
+    vincolare esplicitamente **il caso da cui l'affermazione è nata**, non un caso qualsiasi
+    del campione. Lezione della chiusura del contenimento IVF/EV: il criterio registrato
+    vincolava Fab e ha prodotto una ritrattazione netta, mentre una lettura post-hoc degli
+    stessi identici dati avrebbe dichiarato l'esito positivo su altri due manuali sopra
+    soglia. Vale anche per le esclusioni: fissarle prima impedisce di scartare a posteriori
+    i casi scomodi.
 
 Verifiche minime per un commit di codice:
 
@@ -404,7 +413,7 @@ None`); nessuna apertura pdfplumber per i producer che non la richiedono.
 dict[str, _ProducerSpec]` (nome interno, versione, configuration_id, necessità di
 pdfplumber); il dispatcher di esecuzione resta `if`/`elif`, non giustificato un
 registry a interfaccia comune con due soli producer di forma diversa. Implementato nel
-commit `<hash>`. Baseline verificata: Ruff verde, BasedPyright 0 errori/0 warning/0
+commit `3bda611`. Baseline verificata: Ruff verde, BasedPyright 0 errori/0 warning/0
 note, suite completa 1149 test OK (1146 preesistenti + 3 nuovi) e 7 skipped,
 `git diff --check` verde. Dettagli completi, inclusa la verifica su manuali reali, in
 `State.md`.
@@ -426,7 +435,7 @@ relazione resta lavoro futuro di Resolution/consumer secondo l'invariante di
 `State.md` ("Resolution è l'unico livello che può accettare, rifiutare o lasciare
 irrisolto un candidato"), con nota di design su una futura soglia di magnitudo per
 distinguere containment genuino da coincidenza di margine. Implementato nel commit
-`<hash>`. Baseline verificata: Ruff verde, BasedPyright 0 errori/0 warning/0 note,
+`27af1ef`. Baseline verificata: Ruff verde, BasedPyright 0 errori/0 warning/0 note,
 suite completa N test OK (1149 preesistenti + 2 nuovi) e 7 skipped, `git diff --check`
 verde. Dettagli completi, inclusa la verifica empirica sui 5 manuali, in `State.md`.
 
@@ -442,7 +451,7 @@ componendo `measure_primitive_pair` (Milestone 6), ispirati nel segnale (non
 nell'implementazione) alla classificazione legacy `_asset_is_box_like_text_region`.
 Soddisfa la precondizione di `State_Archive.md:133/894` ("osservate con la
 diagnostica prima"), che resta in vigore: nessun producer aperto qui. Implementato
-nel commit `<hash>`. Baseline verificata: Ruff verde, BasedPyright 0 errori/0
+nel commit `c5aea29`. Baseline verificata: Ruff verde, BasedPyright 0 errori/0
 warning/0 note, suite completa 1157 test OK (1150 preesistenti + 7 nuovi) e 7 skipped,
 `git diff --check` verde. Dettagli completi in `State.md`.
 
@@ -463,7 +472,7 @@ identificata via `content_digest`). Nuovo stage `drawing-cluster-diagnostics`:
 union-find su bbox espanse di un margine esplicito (`cluster_margin`), pre-filtro
 esplicito (`min_member_area`, `max_member_page_width/height_ratio`) con
 `excluded_reason` non silenzioso, `dispersion_ratio` per cluster. Implementato nel
-commit `<hash>`. Baseline verificata: Ruff verde, BasedPyright 0 errori/0
+commit `f3e16cf`. Baseline verificata: Ruff verde, BasedPyright 0 errori/0
 warning/0 note, suite completa 1164 test OK (1157 preesistenti + 7 nuovi) e 7
 skipped, `git diff --check` verde. Dettagli completi in `State.md`.
 
@@ -486,7 +495,7 @@ singleton scartati dal pre-filtro di Milestone 26 (`excluded_reason` valorizzato
 producer filtra esplicitamente su `is_residual_interior_visual is True` e
 `excluded_reason is None`, altrimenti ogni frammento vettoriale marginale verrebbe
 promosso a candidate. Nessun campo nuovo su `RegionCandidate`, nessuna modifica ai
-moduli diagnostici riusati. Implementato nel commit `<hash>`. Baseline verificata:
+moduli diagnostici riusati. Implementato nel commit `1701544`. Baseline verificata:
 Ruff verde, BasedPyright 0 errori/0 warning/0 note, suite completa 1172 test OK
 (1164 preesistenti + 8 nuovi) e 7 skipped, `git diff --check` verde.
 
@@ -503,7 +512,7 @@ Chiude il rinvio esplicito di Milestone 27. Wired `embedded_visual` accanto a
 modifica al producer (Milestone 27), agli altri producer, alla cache o al binding
 documento. Test di simmetria `include_pdfplumber` esteso al quarto producer; nuovo
 test end-to-end con cache-hit verificato (bind/capture forzati ad `AssertionError`).
-Implementato nel commit `<94e846d>`. Baseline verificata: Ruff verde, BasedPyright 0
+Implementato nel commit `94e846d`. Baseline verificata: Ruff verde, BasedPyright 0
 errori/0 warning/0 note, suite completa 1173 test OK (1172 preesistenti + 1 nuovo) e 7
 skipped, `git diff --check` verde.
 
@@ -541,6 +550,13 @@ new
 - `new`: usa il nuovo percorso per il comportamento approvato.
 
 Lo shadow mode deve avere criteri di equivalenza e una milestone di uscita.
+
+**Stato: la milestone di uscita non esiste.** Verificato su tutto `State.md` e su questo file:
+i criteri di equivalenza sono scritti qui sotto, la milestone di uscita non è mai stata
+numerata né rinviata esplicitamente. È una decisione aperta e bloccante, registrata in
+`State.md` §Stato operativo. Finché resta tale, ogni nuova milestone diagnostica allunga la
+distanza dal primo output verificabile della pipeline nuova senza che nessuno abbia deciso
+quando quella distanza va chiusa.
 
 L'equivalenza non richiede JSON identici, ma almeno:
 
@@ -762,3 +778,14 @@ Test di fattibilità sul rilevatore di callout della pipeline legacy (`ir_builde
 corretti, candidato per un futuro producer, non deciso qui.
 
 **Milestone chiusa in `2fda096`.**
+
+Lavoro esplorativo successivo alla chiusura, registrato in `State.md` e senza milestone aperta:
+otto ipotesi di discriminazione arredamento/contenuto falsificate in sequenza, tutte con la
+stessa firma (separano dentro un manuale, non fra manuali). Regge un solo criterio, la forma
+page-local (lato minore in punti sul corpo stimato dalla moda delle `font_size` della pagina,
+incrociato col rapporto d'aspetto): precisione alta su 72 celle a campionamento casuale in tre
+manuali, zero contenuto catturato, copertura parziale, modo di fallire conservativo, non
+estendibile con una soglia unica. L'ottava — contenimento
+`interior_visual_frame ⊃ embedded_visual`, l'unica relazione che `State.md` indicasse come da
+guardare per prima — è caduta contro criterio pre-registrato: 1,94×/1,24× su Fab contro una
+barra di 3×, e il 40,6% d'origine si è rivelato prodotto per il 90% da due pagine su quaranta.

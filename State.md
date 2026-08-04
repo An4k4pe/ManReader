@@ -21,6 +21,17 @@ Restano rinviate a milestone future non ancora aperte né numerate: persistenza 
 per un secondo artifact, un consumer document-level di ricorrenza per `content_digest`
 (vedi appunto sotto).
 
+**Decisione aperta e bloccante, mai messa per iscritto prima d'ora.** `AGENTS.MD` §Migrazione e
+shadow mode prescrive che lo shadow mode abbia "criteri di equivalenza **e una milestone di
+uscita**". I criteri di equivalenza sono elencati lì; la milestone di uscita **non esiste in
+nessun punto di `State.md` o `AGENTS.MD`** — non è stata rinviata, non è mai stata scritta.
+Lo stato reale dopo 35 milestone: cinque producer wired, una sola regola di Resolution, nessuna
+persistenza del `PageAnalysis` prodotto, nessuno stadio asset, nessuna IR 2, renderer intoccati.
+La pipeline nuova non è in grado di produrre una singola pagina di output, e le decisioni
+rinviate (precedenza fra regole di Resolution, stadio asset, contratto `column_band`) vengono
+discusse in astratto. È lo stesso metodo che le otto falsificazioni registrate sotto Milestone 35
+hanno screditato sui manuali, applicato all'architettura.
+
 Milestone 24 ha ratificato la relazione fra `layout.page_edge_visual` e
 `layout.side_band` (singleton e local-fragment): restano due producer indipendenti,
 nessuna unificazione di contratto — operano su primitive di tipo diverso (`text` vs.
@@ -662,14 +673,14 @@ contenuto in una visuale come indizio di box/callout — non nell'implementazion
 nelle soglie numeriche legacy, tarate su un modello di dati diverso e non
 rivalidate. Nessun codice legacy importato o duplicato.
 
-Implementato nel commit `<hash>`. Baseline: Ruff verde, BasedPyright 0/0/0, 1157 test OK
+Implementato nel commit `c5aea29`. Baseline: Ruff verde, BasedPyright 0/0/0, 1157 test OK
 (1150 preesistenti + 7 nuovi), 7 skipped, `git diff --check` verde.
 
 Fuori scope: producer, wiring nel job, classificazione decorativo/contenuto, soglie
 legacy, callout/box (`layout.interior_visual_frame`, non-obiettivo Milestone 6,
 ancora non aperto), elenchi.
 
-**Milestone chiusa nel commit `<c5aea29>`.**
+**Milestone chiusa nel commit `c5aea29`.**
 
 ## Milestone 26 — diagnostica di clustering geometrico per DrawingPrimitive (drawing-cluster-diagnostics) — completata
 
@@ -695,7 +706,7 @@ bbox-unione) per distinguere un'unione compatta da una dispersa prima di applica
 le soglie di `page_covering_visual`/`page_edge_visual` (duplicate localmente) al
 bbox-unione.
 
-Implementato nel commit `<f3e16cf>`. Baseline: Ruff verde, BasedPyright 0/0/0, 1164 test OK
+Implementato nel commit `f3e16cf`. Baseline: Ruff verde, BasedPyright 0/0/0, 1164 test OK
 (1157 preesistenti + 7 nuovi), 7 skipped, `git diff --check` verde.
 
 Fuori scope: producer, wiring nel job, estensione a testo/immagini, ottimizzazione
@@ -706,7 +717,7 @@ O(n²), soglie legacy come default definitivo (restano punto di partenza esplici
 trovato non tracciato durante il riordino di Milestone 35, committato ora in
 `ecb5b72` (`scan_drawing_cluster_diagnostics.py`).
 
-**Milestone chiusa nel commit `<f3e16cf>`.**
+**Milestone chiusa nel commit `f3e16cf`.**
 
 ## Milestone 27 — producer per visuali interne (embedded_visual, no wiring) — completata
 
@@ -738,21 +749,22 @@ separati per raster/vettoriale (riapertura solo con un consumer reale che lo
 richieda); un campo su `RegionCandidate` che rispecchi `content_digest` per il caso
 raster (tocca un tipo condiviso da tutti i producer e dal validatore cross-model,
 decisione a sé); cardinalità massima di un cluster (rinviato a Resolution, invariante
-`State.md:108`); deduplica document-level per `content_digest` (lavoro di consumer
-futuro, già annotato dopo Milestone 23).
+`State.md`, §Architettura target approvata, invariante "Resolution è l'unico livello che può
+accettare, rifiutare o lasciare irrisolto un candidato"); deduplica document-level per
+`content_digest` (lavoro di consumer futuro, già annotato dopo Milestone 23).
 
 Nessun wiring nel job in questa milestone, per scelta esplicita — stesso schema già
 seguito da `page_covering_visual`/`page_edge_visual`, costruiti standalone e wired
 solo in milestone dedicate successive (23-24).
 
-Implementato nel commit `<hash>`. Baseline: Ruff verde, BasedPyright 0/0/0, 1172 test
+Implementato nel commit `1701544`. Baseline: Ruff verde, BasedPyright 0/0/0, 1172 test
 OK (1164 preesistenti + 8 nuovi), 7 skipped, `git diff --check` verde.
 
 Fuori scope: wiring nel job, due `structural_kind`, campo document-level su
 `RegionCandidate`, limite di cardinalità cluster, estrazione raster/vettoriale in
 alta qualità (vedi appunto sopra).
 
-**Milestone chiusa nel commit `<1701544>`.**
+**Milestone chiusa nel commit `1701544`.**
 
 ## Milestone 28 — wiring del quarto producer nel job (embedded_visual) — completata
 
@@ -783,14 +795,14 @@ interiore sintetico (immagine centrale, né covering né edge), verifica cache h
 `bind_pymupdf_pdfplumber_document_source`/`capture_pymupdf_page` forzati ad
 `AssertionError` se richiamati.
 
-Implementato nel commit `<94e846d>`. Baseline: Ruff verde, BasedPyright 0/0/0, 1173 test
+Implementato nel commit `94e846d`. Baseline: Ruff verde, BasedPyright 0/0/0, 1173 test
 OK (1172 preesistenti + 1 nuovo — il secondo requisito era un'estensione di un test
 esistente, non una nuova funzione), 7 skipped, `git diff --check` verde.
 
 Fuori scope: modifiche al producer stesso; parametrizzazione di `cluster_margin`
 attraverso il runner.
 
-**Milestone chiusa nel commit `<94e846d>`.**
+**Milestone chiusa nel commit `94e846d`.**
 
 ## Milestone 29 — diagnostica esplorativa per riquadri di testo (box-like interior visual) — completata
 
@@ -1047,8 +1059,10 @@ un valore singolo né una proposta singola. Tre opzioni concrete, nessuna scelta
 qui, per una futura milestone di progettazione dedicata (non numerata): un nuovo
 tipo di fatto page-global strutturato (sequenza di bande, senza precedente
 diretto nel repo); più istanze di `RegionCandidate` per pagina, una per banda —
-il contratto lo permette già senza modifiche (nessun vincolo di cardinalità in
-`page_analysis_model.py:107-118`, pattern già in uso per `side_band`/
+il contratto lo permette già senza modifiche (nessun vincolo di cardinalità sul campo
+`candidates`, `page_analysis_model.py:199-205` più il ciclo di validazione che segue —
+la citazione precedente, `:107-118`, puntava alla definizione di `RegionCandidate`, un
+punto diverso; pattern già in uso per `side_band`/
 `table_candidate`); una combinazione delle due. Quella milestone dovrà anche
 specificare come distinguere una transizione reale (2→1→2) da un'eccezione
 locale annidata (2→3→2) e dai confound di rumore (intestazioni/piè di pagina,
@@ -1131,7 +1145,7 @@ correzione).
 Quattro decisioni esplicitamente rinviate alla futura milestone del producer
 `column_band` (non ancora aperta né numerata), marcate come bloccanti per
 quella milestone, non come dettagli: trattamento del flicker per-riga
-rispetto all'invariante `State.md:134` ("Resolution è
+rispetto all'invariante di §Architettura target approvata ("Resolution è
 l'unico livello che può accettare, rifiutare o lasciare irrisolto un
 candidato") — escludere dalla proposta (compatibile, pattern
 `excluded_reason`/Milestone 26) vs. fondere bande adiacenti (decisione
@@ -1187,7 +1201,10 @@ Fuori scope, invariato dal documento: `§8.2.2` (layout.table × IVF/EV, tabelle
 resta da fare — E1 sblocca il sottosistema di misura, non fornisce ancora evidenza sufficiente per
 una regola su quella coppia (vedi Milestone 35).
 
-**Milestone chiusa nei commit `32a3389`..280 pagine, PASS su tutte, IVF ⊆ EV confermato su dati reali, tutti gli unresolved sono embedded_visual).**
+**Milestone chiusa nei commit `32a3389`..`ba94a34`.** (Riga ricostruita: la formulazione
+precedente era troncata da un incidente di editing, con un frammento di frase orfano. Il
+riferimento di commit è ripreso da `AGENTS.MD` §Milestone 34, che lo riporta integro; i fatti
+sul campione da 280 pagine sono registrati sotto Milestone 35, non qui.)
 
 ## Milestone 35 — diagnostica di clustering vettoriale: filtro mancante, colore, frequenza — completata
 
@@ -1248,9 +1265,9 @@ strutturalmente: modulo a campi vuoti, nessun paragrafo di corpo per costruzione
 discriminante pronto — un candidato per un futuro producer, non deciso qui.
 
 Bug trovato e corretto in corso di lavoro, non specifico di questa milestone: `cluster_id`/
-`primitive_id` (`primitive_normalizer.py:141`) non sono univoci nel manuale, solo nella pagina
-(`page_analysis_model.py:262`) — qualunque aggregazione cross-pagina che usi `cluster_id` da solo
-come chiave rischia di fondere sotto-cluster di pagine diverse. Nota per futuri consumer.
+`primitive_id` (`primitive_normalizer.py:141`, `_primitive_id` deriva l'id dall'`observation_id`)
+non sono univoci nel manuale, solo nella pagina — qualunque aggregazione cross-pagina che usi
+`cluster_id` da solo come chiave rischia di fondere sotto-cluster di pagine diverse. Nota per futuri consumer.
 
 Fuori scope, invariato: nessuna regola di Resolution su `layout.table`×`layout.embedded_visual`/
 `layout.interior_visual_frame` (`Proposta_ResolutionDesign_v3.md` §8.2.2) — questa milestone
@@ -1294,7 +1311,7 @@ di sette esecuzioni dello script già committato.
 
 Massa irrisolta di embedded_visual: ripetizione geometrica e identità di contenuto — entrambe scartate su evidenza. Campione casuale riproducibile di 280 pagine (40 per manuale, 7 manuali, seed 20260802, scripts/sample_resolution_prototype_pages.py): 3917 candidate embedded_visual irrisolte, di cui 2671 (68,2%) in gruppi di almeno 3 bbox identiche, IC95 bootstrap per pagina 60,6–73,7%. L'aggregato si dissolve alla disaggregazione: Kul 93,6% (1570 irrisolte), Fab 72,1% (1353), DB 27,8% (756), Vil 23,1% (52), Lan 8,9% (45), Dag e Apo 0,0% (90 e 51). Kul ha 11 sole forme distinte e la dominante 284.9×5.2 compare 27 volte per pagina su 26 pagine su 40: da sola Kul vale il 55% della massa "ripetuta" del campione. L'ispezione visiva (regola 14) mostra che la firma unifica cose opposte: su Kul è il fondo a righe della pagina, su Fab sono le icone degli oggetti nelle tabelle di equipaggiamento — contenuto da preservare, non arredamento — e sulla stessa pagina di Fab convivono icone e filetti di riga con firma di ripetizione identica. ImageOccurrencePrimitive.content_digest è stato testato come discriminante alternativo (scripts/inspect_image_content_digest_recurrence.py) e non separa: Kul 284.9×5.2 dà 1 digest su 27 occorrenze e 108 occorrenze su 4/4 pagine, le icone Fab 20.9×20.9 danno 12 digest su 12 occorrenze come atteso, ma i filetti Fab 56.0×1.0 danno 21 digest su 27 occorrenze e 231.0×1.0 ne danno 9 su 9 — arredamento che non condivide identità. Le fasce di tabella di DB sono raster e danno 2 digest su 4 occorrenze a p.33, 4 su 4 a p.53. Nessuna milestone si apre. Resta valido, e rafforzato da una seconda conferma indipendente dopo Milestone 23, il solo uso stretto già annotato in §Stato operativo: un consumer document-level per content_digest limitato all'arte raster ripetuta identica. La lacuna di identità su DrawingPrimitive non è stata esercitata: tutti i casi osservati erano raster.
 
-Copertura fra producer delle candidate embedded_visual irrisolte — primo esito parzialmente positivo, non ratificato. Fino a qui il confronto fra producer era stato osservato solo fra embedded_visual e interior_visual_frame: il prototipo di Milestone 34 costruisce due producer su cinque, quindi table_candidate, page_covering_visual e page_edge_visual non erano mai entrati in una CoReferencedPageAnalyses reale. scripts/measure_cross_producer_candidate_coverage.py costruisce tutti e cinque i producer wired sulla stessa NormalizedPrimitivePage, li lega con il sottosistema Milestone 13-19, applica resolve_page_candidates e misura, per ogni candidate embedded_visual rimasta unresolved, la frazione della propria area coperta dalla candidate più sovrapposta di ciascun altro producer. Eseguito sulle 120 pagine di Kul/Fab/DB già estratte nel campione casuale da 280 (seed 20260802), senza riestrazione. Candidate prodotte: embedded_visual 4110, interior_visual_frame 431, page_covering_visual 122, table_candidate 71, page_edge_visual 61; 3679 embedded_visual restano irrisolte. Il risultato grezzo — 96,6% coperte a ≥0,9 — è degenere: page_covering_visual produce circa una candidate per pagina (41 su 40 pagine Kul, 39 su 40 Fab, 42 su 40 DB, presente su 116 pagine su 120) e per costruzione delle proprie soglie (visible_width_ratio >= 0.95 e visible_height_ratio >= 0.95) contiene ogni altra candidate della pagina, quindi la sua copertura non porta informazione. Correzione post-hoc, dichiarata come tale e non pre-registrata: escluso page_covering_visual dal calcolo, la copertura a ≥0,9 diventa Kul 0,0% (IC95 bootstrap per pagina 0,0–0,0%), Fab 68,8% (48,5–80,5%), DB 34,0% (27,1–40,3%); considerando il solo table_candidate, Fab 53,3% (34,3–63,2%) e DB 18,0% (12,4–23,0%). La predizione registrata prima dell'esecuzione era confermata su Kul (nessun altro producer vede il fondo rigato; table_candidate non scatta su nessuna delle 40 pagine) e su Fab, fallita su DB, dove le fasce di tabella erano attese coperte da table_candidate a ≥0,9 e lo sono per meno di un quinto. Osservazione non prevista e rilevante: su Fab il 40,6% delle irrisolte è coperto a ≥0,9 da interior_visual_frame — sono candidate senza gemello IVF a insieme di primitive identico, quindi fuori dalla regola unica di Milestone 34, ma geometricamente contenute in un riquadro IVF. È un secondo tipo di relazione fra candidate, contenimento senza identità, misurabile con i contratti Milestone 13-19 già scritti e oggi non toccato da alcuna regola. Il calcolo di sovrapposizione in linea è stato riverificato su Fab p.284 contro measure_co_referenced_page_candidate_overlap_ratio (Milestone 34): 300 coppie, 0 discordanze. Nessuna milestone si apre. Conclusione operativa: il confronto fra producer è informativo, ma non è il primo passo — finché page_covering_visual promuove a candidate lo sfondo del 97% delle pagine, qualunque misura di copertura va corretta a mano per non essere dominata da lui. La precondizione è distinguere sfondo ricorrente da illustrazione unica, cioè il consumer document-level per content_digest già annotato in §Stato operativo, che riceve qui la sua terza gamba empirica dopo Milestone 23 e dopo il caso Kul (1 digest, 108 occorrenze su 4 pagine su 4). Solo dopo ha senso rimisurare la copertura fra producer, e in quel caso il contenimento interior_visual_frame ⊃ embedded_visual è la relazione da guardare per prima.
+Copertura fra producer delle candidate embedded_visual irrisolte — primo esito parzialmente positivo, non ratificato. Fino a qui il confronto fra producer era stato osservato solo fra embedded_visual e interior_visual_frame: il prototipo di Milestone 34 costruisce due producer su cinque, quindi table_candidate, page_covering_visual e page_edge_visual non erano mai entrati in una CoReferencedPageAnalyses reale. scripts/measure_cross_producer_candidate_coverage.py costruisce tutti e cinque i producer wired sulla stessa NormalizedPrimitivePage, li lega con il sottosistema Milestone 13-19, applica resolve_page_candidates e misura, per ogni candidate embedded_visual rimasta unresolved, la frazione della propria area coperta dalla candidate più sovrapposta di ciascun altro producer. Eseguito sulle 120 pagine di Kul/Fab/DB già estratte nel campione casuale da 280 (seed 20260802), senza riestrazione. Candidate prodotte: embedded_visual 4110, interior_visual_frame 431, page_covering_visual 122, table_candidate 71, page_edge_visual 61; 3679 embedded_visual restano irrisolte. Il risultato grezzo — 96,6% coperte a ≥0,9 — è degenere: page_covering_visual produce circa una candidate per pagina (41 su 40 pagine Kul, 39 su 40 Fab, 42 su 40 DB, presente su 116 pagine su 120) e per costruzione delle proprie soglie (visible_width_ratio >= 0.95 e visible_height_ratio >= 0.95) contiene ogni altra candidate della pagina, quindi la sua copertura non porta informazione. Correzione post-hoc, dichiarata come tale e non pre-registrata: escluso page_covering_visual dal calcolo, la copertura a ≥0,9 diventa Kul 0,0% (IC95 bootstrap per pagina 0,0–0,0%), Fab 68,8% (48,5–80,5%), DB 34,0% (27,1–40,3%); considerando il solo table_candidate, Fab 53,3% (34,3–63,2%) e DB 18,0% (12,4–23,0%). La predizione registrata prima dell'esecuzione era confermata su Kul (nessun altro producer rima, i documenti subito dopo. Poi apro la Mossa 1.vede il fondo rigato; table_candidate non scatta su nessuna delle 40 pagine) e su Fab, fallita su DB, dove le fasce di tabella erano attese coperte da table_candidate a ≥0,9 e lo sono per meno di un quinto. Osservazione non prevista e rilevante: su Fab il 40,6% delle irrisolte è coperto a ≥0,9 da interior_visual_frame — sono candidate senza gemello IVF a insieme di primitive identico, quindi fuori dalla regola unica di Milestone 34, ma geometricamente contenute in un riquadro IVF. È un secondo tipo di relazione fra candidate, contenimento senza identità, misurabile con i contratti Milestone 13-19 già scritti e oggi non toccato da alcuna regola. Il calcolo di sovrapposizione in linea è stato riverificato su Fab p.284 contro measure_co_referenced_page_candidate_overlap_ratio (Milestone 34): 300 coppie, 0 discordanze. Nessuna milestone si apre. Conclusione operativa: il confronto fra producer è informativo, ma non è il primo passo — finché page_covering_visual promuove a candidate lo sfondo del 97% delle pagine, qualunque misura di copertura va corretta a mano per non essere dominata da lui. La precondizione è distinguere sfondo ricorrente da illustrazione unica, cioè il consumer document-level per content_digest già annotato in §Stato operativo, che riceve qui la sua terza gamba empirica dopo Milestone 23 e dopo il caso Kul (1 digest, 108 occorrenze su 4 pagine su 4). Solo dopo ha senso rimisurare la copertura fra producer, e in quel caso il contenimento interior_visual_frame ⊃ embedded_visual è la relazione da guardare per prima.
 
 Appunto per una futura passata di raffinamento (non aperta, non numerata):
 misura esplorativa sul rumore raster, 16 manuali reali, nessun codice di produzione
@@ -1363,7 +1380,7 @@ robusta, i suoi bordi non sono difendibili come numeri, solo come descrizione di
 A cosa serve, misurato invece che supposto
 (`scripts/inspect_page_local_lines_vs_tables.py`, 40 pagine per manuale, seed 20260803).
 Prima misura: la quota di linee e bande che cade per almeno metà della propria area dentro
-un `table_candidate` della stessa pagina — Fab 738/982 (75%), DrW 92/151 (61%), DrM 31/53
+un `table_candidate` della stessa pagina — Fab 738/982 (rima, i documenti subito dopo. Poi apro la Mossa 1.75%), DrW 92/151 (61%), DrM 31/53
 (58%), DB 12/16 (75%). Letta da sola sembrava dire che le linee confermano le tabelle.
 **Non lo dice.** Il controllo di permutazione (ogni linea ricollocata a caso sulla stessa
 pagina, venti ripetizioni, stesso calcolo) mostra che l'atteso per caso è alto: Fab 50%,
@@ -1465,3 +1482,51 @@ arredamento); modo di fallire conservativo, cioè quello giusto, perché lascia 
 di cancellare contenuto; non estendibile con una soglia unica. Le tre misure chieste dalla
 revisione Chat B sono state eseguite tutte: la prima ha falsificato l'asse in pixel, la
 seconda ha ritirato la corroborazione delle tabelle, la terza è questa.
+
+Contenimento `interior_visual_frame ⊃ embedded_visual` — ritirato su criterio pre-registrato.
+La sola relazione che `State.md` indicava come "da guardare per prima" è stata sottoposta al
+controllo di permutazione che le due misure precedenti non avevano, con criterio di
+falsificazione registrato per iscritto prima dell'esecuzione (`Prereg_ContenimentoIVF_EV_v1.md`,
+non nel repo, stessa prassi di Milestone 33/34/35): ritiro se l'arricchimento è < 3× **su Fab**,
+cioè sul manuale da cui l'affermazione è nata. Misura su tutti e sette i manuali del campione
+casuale già registrato (280 pagine, 40 per manuale, seed 20260802), con
+`scripts/measure_cross_producer_candidate_coverage.py` esteso di un controllo di permutazione
+opt-in (`--permutations`, default 0: l'output preesistente resta identico byte per byte,
+verificato). Due nulli: A ricolloca ogni candidate irrisolta a caso sulla pagina preservando
+larghezza e altezza, B preserva `y0`/`y1` e randomizza solo `x`; le candidate degli altri
+producer restano immobili e `resolve_page_candidates` non viene mai rieseguito sulla geometria
+permutata. Zero candidate non ricollocabili su sette manuali.
+
+Fab sta a **1,94×** (nullo A) e **1,24×** (nullo B): sotto la barra su entrambi, quindi la
+ritrattazione non dipende da quale nullo si creda. Gli altri: DB 2,63×/1,43× (756 irrisolte),
+Dag 3,21×/1,65× (90), Vil 7,06×/1,14× (52), Apo e Kul osservato 0,0%, Lan escluso per n<50 e
+comunque a 0,0% osservato contro 13,0% atteso per caso. I conteggi di irrisolte per manuale
+coincidono esattamente con quelli già registrati sopra, quindi la misura originale è
+riproducibile: è la sua interpretazione a cadere, non il suo dato.
+
+Due cose che il criterio non chiedeva e che pesano più del suo esito. La prima: **il 40,6% di
+Fab non era una statistica di popolazione ma due pagine.** p.317 (248 candidate coperte) e p.354
+(247) valgono 495 delle 549 totali, il 90%; solo 13 pagine su 40 hanno una singola candidate
+coperta; IC95 bootstrap per pagina 5,5%–62,7%. Vil è peggio: il suo 11,5% e il suo 7,06% vengono
+da una pagina sola (p.123, 6 su 6). Terza occorrenza dello stesso errore dopo il campione
+ordinato per frequenza e dopo il 75% di DB sgonfiato a 60% dal censimento completo. La seconda:
+**la direzione della debolezza del nullo, dichiarata ignota in pre-registrazione, ora è
+misurata.** Il nullo B dà sistematicamente un tasso permutato più alto del nullo A su tutti i
+manuali: IVF ed EV si concentrano nelle stesse fasce verticali, quindi il nullo uniforme
+sottostima il caso e ogni arricchimento calcolato su di esso è gonfiato. Il numero difendibile è
+quello del nullo B, e lì il massimo su sette manuali è 1,65×.
+
+Segnale opposto, coerente con Wil a 0,2× nella misura linee/tabelle: su Lan le irrisolte reali
+cadono dentro i riquadri IVF allo 0,0% contro un atteso per caso del 13,0%. L'arredamento sta
+sistematicamente dove le cornici non sono.
+
+Nota di metodo, la più riutilizzabile di questo giro: il criterio pre-registrato vincolava
+**Fab**, non "due manuali qualsiasi". Una lettura post-hoc degli stessi identici dati avrebbe
+dichiarato l'esito positivo, su Dag (3,21×) e Vil (7,06×), entrambi sopra 3× e sopra le soglie
+di n e di tasso osservato. Pre-registrare non basta: il criterio deve vincolare il caso da cui
+l'affermazione è nata, altrimenti si sposta la domanda invece di rispondere.
+
+Nessuna milestone si apre, nessuna soglia è ratificata, nessun producer o contratto è
+modificato. Ottava caduta consecutiva, e in una variante più stretta delle precedenti: non
+separa fra manuali, e su Fab non separa nemmeno fra pagine — separa due pagine dalle altre
+trentotto.
