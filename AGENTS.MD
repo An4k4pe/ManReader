@@ -226,6 +226,12 @@ Per ogni task:
     stessi identici dati avrebbe dichiarato l'esito positivo su altri due manuali sopra
     soglia. Vale anche per le esclusioni: fissarle prima impedisce di scartare a posteriori
     i casi scomodi.
+16. `State.md` termina con una riga sentinella HTML che ne dichiara la fine. Chi lo legge
+    deve verificare di averla ricevuta: se non compare, la copia è troncata e va dichiarato
+    invece di ragionarci sopra. Lezione della migrazione di Milestone 36: il file aveva
+    superato il cap di lettura degli strumenti di fetch, e una sessione ha ragionato per un
+    giro intero su una fonte mutilata credendola integra, convinta da tre mirror che
+    troncavano allo stesso punto perché passavano dallo stesso strumento.
 
 Verifiche minime per un commit di codice:
 

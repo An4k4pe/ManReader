@@ -658,12 +658,13 @@ collassano in 13 asset e le 13 inline in 12.
 Il fallback `rasterized_clip` è una proprietà dei PDF e non un difetto del nostro lookup:
 verificato che `get_images(full=True)` restituisce 17 voci su 13 xref distinti, cioè non
 trova un solo xref in più di quelli che `get_image_info(hashes=True, xrefs=True)` già
-risolve — le restanti sono immagini inline, che non esistono come risorsa. Confronto fatto
-sui conteggi, non sugli insiemi: chiusura insiemistica ancora da fare. Le immagini inline non
-estraibili sono tutte piccole (≤580×176 px intrinseci, per lo più 304×80 e 336×52: etichette
-e bandelle), mentre le illustrazioni grandi (1244×1616, 845×1155, 509×809) passano
-correttamente per xref. La rasterizzazione a 72 dpi del ritaglio degrada quindi elementi
-minori, non l'arte. Quando `extraction_method = rasterized_clip`, i byte su disco **non**
+risolve — le restanti sono immagini inline, che non esistono come risorsa. Confronto poi
+chiuso anche sugli insiemi: `solo in get_images` e `solo in get_image_info` entrambi vuoti.
+Le immagini inline non estraibili sono tutte piccole (≤580×176 px intrinseci, per lo più
+304×80 e 336×52: etichette e bandelle), mentre le illustrazioni grandi
+(1244×1616, 845×1155, 509×809) passano correttamente per xref.
+La rasterizzazione a 72 dpi del ritaglio degrada quindi elementi minori, non l'arte.
+Quando `extraction_method = rasterized_clip`, i byte su disco **non**
 corrispondono al `digest` sotto cui sono indicizzati: la sostituzione è registrata in
 `assets_index.csv`, mai silenziosa.
 
