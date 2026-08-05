@@ -451,9 +451,10 @@ robusta, i suoi bordi non sono difendibili come numeri, solo come descrizione di
 A cosa serve, misurato invece che supposto
 (`scripts/inspect_page_local_lines_vs_tables.py`, 40 pagine per manuale, seed 20260803).
 Prima misura: la quota di linee e bande che cade per almeno metà della propria area dentro
-un `table_candidate` della stessa pagina — Fab 738/982 (rima, i documenti subito dopo. Poi apro la Mossa 1.75%), DrW 92/151 (61%), DrM 31/53
-(58%), DB 12/16 (75%). Letta da sola sembrava dire che le linee confermano le tabelle.
-**Non lo dice.** Il controllo di permutazione (ogni linea ricollocata a caso sulla stessa
+un `table_candidate` della stessa pagina — Fab 738/982 (75%),
+DrW 92/151 (61%), DrM 31/53 (58%), DB 12/16 (75%).
+Letta da sola sembrava dire che le linee confermano le tabelle. **Non lo dice.**
+Il controllo di permutazione (ogni linea ricollocata a caso sulla stessa
 pagina, venti ripetizioni, stesso calcolo) mostra che l'atteso per caso è alto: Fab 50%,
 DrM 49%, DB 46%, DrW 33%. L'arricchimento reale è quindi Fab 1,5×, DrW 2,0×, DrM 1,4×,
 e nessuno raggiunge il 3× registrato come soglia prima dell'esecuzione. Quattro manuali
