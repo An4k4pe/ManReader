@@ -21,6 +21,10 @@ Restano rinviate a milestone future non ancora aperte né numerate: persistenza 
 per un secondo artifact, un consumer document-level di ricorrenza per `content_digest`
 (vedi appunto sotto).
 
+**Priorità aggiornata dopo Milestone 36 Fase A**: il producer `column_band` (contratto deciso
+in Milestone 33, mai costruito, quattro punti bloccanti aperti) non è più un rinvio laterale
+ma la precondizione del primo output leggibile della pipeline nuova. Vedi Milestone 36.
+
 **Decisione aperta e bloccante, mai messa per iscritto prima d'ora.** `AGENTS.MD` §Migrazione e
 shadow mode prescrive che lo shadow mode abbia "criteri di equivalenza **e una milestone di
 uscita**". I criteri di equivalenza sono elencati lì; la milestone di uscita **non esiste in
@@ -1530,3 +1534,84 @@ Nessuna milestone si apre, nessuna soglia è ratificata, nessun producer o contr
 modificato. Ottava caduta consecutiva, e in una variante più stretta delle precedenti: non
 separa fra manuali, e su Fab non separa nemmeno fra pagine — separa due pagine dalle altre
 trentotto.
+
+## Milestone 36 — fetta verticale end-to-end su una pagina — Fase A completata, Fase B non eseguita
+
+Design in `Proposta_Milestone36_FettaVerticale_v1..v4.md` (non nel repo, stessa prassi di
+Milestone 33/34/35). Due giri di revisione Chat B **disgiunti** — metodologico prima,
+architetturale poi, con letture separate: formato nuovo, adottato dopo che un giro unico è
+costato ~54.000 token in ingresso e che i contributi decisivi di Chat B, storicamente, sono
+quasi tutti metodologici e non richiedono il repository.
+
+Obiettivo: il percorso più sottile da un PDF a un frammento markdown con note che
+referenziano immagini estratte su disco, attraverso i contratti già esistenti. Prima volta in
+35 milestone che la pipeline nuova produce un output leggibile da un essere umano.
+
+`scripts/prototype_vertical_slice_page.py` compone capture → normalize → i cinque producer →
+co-reference (Milestone 13-19) → `resolve_page_candidates`, ed emette `page.md`,
+`assets_index.csv`, `review.md` e i file asset. Nessun producer nuovo, nessun contratto,
+nessun wiring nel job; la pipeline legacy non è importata né invocata.
+
+Due invarianti **auto-verificati a ogni esecuzione**, con uscita `4` su fallimento:
+conservazione del contenuto testuale come multiset di caratteri non-spazio (cieco all'ordine
+di proposito, perché `page_analysis_model.py` nega esplicitamente il reading order alle
+righe 189-190, 192-193, 195-196), e integrità dei riferimenti. Il criterio di uscita è
+eseguibile dall'artefatto, non valutato a occhio da chi legge l'output.
+
+Esecuzione reale su DB.pdf p.99: 30 occorrenze, 25 asset distinti, 6 note nel corpo, 24 voci
+in revisione, 1230 caratteri non-spazio conservati, rapporto note/parole 0,027.
+
+**Risultato principale, che riordina le priorità: il reading order richiede il producer
+`column_band`.** Il testo emesso con ordinamento geometrico puro (`y0`, poi `x0`) concatena
+riga per riga le due colonne del corpo, ed è illeggibile. La regola editoriale reale —
+colonna sinistra fino a un'interruzione, poi destra, poi di nuovo sinistra riprendendo sotto
+l'interruzione, con l'incolonnamento che cambia alle interruzioni — presuppone esattamente la
+segmentazione in bande a conteggio di colonne stabile costruita da Milestone 32 e il
+contratto deciso da Milestone 33 (`proposed_structural_kind="layout.column_band"` più misura
+satellite). Quel producer non esiste, e Milestone 33 ha lasciato quattro punti bloccanti. La
+proposta di Milestone 36 classificava `column_band` come "fuori dalla catena": l'artefatto
+reale dice che è la prima cosa di cui la catena ha bisogno. È il motivo per cui la fetta è
+stata costruita invece di continuare a decidere sulla carta, e ha risposto al primo run.
+
+**JPEG 2000: la transcodifica a PNG o WebP è indispensabile.** `extract_image(xref)`
+restituisce lo stream come è memorizzato nel PDF, senza transcodifica: DB.pdf archivia le sue
+immagini in JPEG 2000, quindi gli asset estratti per xref escono in `.jpx`. Le immagini non
+sono destinate alla lettura sul dispositivo — vanno in una cartella a parte e sono solo
+referenziate dal markdown — ma il `.jpx` non è apribile dai visualizzatori di immagini
+correnti su Windows e Linux, quindi la cartella risulterebbe inutilizzabile per lo scopo per
+cui esiste. Requisito registrato, non opzionale: gli asset raster vanno transcodificati in
+PNG o WebP. Non deciso qui quale dei due, né dove avvenga la conversione.
+
+**Correzione a un resoconto di implementazione**, registrata perché il numero era già
+circolato: gli asset di DB p.99 sono **13 estratti via `xref` e 12 via `rasterized_clip`**,
+non 12 e 13 come riportato in prima battuta. Nessuna contraddizione con le 13 occorrenze a
+`xref == 0`: occorrenze e identità sono entità distinte, le 17 occorrenze risolvibili
+collassano in 13 asset e le 13 inline in 12.
+
+Il fallback `rasterized_clip` è una proprietà dei PDF e non un difetto del nostro lookup:
+verificato che `get_images(full=True)` restituisce 17 voci su 13 xref distinti, cioè non
+trova un solo xref in più di quelli che `get_image_info(hashes=True, xrefs=True)` già
+risolve — le restanti sono immagini inline, che non esistono come risorsa. Confronto fatto
+sui conteggi, non sugli insiemi: chiusura insiemistica ancora da fare. Le immagini inline non
+estraibili sono tutte piccole (≤580×176 px intrinseci, per lo più 304×80 e 336×52: etichette
+e bandelle), mentre le illustrazioni grandi (1244×1616, 845×1155, 509×809) passano
+correttamente per xref. La rasterizzazione a 72 dpi del ritaglio degrada quindi elementi
+minori, non l'arte. Quando `extraction_method = rasterized_clip`, i byte su disco **non**
+corrispondono al `digest` sotto cui sono indicizzati: la sostituzione è registrata in
+`assets_index.csv`, mai silenziosa.
+
+**Buco nella regola di processo, non violazione.** `AGENTS.MD` §Aggiornamento documenti
+impone di committare lo script che produce un numero citato, e lo script c'è. Ma
+`scripts/inspect_document_image_asset_inventory.py` accetta `--pdf` come **singolo file per
+invocazione** e anche l'intervallo di pagine è runtime (`--first-page`, `--last-page`), con
+`--json-output` opzionale e non committato: lo scope della misura «zero mancanti su 27.437
+occorrenze» su 16 manuali è il risultato di sedici o più invocazioni di cui non resta
+traccia. La regola copre l'**esistenza** dello script, non la **tracciabilità delle
+invocazioni**. Nessuna decisione presa qui su come chiuderlo.
+
+Fase B (esecuzione sulle 280 pagine del campione, tassonomia dei fallimenti, distribuzione
+del rapporto note/parole) **non è stata eseguita**: è un passo separato, previsto dalla
+proposta e non ancora fatto. Restano fuori scope: producer nuovi, contratti, wiring nel job,
+modifiche ai renderer, IR 2, regole di Resolution. L'emettitore diagnostico **non è** il
+punto di partenza del renderer IR-first: una sua eventuale promozione è una decisione da
+prendere esplicitamente, e nulla in questa milestone la costituisce.
