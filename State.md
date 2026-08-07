@@ -25,6 +25,12 @@ per un secondo artifact, un consumer document-level di ricorrenza per `content_d
 in Milestone 33, mai costruito, quattro punti bloccanti aperti) non è più un rinvio laterale
 ma la precondizione del primo output leggibile della pipeline nuova. Vedi Milestone 36.
 
+Diagnostica pre-milestone per column_band, non ancora una milestone aperta. Il clustering geometrico di righe di Milestone 32 (\_cluster_rows, inviluppo verticale transitivo) fonde più righe reali in una: 13,6%-45,7% delle righe stimate, misurato su DB/Fab/Kul con due metodi indipendenti convergenti al 94,5-96,0% di accordo (scripts/inspect_row_clustering_merge_diagnostics.py). Effetto sulle bande di colonna: gap dissolti o interruzioni a colonna singola nascoste, tre gravità osservate (lieve, moderata, severa), replicato su pagine sia mirate che scelte a caso da pool non condizionato (scripts/compare_strict_vs_loose_column_bands.py).
+
+Alternativa testata: raggruppamento per (block_index, line_index) già assegnato da PyMuPDF in cattura, recuperato da TextPrimitive.source_observation_id (pymupdf_capture.py:124). Test di falsificazione pre-registrato (soglia 2% di gruppi che attraversano un gap noto, su più di un manuale) eseguito esaustivamente su 17 manuali (scripts/test_pymupdf_block_gap_straddle.py): un solo manuale (FWK.pdf, 2,24%) supera la soglia, isolato, e ispezionato — concentrato su 4 pagine di sommario, non prosa a due colonne. Ipotesi non falsificata. Non risolve l'overlap banda/table_candidate (punto bloccante 2 di Milestone 33, ora con due casi concreti: sommari e liste numerate con icona) né due casi isolati con coordinate anomale su Fab.pdf p.2, entrambi non spiegati.
+
+Meccanismo di rilevazione proposto (non implementato, non nel repo): Proposta_ColumnBandProducer_v8.md, Chat A, in revisione con Chat B (Giro 2 architetturale). Script diagnostici committati in 53d5ffc: compare_pymupdf_line_grouping_column_bands.py, dump_pymupdf_line_grouping.py, render_pymupdf_block_overlay.py, test_pymupdf_block_gap_straddle.py. Nessuna modifica a producer, contratti o wiring: diagnostica pura, stesso standard delle altre milestone esplorative.
+
 **Decisione aperta e bloccante, mai messa per iscritto prima d'ora.** `AGENTS.MD` §Migrazione e
 shadow mode prescrive che lo shadow mode abbia "criteri di equivalenza **e una milestone di
 uscita**". I criteri di equivalenza sono elencati lì; la milestone di uscita **non esiste in
@@ -684,5 +690,7 @@ proposta e non ancora fatto. Restano fuori scope: producer nuovi, contratti, wir
 modifiche ai renderer, IR 2, regole di Resolution. L'emettitore diagnostico **non è** il
 punto di partenza del renderer IR-first: una sua eventuale promozione è una decisione da
 prendere esplicitamente, e nulla in questa milestone la costituisce.
+
+Appunto per una futura passata di raffinamento (non aperta, non numerata): le schede statistiche mostro nel bestiario (es. DB.pdf, GUERRIERO/ARCIERE/CAMPIONE, riquadro a colonne non allineate) non sono table_candidate (nessuna griglia regolare, verificato per ispezione visiva) né riconducibili a un riquadro puramente visivo (embedded_visual/interior_visual_frame): contengono testo strutturato a campi etichetta:valore da preservare, reso oggi con sfondo decorativo che andrebbe rimosso in resa, mantenendo la struttura leggibile. Nessuna decisione presa: possibile candidato per un futuro structural_kind dedicato o per un trattamento di rendering separato dalla classificazione geometrica. Tocca il quarto punto bloccante di Milestone 33 (structural_kind unico vs. distinzione corpo/struttura interna).
 
 <!-- FINE DI State.md — se non leggi questa riga, la tua copia è troncata: fermati e dillo -->
