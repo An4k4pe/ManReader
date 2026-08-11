@@ -357,6 +357,14 @@ def _rotated_group_ids(
     `pymupdf_capture.py`). Un gruppo e' ruotato se TUTTE le sue primitive lo
     sono.
 
+    ATTENZIONE, correzione a verbale: una versione precedente di questa
+    docstring affermava che ``direction`` non fosse mai stato usato. E' FALSO --
+    ``_has_compatible_orientation`` (page_analysis_text_hypotheses.py:74-95, usata
+    a :55, importata da page_analysis_side_band.py:18) lo consuma in produzione
+    da Milestone 6, con un predicato PIU' STRETTO di questo: ammette solo
+    dx circa +-1 e dy circa 0, mentre qui basta abs(dy) > abs(dx). Le due
+    definizioni divergono sul testo obliquo. Vanno unificate sulla prima.
+
     Serve a escludere le linguette di capitolo, che sono la causa verificata
     dei falsi positivi: su DrW p.216 e Fab p.139 -- entrambe pagine a colonna
     singola che il prototipo segnalava come a due colonne -- l'unico testo
