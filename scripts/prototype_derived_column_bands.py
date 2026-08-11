@@ -63,39 +63,67 @@ per quanto durano.
    delle righe corte a fine paragrafo). Un gutter si chiude quando del testo lo
    attraversa; una zona senza testo non lo chiude ma non ne allunga
    l'estensione.
-7. Nessun filtro: lo script emette ogni gutter ordinato per estensione y, cosi'
-   la separazione fra spazi fra parole e gutter si vede nel dato invece di
-   essere postulata.
-8. Le bande si ricavano dai confini y dei gutter: ogni y in cui l'insieme dei
-   gutter attivi cambia e' un confine. `column_count` di una banda = numero di
-   gutter che la attraversano per intero, piu' uno.
+7. Un gutter conta come separatore di colonna solo se ha almeno
+   `--min-flanking-groups` righe distinte **per lato** entro la sua estensione
+   y (default 2). Non e' una soglia geometrica tarabile ma un minimo
+   strutturale: una colonna di una riga sola non e' una colonna, e un gap con
+   zero righe da un lato non separa niente. Il criterio si conta in righe del
+   documento, non in punti ne' in frazioni di pagina -- nessun metro esterno.
+   Si applica solo a `--emit bands`; `--emit gutters` resta grezzo, con
+   `left_groups`/`right_groups` in chiaro, cosi' il filtro si puo' sempre
+   rifare a valle su output gia' raccolti.
+8. Le bande si ricavano dai confini y dei gutter superstiti: ogni y in cui
+   l'insieme dei gutter attivi cambia e' un confine. `column_count` di una
+   banda = numero di gutter che la attraversano per intero, piu' uno.
 
 ## Stato empirico, aggiornato all'11 agosto 2026
 
-- **Dag p.84 posizionale** (prosa 2 colonne verificata a render, il caso su cui
-  il meccanismo di Fase 2 falliva a ogni combinazione di parametri con
-  `--min-gap-width` 15pt): trovato. Gutter a x 298-306, larghezza 8pt --
-  **sotto** la vecchia soglia -- con estensione 120pt, piu' un secondo tratto di
-  46pt sopra. Nessuna soglia di larghezza, nessun support ratio.
-- **Residuo non risolto**: su quella stessa pagina il gutter esce spezzato in
-  due bande (126-172 e 192-312) invece che in una. Il taglio cade dove cambia
-  la struttura del contenuto a destra; non e' stato indagato.
-- **Fab p.262 posizionale**: entrambi i meccanismi falliscono, non e' un
-  disaccordo. Misurato sull'intero corpus, non dedotto: `persistence` su quella
-  pagina restituisce `column_count=1`, non 2. Questo prototipo trova solo bande
-  minuscole (12pt e 30pt di estensione), cioe' rumore.
-  **Correzione di una versione precedente di questa docstring** (commit
-  56954f9), lasciata a verbale invece che cancellata: vi si affermava che
-  `persistence` desse `column_count=2` su p.262 e che il prototipo non lo
-  riproducesse. L'affermazione era presa dalla narrazione di `State.md` invece
-  che da una misura, ed e' falsa. `State.md` cita un caso Fab a lista numerata
-  con `column_count=2` corretto ma **non indica quale pagina sia**: non e' la
-  262, e non e' stato identificato. E' lo stesso errore di attribuzione via
-  `--page N` gia' registrato in `State.md` come rischio procedurale.
-  Compatibile col dato di `dump_raw_group_gaps.py` su p.262 (meta' delle fette
-  y ha gap NEGATIVI: i gruppi delle due colonne si sovrappongono in x, quindi un
-  corridoio verticale libero non esiste), ma la spiegazione resta non
-  verificata.
+- **Dag p.84 posizionale** (pagina stampata 82; prosa 2 colonne verificata a
+  render E a ispezione visiva diretta del PDF; e' il caso su cui il meccanismo
+  di Fase 2 falliva a ogni combinazione di parametri con `--min-gap-width`
+  15pt): **una sola banda**, y 126-312, estensione 186pt, `column_count=2`,
+  gutter a x 298-306 largo 8pt -- **sotto** la vecchia soglia -- fiancheggiato
+  da 15 righe a sinistra e 16 a destra. Nessuna soglia di larghezza, nessun
+  support ratio.
+  L'introduzione monocolonna sopra la banda (titolo, sottotitolo, intestazione
+  di sezione) non produce alcuna banda perche' non contiene gutter;
+  l'illustrazione a piena larghezza sotto neppure. E' il comportamento voluto
+  su una pagina a struttura mista, che e' il caso tipico e non particolare
+  (v. `State.md`, "Struttura di colonna variabile dentro la stessa pagina").
+- **Residuo risolto** (era: gutter spezzato in due bande, 126-172 e 192-312).
+  Causa misurata, non ipotizzata: a y 180-190 e' attiva la sola colonna destra,
+  la cui riga comincia a x=306,8 -- dentro il nucleo del gutter, fissato a
+  298-312 perche' le righe precedenti di destra erano rientrate (312,5 e
+  321,0). La regola di chiusura chiedeva che il nucleo fosse INTERAMENTE senza
+  testo, e chiudeva. Ora lo restringe alla parte ancora libera (`_largest_free_run`),
+  stesso principio del nucleo garantito gia' usato quando un intervallo
+  combacia; chiude solo se non resta niente.
+  Nota di metodo: il difetto era visibile nel render gia' disponibile e non e'
+  stato riconosciuto per un giro. L'ispezione visiva va fatta, non rimandata.
+- **Fab p.262 posizionale = pagina stampata 260** (scostamento +2). Ispezionata
+  visivamente: **e' a COLONNA SINGOLA** -- sei riquadri numerati impilati in
+  verticale, ciascuno con un numero cerchiato a sinistra. Non e' una lista a due
+  colonne. Quindi `persistence`, che vi restituisce `column_count=1`, e'
+  corretto, e questo prototipo con `--min-flanking-groups` >= 3 non emette
+  nulla, corretto anche lui.
+  A `--min-flanking-groups 2` (default) il prototipo emette pero' **un falso
+  positivo**: banda y 536-566, gutter x 42-60, cioe' lo spazio fra il numero
+  cerchiato e il riquadro che lo segue, con esattamente 2 righe per lato. E' il
+  caso che mostra il limite del minimo strutturale a 2 -- un elemento decorativo
+  affiancato a due righe di testo lo soddisfa. Una pagina non basta per
+  cambiare il default: v. lo sweep sul corpus.
+  **Due correzioni di versioni precedenti di questa docstring**, lasciate a
+  verbale invece che cancellate, perche' sono lo stesso errore ripetuto:
+  (a) in 56954f9 si affermava che `persistence` desse `column_count=2` su p.262
+  e che il prototipo non lo riproducesse -- falso, dava 1;
+  (b) subito dopo si affermava che su p.262 "falliscono entrambi" -- falso
+  anche questo, la pagina e' a colonna singola e nessuno dei due sbaglia.
+  Entrambe le affermazioni derivavano dalla narrazione di `State.md` invece che
+  da una misura o da un'ispezione. `State.md` cita un caso Fab a lista numerata
+  con `column_count=2` corretto ma **non dice quale pagina sia**: non e' la 262,
+  e resta non identificato. E' lo stesso errore di attribuzione via `--page N`
+  che `State.md` registra come rischio procedurale, commesso due volte di
+  seguito nello stesso file che lo descrive.
 
 ## Cosa NON risolve, dichiarato
 
@@ -147,6 +175,8 @@ from pymupdf_capture import capture_pymupdf_page  # noqa: E402
 _DEFAULT_BIN_WIDTH_X = 1.0
 _DEFAULT_BIN_HEIGHT_Y = 2.0
 
+_DEFAULT_MIN_FLANKING_GROUPS = 2
+
 _COVERED = 0
 _GAP = 1
 _NO_TEXT = 2
@@ -161,6 +191,10 @@ _GUTTER_FIELDNAMES = (
     "y0",
     "y1",
     "y_extent",
+    "left_groups",
+    "right_groups",
+    "flanking_min",
+    "page_line_height",
 )
 
 _BAND_FIELDNAMES = (
@@ -250,6 +284,70 @@ def _build_gap_grid(
     return grid, n_x_bins, n_y_bins
 
 
+def _count_flanking_groups(
+    groups: list[_Group], rect: _GapRect, *, bin_width_x: float
+) -> tuple[int, int]:
+    """Quante righe distinte `(block_index, line_index)` fiancheggiano il gutter
+    a sinistra e a destra, entro la sua estensione y.
+
+    E' la domanda strutturale che sostituisce la soglia in punti. Un separatore
+    di colonna ha molte righe per lato; uno spazio fra parole, o un gutter alto
+    una riga sola, ne ha una. Il conteggio non ha un metro esterno: e' un
+    numero di righe del documento, non una frazione di qualcosa."""
+
+    gutter_x0 = rect.x_bin_start * bin_width_x
+    gutter_x1 = (rect.x_bin_end + 1) * bin_width_x
+    left = 0
+    right = 0
+    for group in groups:
+        if group.y1 <= rect.y0 or group.y0 >= rect.y1:
+            continue
+        group_x0 = min(bbox[0] for bbox in group.bboxes)
+        group_x1 = max(bbox[2] for bbox in group.bboxes)
+        if group_x1 <= gutter_x0:
+            left += 1
+        elif group_x0 >= gutter_x1:
+            right += 1
+    return left, right
+
+
+def _median_line_height(groups: list[_Group]) -> float:
+    """Altezza di riga mediana della pagina, dai gruppi stessi. Serve solo come
+    unita' di lettura nell'output -- non e' usata come soglia da nessuna parte."""
+
+    heights = sorted(g.y1 - g.y0 for g in groups if g.y1 > g.y0)
+    if not heights:
+        return 0.0
+    return heights[len(heights) // 2]
+
+
+def _largest_free_run(row: bytearray, x_bin_start: int, x_bin_end: int) -> tuple[int, int] | None:
+    """La run contigua piu' lunga di celle NON ``_COVERED`` dentro
+    ``[x_bin_start, x_bin_end]``, o ``None`` se il tratto e' tutto coperto.
+
+    Serve a restringere un gutter invece di chiuderlo quando del testo ne
+    invade solo una parte."""
+
+    best: tuple[int, int] | None = None
+    best_length = 0
+    run_start: int | None = None
+    for x_bin in range(x_bin_start, x_bin_end + 1):
+        if row[x_bin] != _COVERED:
+            if run_start is None:
+                run_start = x_bin
+        elif run_start is not None:
+            length = x_bin - run_start
+            if length > best_length:
+                best_length = length
+                best = (run_start, x_bin - 1)
+            run_start = None
+    if run_start is not None:
+        length = x_bin_end + 1 - run_start
+        if length > best_length:
+            best = (run_start, x_bin_end)
+    return best
+
+
 def _gap_intervals(row: bytearray) -> list[tuple[int, int]]:
     """Intervalli x massimali di celle ``_GAP`` su una fetta y."""
 
@@ -309,10 +407,24 @@ def _chain_gutters(grid: list[bytearray], *, bin_height_y: float) -> list[_GapRe
                 gutter.y1 = (y_bin_index + 1) * bin_height_y
                 still_open.append(gutter)
                 continue
-            core = row[gutter.x_bin_start : gutter.x_bin_end + 1]
-            if all(state == _NO_TEXT for state in core):
-                # Zona senza testo: non conferma il gutter ma non lo smentisce.
-                # y1 non avanza, cosi' l'estensione resta quella sostenuta.
+            # Nessun intervallo di gap combacia. Non basta chiedere se il
+            # nucleo sia INTERAMENTE senza testo: quando su questa fetta e'
+            # attiva una sola delle due colonne, parte del nucleo cade fuori
+            # dal suo inviluppo (``_NO_TEXT``) e parte puo' essere coperta --
+            # succede quando una riga della colonna destra comincia piu' a
+            # sinistra di quelle che l'hanno preceduta, perche' le prime erano
+            # rientrate. Misurato su Dag p.84 y 180-190, dove la regola
+            # "una parte coperta, chiudi" spezzava in due un gutter che
+            # visivamente e' uno solo (verificato a render).
+            #
+            # Il gutter va invece RISTRETTO alla sua parte ancora libera, come
+            # gia' avviene quando un intervallo combacia: stesso principio del
+            # nucleo garantito. Si chiude solo se non resta niente.
+            survivor = _largest_free_run(
+                row, gutter.x_bin_start, gutter.x_bin_end
+            )
+            if survivor is not None:
+                gutter.x_bin_start, gutter.x_bin_end = survivor
                 still_open.append(gutter)
             else:
                 closed.append(gutter)
@@ -366,6 +478,7 @@ def _process_page(
     manual: str,
     bin_width_x: float,
     bin_height_y: float,
+    min_flanking_groups: int,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
     page = document.load_page(page_index)
     if page.rotation != 0 or page.mediabox != page.cropbox:
@@ -404,10 +517,12 @@ def _process_page(
     rects.sort(key=lambda r: (r.y1 - r.y0), reverse=True)
 
     page_label = page_index + 1
+    line_height = _median_line_height(groups)
     gutter_rows: list[dict[str, object]] = []
     for gutter_index, rect in enumerate(rects):
         x0 = rect.x_bin_start * bin_width_x
         x1 = (rect.x_bin_end + 1) * bin_width_x
+        left, right = _count_flanking_groups(groups, rect, bin_width_x=bin_width_x)
         gutter_rows.append(
             {
                 "manual": manual,
@@ -419,12 +534,24 @@ def _process_page(
                 "y0": round(rect.y0, 2),
                 "y1": round(rect.y1, 2),
                 "y_extent": round(rect.y1 - rect.y0, 2),
+                "left_groups": left,
+                "right_groups": right,
+                "flanking_min": min(left, right),
+                "page_line_height": round(line_height, 2),
             }
         )
 
+    # Solo i gutter che separano davvero qualcosa entrano nella segmentazione.
+    separating = [
+        rect
+        for rect in rects
+        if min(_count_flanking_groups(groups, rect, bin_width_x=bin_width_x))
+        >= min_flanking_groups
+    ]
+
     band_rows: list[dict[str, object]] = []
     for band_index, (band_y0, band_y1, crossing) in enumerate(
-        _segment_bands(rects, bin_width_x=bin_width_x)
+        _segment_bands(separating, bin_width_x=bin_width_x)
     ):
         band_rows.append(
             {
@@ -456,6 +583,16 @@ def build_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--bin-width-x", type=float, default=_DEFAULT_BIN_WIDTH_X)
     parser.add_argument("--bin-height-y", type=float, default=_DEFAULT_BIN_HEIGHT_Y)
+    parser.add_argument(
+        "--min-flanking-groups",
+        type=int,
+        default=_DEFAULT_MIN_FLANKING_GROUPS,
+        help="Righe distinte richieste su CIASCUN lato di un gutter perche' conti come "
+        "separatore di colonna. Non e' una soglia geometrica tarabile ma un minimo "
+        "strutturale: una colonna di una riga sola non e' una colonna, e un gap con zero "
+        "righe da un lato non separa nulla. Si applica solo a --emit bands; --emit gutters "
+        "resta grezzo, cosi' il filtro si puo' sempre rifare a valle. Default: 2.",
+    )
     return parser
 
 
@@ -484,6 +621,7 @@ def main(argv: list[str] | None = None) -> int:
                 manual=pdf_path.name,
                 bin_width_x=args.bin_width_x,
                 bin_height_y=args.bin_height_y,
+                min_flanking_groups=args.min_flanking_groups,
             )
             all_gutters.extend(gutter_rows)
             all_bands.extend(band_rows)
