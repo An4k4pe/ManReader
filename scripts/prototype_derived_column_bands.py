@@ -169,6 +169,7 @@ if str(SCRIPTS_DIR) not in sys.path:
 
 from prototype_column_band_producer import _Group, _group_by_pymupdf_line  # noqa: E402
 
+from primitive_model import TextPrimitive  # noqa: E402
 from primitive_normalizer import normalize_backend_page_capture  # noqa: E402
 from pymupdf_capture import capture_pymupdf_page  # noqa: E402
 
@@ -194,6 +195,8 @@ _GUTTER_FIELDNAMES = (
     "left_groups",
     "right_groups",
     "flanking_min",
+    "left_rotated",
+    "right_rotated",
     "left_width_median",
     "right_width_median",
     "shared_blocks",
@@ -293,6 +296,8 @@ class _FlankingProfile:
     __slots__ = (
         "left",
         "right",
+        "left_rotated",
+        "right_rotated",
         "left_width_median",
         "right_width_median",
         "shared_blocks",
@@ -302,12 +307,16 @@ class _FlankingProfile:
         self,
         left: int,
         right: int,
+        left_rotated: int,
+        right_rotated: int,
         left_width_median: float,
         right_width_median: float,
         shared_blocks: int,
     ) -> None:
         self.left = left
         self.right = right
+        self.left_rotated = left_rotated
+        self.right_rotated = right_rotated
         self.left_width_median = left_width_median
         self.right_width_median = right_width_median
         self.shared_blocks = shared_blocks
@@ -317,8 +326,43 @@ class _FlankingProfile:
         return min(self.left, self.right)
 
 
+def _rotated_group_ids(
+    groups: list[_Group], text_primitives: list[TextPrimitive]
+) -> set[tuple[int, int]]:
+    """I gruppi il cui testo e' scritto in verticale, da
+    ``TextPrimitive.direction`` (il vettore `dir` di PyMuPDF, catturato in
+    `pymupdf_capture.py`). Un gruppo e' ruotato se TUTTE le sue primitive lo
+    sono.
+
+    Serve a escludere le linguette di capitolo, che sono la causa verificata
+    dei falsi positivi: su DrW p.216 e Fab p.139 -- entrambe pagine a colonna
+    singola che il prototipo segnalava come a due colonne -- l'unico testo
+    verticale della pagina e' l'etichetta della linguetta ("Talent",
+    "REGOLE"), e il gutter rilevato e' lo spazio fra quella e il corpo del
+    testo. Sulle pagine dove il rilevamento e' corretto (tabella Vil p.75,
+    etichette LIVELLO di DIE p.105) le primitive verticali sono ZERO: il
+    criterio non le tocca.
+
+    Non e' una soglia: l'orientamento del testo e' un fatto del documento."""
+
+    direction_by_id = {p.primitive_id: p.direction for p in text_primitives}
+    rotated: set[tuple[int, int]] = set()
+    for group in groups:
+        directions = [
+            direction_by_id.get(primitive_id) for primitive_id in group.primitive_ids
+        ]
+        known = [d for d in directions if d is not None]
+        if known and all(abs(d[1]) > abs(d[0]) for d in known):
+            rotated.add((group.block_index, group.line_index))
+    return rotated
+
+
 def _flanking_profile(
-    groups: list[_Group], rect: _GapRect, *, bin_width_x: float
+    groups: list[_Group],
+    rect: _GapRect,
+    *,
+    bin_width_x: float,
+    rotated_groups: set[tuple[int, int]],
 ) -> _FlankingProfile:
     """Quante righe distinte `(block_index, line_index)` fiancheggiano il gutter
     a sinistra e a destra entro la sua estensione y, quanto sono larghe, e
@@ -343,18 +387,27 @@ def _flanking_profile(
     right_widths: list[float] = []
     left_blocks: set[int] = set()
     right_blocks: set[int] = set()
+    left_rotated = 0
+    right_rotated = 0
 
     for group in groups:
         if group.y1 <= rect.y0 or group.y0 >= rect.y1:
             continue
         group_x0 = min(bbox[0] for bbox in group.bboxes)
         group_x1 = max(bbox[2] for bbox in group.bboxes)
+        is_rotated = (group.block_index, group.line_index) in rotated_groups
         if group_x1 <= gutter_x0:
-            left_widths.append(group_x1 - group_x0)
-            left_blocks.add(group.block_index)
+            if is_rotated:
+                left_rotated += 1
+            else:
+                left_widths.append(group_x1 - group_x0)
+                left_blocks.add(group.block_index)
         elif group_x0 >= gutter_x1:
-            right_widths.append(group_x1 - group_x0)
-            right_blocks.add(group.block_index)
+            if is_rotated:
+                right_rotated += 1
+            else:
+                right_widths.append(group_x1 - group_x0)
+                right_blocks.add(group.block_index)
 
     def median(values: list[float]) -> float:
         if not values:
@@ -365,6 +418,8 @@ def _flanking_profile(
     return _FlankingProfile(
         left=len(left_widths),
         right=len(right_widths),
+        left_rotated=left_rotated,
+        right_rotated=right_rotated,
         left_width_median=median(left_widths),
         right_width_median=median(right_widths),
         shared_blocks=len(left_blocks & right_blocks),
@@ -576,13 +631,16 @@ def _process_page(
     rects = _chain_gutters(grid, bin_height_y=bin_height_y)
     rects.sort(key=lambda r: (r.y1 - r.y0), reverse=True)
 
+    rotated_groups = _rotated_group_ids(groups, primitive_page.text_primitives)
     page_label = page_index + 1
     line_height = _median_line_height(groups)
     gutter_rows: list[dict[str, object]] = []
     for gutter_index, rect in enumerate(rects):
         x0 = rect.x_bin_start * bin_width_x
         x1 = (rect.x_bin_end + 1) * bin_width_x
-        profile = _flanking_profile(groups, rect, bin_width_x=bin_width_x)
+        profile = _flanking_profile(
+            groups, rect, bin_width_x=bin_width_x, rotated_groups=rotated_groups
+        )
         gutter_rows.append(
             {
                 "manual": manual,
@@ -597,6 +655,8 @@ def _process_page(
                 "left_groups": profile.left,
                 "right_groups": profile.right,
                 "flanking_min": profile.minimum,
+                "left_rotated": profile.left_rotated,
+                "right_rotated": profile.right_rotated,
                 "left_width_median": round(profile.left_width_median, 2),
                 "right_width_median": round(profile.right_width_median, 2),
                 "shared_blocks": profile.shared_blocks,
@@ -608,7 +668,9 @@ def _process_page(
     separating = [
         rect
         for rect in rects
-        if _flanking_profile(groups, rect, bin_width_x=bin_width_x).minimum
+        if _flanking_profile(
+            groups, rect, bin_width_x=bin_width_x, rotated_groups=rotated_groups
+        ).minimum
         >= min_flanking_groups
     ]
 
