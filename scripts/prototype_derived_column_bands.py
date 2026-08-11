@@ -80,13 +80,22 @@ per quanto durano.
 - **Residuo non risolto**: su quella stessa pagina il gutter esce spezzato in
   due bande (126-172 e 192-312) invece che in una. Il taglio cade dove cambia
   la struttura del contenuto a destra; non e' stato indagato.
-- **Fab p.262 posizionale** (lista numerata a 2 colonne, dove il meccanismo di
-  Fase 2 riportava `column_count=2` corretto): **non riprodotto**. Qui i gutter
-  piu' estesi arrivano a 30pt e nessuno corrisponde a una separazione di
-  colonna. Compatibile con il dato gia' noto di `dump_raw_group_gaps.py` su
-  quella pagina (meta' delle fette y ha gap NEGATIVI, cioe' i gruppi delle due
-  colonne si sovrappongono in x), ma la spiegazione non e' verificata e il caso
-  resta un fallimento aperto di questo prototipo, non del vecchio metodo.
+- **Fab p.262 posizionale**: entrambi i meccanismi falliscono, non e' un
+  disaccordo. Misurato sull'intero corpus, non dedotto: `persistence` su quella
+  pagina restituisce `column_count=1`, non 2. Questo prototipo trova solo bande
+  minuscole (12pt e 30pt di estensione), cioe' rumore.
+  **Correzione di una versione precedente di questa docstring** (commit
+  56954f9), lasciata a verbale invece che cancellata: vi si affermava che
+  `persistence` desse `column_count=2` su p.262 e che il prototipo non lo
+  riproducesse. L'affermazione era presa dalla narrazione di `State.md` invece
+  che da una misura, ed e' falsa. `State.md` cita un caso Fab a lista numerata
+  con `column_count=2` corretto ma **non indica quale pagina sia**: non e' la
+  262, e non e' stato identificato. E' lo stesso errore di attribuzione via
+  `--page N` gia' registrato in `State.md` come rischio procedurale.
+  Compatibile col dato di `dump_raw_group_gaps.py` su p.262 (meta' delle fette
+  y ha gap NEGATIVI: i gruppi delle due colonne si sovrappongono in x, quindi un
+  corridoio verticale libero non esiste), ma la spiegazione resta non
+  verificata.
 
 ## Cosa NON risolve, dichiarato
 
