@@ -177,6 +177,8 @@ _DEFAULT_BIN_WIDTH_X = 1.0
 _DEFAULT_BIN_HEIGHT_Y = 2.0
 
 _DEFAULT_MIN_FLANKING_GROUPS = 2
+_DEFAULT_MIN_FLANKING_CHARS = 5
+_DEFAULT_MIN_GUTTER_LINES = 3.0
 
 _COVERED = 0
 _GAP = 1
@@ -201,7 +203,10 @@ _GUTTER_FIELDNAMES = (
     "right_width_median",
     "shared_blocks",
     "page_line_height",
+    "left_chars_median",
+    "right_chars_median",
     "page_font_size",
+    "reject_reason",
 )
 
 _BAND_FIELDNAMES = (
@@ -301,6 +306,8 @@ class _FlankingProfile:
         "right_rotated",
         "left_width_median",
         "right_width_median",
+        "left_chars_median",
+        "right_chars_median",
         "shared_blocks",
     )
 
@@ -312,6 +319,8 @@ class _FlankingProfile:
         right_rotated: int,
         left_width_median: float,
         right_width_median: float,
+        left_chars_median: float,
+        right_chars_median: float,
         shared_blocks: int,
     ) -> None:
         self.left = left
@@ -320,11 +329,24 @@ class _FlankingProfile:
         self.right_rotated = right_rotated
         self.left_width_median = left_width_median
         self.right_width_median = right_width_median
+        self.left_chars_median = left_chars_median
+        self.right_chars_median = right_chars_median
         self.shared_blocks = shared_blocks
 
     @property
     def minimum(self) -> int:
         return min(self.left, self.right)
+
+    @property
+    def chars_minimum(self) -> float:
+        """Caratteri per riga sul lato PIU' POVERO. Un separatore di colonna ha
+        parole da entrambe le parti; un punto decorativo, un numero di elenco o
+        l'etichetta di una linguetta no. Il vincolo non e' arbitrario ma
+        tipografico: non si va a capo dopo una lettera o un articolo, quindi una
+        colonna larga uno o due caratteri o non e' una colonna, o e' cosi'
+        stretta che sbagliarla e' un errore trascurabile e correggibile dopo."""
+
+        return min(self.left_chars_median, self.right_chars_median)
 
 
 def _rotated_group_ids(
@@ -358,12 +380,49 @@ def _rotated_group_ids(
     return rotated
 
 
+def _reject_reason(
+    profile: _FlankingProfile,
+    rect: _GapRect,
+    *,
+    line_height: float,
+    min_flanking_groups: int,
+    min_flanking_chars: float,
+    min_gutter_lines: float,
+) -> str | None:
+    """Perche' questo gutter NON e' un separatore di colonna, o ``None`` se lo e'.
+
+    Il motivo viene emesso nel dump grezzo invece di essere buttato: uno
+    scarto etichettato e' materiale per i producer successivi. Un gutter con un
+    solo carattere numerico per lato, per esempio, e' un forte indizio di
+    TABELLA -- e' proprio la colonna dei numeri di riga -- e va passato a chi
+    rileva tabelle, non perso. Lo stesso vale per le linguette di capitolo
+    (fianco ruotato) e per i callout.
+
+    Nessuno dei tre criteri e' una soglia geometrica in punti:
+      - ``too_few_lines``   meno di N righe per lato: una colonna di una riga
+                            non e' una colonna.
+      - ``too_few_chars``   meno di N caratteri per riga sul lato piu' povero:
+                            non si va a capo dopo un articolo.
+      - ``too_short``       gutter piu' basso di N righe DELLA PAGINA: l'unita'
+                            e' l'interlinea misurata, non una costante in pt.
+    """
+
+    if profile.minimum < min_flanking_groups:
+        return "too_few_lines"
+    if profile.chars_minimum < min_flanking_chars:
+        return "too_few_chars"
+    if line_height > 0 and (rect.y1 - rect.y0) < min_gutter_lines * line_height:
+        return "too_short"
+    return None
+
+
 def _flanking_profile(
     groups: list[_Group],
     rect: _GapRect,
     *,
     bin_width_x: float,
     rotated_groups: set[tuple[int, int]],
+    text_length_by_id: dict[str, int],
 ) -> _FlankingProfile:
     """Quante righe distinte `(block_index, line_index)` fiancheggiano il gutter
     a sinistra e a destra entro la sua estensione y, quanto sono larghe, e
@@ -390,6 +449,8 @@ def _flanking_profile(
     right_blocks: set[int] = set()
     left_rotated = 0
     right_rotated = 0
+    left_chars: list[float] = []
+    right_chars: list[float] = []
 
     for group in groups:
         if group.y1 <= rect.y0 or group.y0 >= rect.y1:
@@ -403,12 +464,18 @@ def _flanking_profile(
             else:
                 left_widths.append(group_x1 - group_x0)
                 left_blocks.add(group.block_index)
+                left_chars.append(
+                    sum(text_length_by_id.get(i, 0) for i in group.primitive_ids)
+                )
         elif group_x0 >= gutter_x1:
             if is_rotated:
                 right_rotated += 1
             else:
                 right_widths.append(group_x1 - group_x0)
                 right_blocks.add(group.block_index)
+                right_chars.append(
+                    sum(text_length_by_id.get(i, 0) for i in group.primitive_ids)
+                )
 
     def median(values: list[float]) -> float:
         if not values:
@@ -423,6 +490,8 @@ def _flanking_profile(
         right_rotated=right_rotated,
         left_width_median=median(left_widths),
         right_width_median=median(right_widths),
+        left_chars_median=median(left_chars),
+        right_chars_median=median(right_chars),
         shared_blocks=len(left_blocks & right_blocks),
     )
 
@@ -607,6 +676,8 @@ def _process_page(
     bin_width_x: float,
     bin_height_y: float,
     min_flanking_groups: int,
+    min_flanking_chars: float,
+    min_gutter_lines: float,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
     page = document.load_page(page_index)
     if page.rotation != 0 or page.mediabox != page.cropbox:
@@ -645,6 +716,9 @@ def _process_page(
     rects.sort(key=lambda r: (r.y1 - r.y0), reverse=True)
 
     rotated_groups = _rotated_group_ids(groups, primitive_page.text_primitives)
+    text_length_by_id = {
+        p.primitive_id: len((p.text or "").strip()) for p in primitive_page.text_primitives
+    }
     page_label = page_index + 1
     line_height = _median_line_height(groups)
     font_size = _median_font_size(primitive_page.text_primitives)
@@ -653,7 +727,19 @@ def _process_page(
         x0 = rect.x_bin_start * bin_width_x
         x1 = (rect.x_bin_end + 1) * bin_width_x
         profile = _flanking_profile(
-            groups, rect, bin_width_x=bin_width_x, rotated_groups=rotated_groups
+            groups,
+            rect,
+            bin_width_x=bin_width_x,
+            rotated_groups=rotated_groups,
+            text_length_by_id=text_length_by_id,
+        )
+        reject_reason = _reject_reason(
+            profile,
+            rect,
+            line_height=line_height,
+            min_flanking_groups=min_flanking_groups,
+            min_flanking_chars=min_flanking_chars,
+            min_gutter_lines=min_gutter_lines,
         )
         gutter_rows.append(
             {
@@ -674,8 +760,11 @@ def _process_page(
                 "left_width_median": round(profile.left_width_median, 2),
                 "right_width_median": round(profile.right_width_median, 2),
                 "shared_blocks": profile.shared_blocks,
+                "left_chars_median": round(profile.left_chars_median, 1),
+                "right_chars_median": round(profile.right_chars_median, 1),
                 "page_line_height": round(line_height, 2),
                 "page_font_size": round(font_size, 2),
+                "reject_reason": reject_reason or "",
             }
         )
 
@@ -683,10 +772,21 @@ def _process_page(
     separating = [
         rect
         for rect in rects
-        if _flanking_profile(
-            groups, rect, bin_width_x=bin_width_x, rotated_groups=rotated_groups
-        ).minimum
-        >= min_flanking_groups
+        if _reject_reason(
+            _flanking_profile(
+                groups,
+                rect,
+                bin_width_x=bin_width_x,
+                rotated_groups=rotated_groups,
+                text_length_by_id=text_length_by_id,
+            ),
+            rect,
+            line_height=line_height,
+            min_flanking_groups=min_flanking_groups,
+            min_flanking_chars=min_flanking_chars,
+            min_gutter_lines=min_gutter_lines,
+        )
+        is None
     ]
 
     band_rows: list[dict[str, object]] = []
@@ -720,6 +820,21 @@ def build_argument_parser() -> argparse.ArgumentParser:
         default="bands",
         help="bands: la segmentazione ricavata. gutters: i candidati gutter grezzi, "
         "ordinati per estensione y, senza alcun filtro. Default: bands.",
+    )
+    parser.add_argument(
+        "--min-flanking-chars",
+        type=float,
+        default=_DEFAULT_MIN_FLANKING_CHARS,
+        help="Caratteri per riga richiesti sul lato piu' povero. Vincolo tipografico, non "
+        "geometrico: non si va a capo dopo una lettera o un articolo. Scarta i punti "
+        "decorativi, le colonne di numeri di tabella e le etichette di linguetta. Default: 5.",
+    )
+    parser.add_argument(
+        "--min-gutter-lines",
+        type=float,
+        default=_DEFAULT_MIN_GUTTER_LINES,
+        help="Altezza minima del gutter in RIGHE DELLA PAGINA (interlinea mediana misurata, "
+        "non una costante in pt). Default: 3.",
     )
     parser.add_argument("--bin-width-x", type=float, default=_DEFAULT_BIN_WIDTH_X)
     parser.add_argument("--bin-height-y", type=float, default=_DEFAULT_BIN_HEIGHT_Y)
@@ -762,6 +877,8 @@ def main(argv: list[str] | None = None) -> int:
                 bin_width_x=args.bin_width_x,
                 bin_height_y=args.bin_height_y,
                 min_flanking_groups=args.min_flanking_groups,
+                min_flanking_chars=args.min_flanking_chars,
+                min_gutter_lines=args.min_gutter_lines,
             )
             all_gutters.extend(gutter_rows)
             all_bands.extend(band_rows)
