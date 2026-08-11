@@ -194,6 +194,9 @@ _GUTTER_FIELDNAMES = (
     "left_groups",
     "right_groups",
     "flanking_min",
+    "left_width_median",
+    "right_width_median",
+    "shared_blocks",
     "page_line_height",
 )
 
@@ -284,31 +287,88 @@ def _build_gap_grid(
     return grid, n_x_bins, n_y_bins
 
 
-def _count_flanking_groups(
-    groups: list[_Group], rect: _GapRect, *, bin_width_x: float
-) -> tuple[int, int]:
-    """Quante righe distinte `(block_index, line_index)` fiancheggiano il gutter
-    a sinistra e a destra, entro la sua estensione y.
+class _FlankingProfile:
+    """Cosa sta ai due lati di un gutter, entro la sua estensione y."""
 
-    E' la domanda strutturale che sostituisce la soglia in punti. Un separatore
-    di colonna ha molte righe per lato; uno spazio fra parole, o un gutter alto
-    una riga sola, ne ha una. Il conteggio non ha un metro esterno: e' un
-    numero di righe del documento, non una frazione di qualcosa."""
+    __slots__ = (
+        "left",
+        "right",
+        "left_width_median",
+        "right_width_median",
+        "shared_blocks",
+    )
+
+    def __init__(
+        self,
+        left: int,
+        right: int,
+        left_width_median: float,
+        right_width_median: float,
+        shared_blocks: int,
+    ) -> None:
+        self.left = left
+        self.right = right
+        self.left_width_median = left_width_median
+        self.right_width_median = right_width_median
+        self.shared_blocks = shared_blocks
+
+    @property
+    def minimum(self) -> int:
+        return min(self.left, self.right)
+
+
+def _flanking_profile(
+    groups: list[_Group], rect: _GapRect, *, bin_width_x: float
+) -> _FlankingProfile:
+    """Quante righe distinte `(block_index, line_index)` fiancheggiano il gutter
+    a sinistra e a destra entro la sua estensione y, quanto sono larghe, e
+    quanti blocchi PyMuPDF compaiono su entrambi i lati.
+
+    Il conteggio delle righe e' la domanda strutturale che sostituisce la soglia
+    in punti: un separatore di colonna ha molte righe per lato, uno spazio fra
+    parole ne ha una, il vuoto accanto a un'immagine zero. Non ha metro esterno
+    -- sono righe del documento, non frazioni di pagina.
+
+    Gli altri due campi non servono a decidere se un gutter esiste ma a
+    caratterizzare COSA separa, che il conteggio da solo non dice. Ipotesi da
+    verificare, non risultati: in una tabella la colonna di sinistra e' stretta
+    (numeri) e quella di destra larga; in un callout l'etichetta laterale e'
+    strettissima e molto asimmetrica; in prosa a due colonne le due larghezze
+    sono simili. E due colonne di prosa dovrebbero stare in blocchi PyMuPDF
+    distinti, mentre le due meta' di una riga di tabella possono condividerlo."""
 
     gutter_x0 = rect.x_bin_start * bin_width_x
     gutter_x1 = (rect.x_bin_end + 1) * bin_width_x
-    left = 0
-    right = 0
+    left_widths: list[float] = []
+    right_widths: list[float] = []
+    left_blocks: set[int] = set()
+    right_blocks: set[int] = set()
+
     for group in groups:
         if group.y1 <= rect.y0 or group.y0 >= rect.y1:
             continue
         group_x0 = min(bbox[0] for bbox in group.bboxes)
         group_x1 = max(bbox[2] for bbox in group.bboxes)
         if group_x1 <= gutter_x0:
-            left += 1
+            left_widths.append(group_x1 - group_x0)
+            left_blocks.add(group.block_index)
         elif group_x0 >= gutter_x1:
-            right += 1
-    return left, right
+            right_widths.append(group_x1 - group_x0)
+            right_blocks.add(group.block_index)
+
+    def median(values: list[float]) -> float:
+        if not values:
+            return 0.0
+        ordered = sorted(values)
+        return ordered[len(ordered) // 2]
+
+    return _FlankingProfile(
+        left=len(left_widths),
+        right=len(right_widths),
+        left_width_median=median(left_widths),
+        right_width_median=median(right_widths),
+        shared_blocks=len(left_blocks & right_blocks),
+    )
 
 
 def _median_line_height(groups: list[_Group]) -> float:
@@ -522,7 +582,7 @@ def _process_page(
     for gutter_index, rect in enumerate(rects):
         x0 = rect.x_bin_start * bin_width_x
         x1 = (rect.x_bin_end + 1) * bin_width_x
-        left, right = _count_flanking_groups(groups, rect, bin_width_x=bin_width_x)
+        profile = _flanking_profile(groups, rect, bin_width_x=bin_width_x)
         gutter_rows.append(
             {
                 "manual": manual,
@@ -534,9 +594,12 @@ def _process_page(
                 "y0": round(rect.y0, 2),
                 "y1": round(rect.y1, 2),
                 "y_extent": round(rect.y1 - rect.y0, 2),
-                "left_groups": left,
-                "right_groups": right,
-                "flanking_min": min(left, right),
+                "left_groups": profile.left,
+                "right_groups": profile.right,
+                "flanking_min": profile.minimum,
+                "left_width_median": round(profile.left_width_median, 2),
+                "right_width_median": round(profile.right_width_median, 2),
+                "shared_blocks": profile.shared_blocks,
                 "page_line_height": round(line_height, 2),
             }
         )
@@ -545,7 +608,7 @@ def _process_page(
     separating = [
         rect
         for rect in rects
-        if min(_count_flanking_groups(groups, rect, bin_width_x=bin_width_x))
+        if _flanking_profile(groups, rect, bin_width_x=bin_width_x).minimum
         >= min_flanking_groups
     ]
 
