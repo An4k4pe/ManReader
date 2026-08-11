@@ -201,6 +201,7 @@ _GUTTER_FIELDNAMES = (
     "right_width_median",
     "shared_blocks",
     "page_line_height",
+    "page_font_size",
 )
 
 _BAND_FIELDNAMES = (
@@ -426,6 +427,18 @@ def _flanking_profile(
     )
 
 
+def _median_font_size(text_primitives: list[TextPrimitive]) -> float:
+    """Corpo del carattere mediano della pagina. Unita' del documento, da usare
+    per giudicare se un gruppo fiancheggiante sia testo leggibile: un gruppo
+    largo meno di un carattere non e' una colonna. Misurato, non usato ancora
+    come regola."""
+
+    sizes = sorted(p.font_size for p in text_primitives if p.font_size)
+    if not sizes:
+        return 0.0
+    return sizes[len(sizes) // 2]
+
+
 def _median_line_height(groups: list[_Group]) -> float:
     """Altezza di riga mediana della pagina, dai gruppi stessi. Serve solo come
     unita' di lettura nell'output -- non e' usata come soglia da nessuna parte."""
@@ -634,6 +647,7 @@ def _process_page(
     rotated_groups = _rotated_group_ids(groups, primitive_page.text_primitives)
     page_label = page_index + 1
     line_height = _median_line_height(groups)
+    font_size = _median_font_size(primitive_page.text_primitives)
     gutter_rows: list[dict[str, object]] = []
     for gutter_index, rect in enumerate(rects):
         x0 = rect.x_bin_start * bin_width_x
@@ -661,6 +675,7 @@ def _process_page(
                 "right_width_median": round(profile.right_width_median, 2),
                 "shared_blocks": profile.shared_blocks,
                 "page_line_height": round(line_height, 2),
+                "page_font_size": round(font_size, 2),
             }
         )
 
