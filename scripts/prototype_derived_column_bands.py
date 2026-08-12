@@ -134,10 +134,27 @@ per quanto durano.
   sono soglie decisionali (non stabiliscono se un gap conta) ma la risoluzione
   con cui si guarda; vanno comunque verificate per sensibilita', non assunte
   innocue. Il default y (2pt) e' lo stesso di Fase 2 di proposito.
+  **SMENTITO, correzione a verbale**: la revisione architetturale ha misurato
+  che, avendo rimosso `--min-gap-width` senza sostituirlo, nessun criterio
+  guarda piu' la larghezza -- quindi il gutter minimo rappresentabile e' un bin
+  e `--bin-width-x` E' la soglia di larghezza, implicita e mai dichiarata
+  (3,4% dei gutter accettati e' largo 1pt). Per `--bin-height-y` la difesa
+  regge meglio: entra solo in `too_short` attraverso `line_height` misurata.
 - La distinzione fra spazio fra parole e gutter e' AFFIDATA all'ordinamento per
   estensione y, non dimostrata. Se su qualche pagina uno spazio fra parole
-  persistesse verticalmente (colonne di testo molto strette, o testo
-  incolonnato a mano) il metodo lo chiamerebbe gutter. Caso non ancora cercato.
+  persistesse verticalmente il metodo lo chiamerebbe gutter.
+  **NON PIU' IPOTETICO, correzione a verbale**: una versione precedente di
+  questa riga diceva "caso non ancora cercato". E' stato cercato e trovato --
+  3,6% dei gutter accettati e' attraversato da almeno una riga di testo che li
+  scavalca, con casi verificati su DB p.120 e Wil p.160 (allineamenti
+  accidentali di spazi di giustificazione dentro elenchi puntati). Il 3,6% e'
+  un limite inferiore: conta solo le righe che scavalcano INTERAMENTE il gutter.
+
+- ATTENZIONE, la sezione "Il metodo" qui sopra descrive un solo criterio di
+  ammissione (`--min-flanking-groups`) mentre il codice ne ha TRE
+  (`too_few_lines`, `too_few_chars`, `too_short`, v. `_reject_reason`). La
+  descrizione e' rimasta indietro rispetto al meccanismo. Rilievo della
+  revisione del diff, non ancora sanato riscrivendo la sezione.
 
 Uso:
 
