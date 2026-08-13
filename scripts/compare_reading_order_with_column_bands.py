@@ -74,9 +74,50 @@ def _column_of(primitive: TextPrimitive, gutters: list[tuple[float, float]]) -> 
     return sum(1 for _, gap_end in gutters if center >= gap_end)
 
 
+def _occupied_y_ranges(
+    text_primitives: list[TextPrimitive],
+    visuals: list[tuple[float, float, float, float]],
+    *,
+    gap_start: float,
+    gap_end: float,
+    line_height: float,
+) -> list[tuple[float, float]]:
+    """Fasce y in cui almeno una delle due colonne e' OCCUPATA, da testo o da un
+    visuale. Serve come guardia: senza, l'estensione salda due strutture
+    separate da un vuoto -- il "tunneling" misurato dalla revisione
+    architetturale al 3,3% dei gutter, con casi fino a 29 righe di buco.
+
+    Un visuale conta solo se e' alto almeno un'interlinea della pagina: le
+    righe decorative da 1pt non rendono occupata una fascia. L'unita' e'
+    misurata sul documento, non una costante in pt."""
+
+    ranges: list[tuple[float, float]] = []
+    for primitive in text_primitives:
+        if primitive.bbox[2] <= gap_start or primitive.bbox[0] >= gap_end:
+            ranges.append((primitive.bbox[1], primitive.bbox[3]))
+    for x0, y0, x1, y1 in visuals:
+        if y1 - y0 < line_height:
+            continue
+        if x1 <= gap_start or x0 >= gap_end:
+            ranges.append((y0, y1))
+    if not ranges:
+        return []
+    ranges.sort()
+    merged = [ranges[0]]
+    for start, end in ranges[1:]:
+        last_start, last_end = merged[-1]
+        if start <= last_end + line_height:
+            merged[-1] = (last_start, max(last_end, end))
+        else:
+            merged.append((start, end))
+    return merged
+
+
 def _widen_band_over_visuals(
     band: tuple[float, float, list[tuple[float, float]]],
     text_primitives: list[TextPrimitive],
+    visuals: list[tuple[float, float, float, float]],
+    line_height: float,
 ) -> tuple[float, float, list[tuple[float, float]]]:
     """Estende verticalmente una banda a UNA sola colonna di stacco, finche' il
     corridoio del gutter resta libero da testo.
@@ -124,14 +165,20 @@ def _widen_band_over_visuals(
     if crossing:
         return band
 
-    flanking = [p for p in text_primitives if p.bbox[2] <= gap_start or p.bbox[0] >= gap_end]
-    if not flanking:
-        return band
-    return (
-        min(y0, min(p.bbox[1] for p in flanking)),
-        max(y1, max(p.bbox[3] for p in flanking)),
-        [(gap_start, gap_end)],
+    # L'estensione si ferma dove la pagina smette di essere occupata: si prende
+    # la sola fascia contigua che contiene gia' la banda, non l'inviluppo di
+    # tutto il contenuto della pagina.
+    occupied = _occupied_y_ranges(
+        text_primitives,
+        visuals,
+        gap_start=gap_start,
+        gap_end=gap_end,
+        line_height=line_height,
     )
+    for start, end in occupied:
+        if start <= y0 and y1 <= end:
+            return (min(y0, start), max(y1, end), [(gap_start, gap_end)])
+    return band
 
 
 def _band_aware_order(
@@ -139,6 +186,8 @@ def _band_aware_order(
     bands: list[dict[str, object]],
     *,
     widen: bool = False,
+    visuals: list[tuple[float, float, float, float]] | None = None,
+    line_height: float = 0.0,
 ) -> tuple[list[tuple[TextPrimitive, int]], int]:
     """Ordine a bande. Restituisce (primitiva, id_colonna) dove id_colonna
     cambia a ogni cambio di colonna o di banda, cosi' il renderer sa dove
@@ -157,7 +206,10 @@ def _band_aware_order(
                 continue
         parsed.append((float(cast(float, band["y0"])), float(cast(float, band["y1"])), sorted(intervals)))
     if widen:
-        parsed = [_widen_band_over_visuals(band, text_primitives) for band in parsed]
+        parsed = [
+            _widen_band_over_visuals(band, text_primitives, visuals or [], line_height)
+            for band in parsed
+        ]
     parsed.sort()
 
     assigned: dict[int, list[TextPrimitive]] = {}
@@ -295,7 +347,15 @@ def main(argv: list[str] | None = None) -> int:
     primitives = list(primitive_page.text_primitives)
 
     baseline = [(p, 0) for p in _baseline_order(primitives)]
-    band_aware, inside = _band_aware_order(primitives, bands, widen=args.widen_bands)
+    visuals = [
+        (p.bbox[0], p.bbox[1], p.bbox[2], p.bbox[3])
+        for p in list(primitive_page.image_primitives) + list(primitive_page.drawing_primitives)
+    ]
+    heights = sorted(p.bbox[3] - p.bbox[1] for p in primitives if p.bbox[3] > p.bbox[1])
+    line_height = heights[len(heights) // 2] if heights else 0.0
+    band_aware, inside = _band_aware_order(
+        primitives, bands, widen=args.widen_bands, visuals=visuals, line_height=line_height
+    )
 
     (output_dir / "order_baseline.md").write_text(_render(baseline), encoding="utf-8")
     (output_dir / "order_with_column_bands.md").write_text(_render(band_aware), encoding="utf-8")
