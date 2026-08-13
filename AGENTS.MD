@@ -159,6 +159,8 @@ osservazione backend
 - Confidence geometrica e confidence semantica devono essere separate.
 - Tabelle, marginalia, callout e liste detector-side sono candidati.
 - Un candidato tabella non rimuove testo e non produce CSV definitivo prima della resolution.
+- L'isolamento fra producer è una proprietà voluta, non un limite da superare: la relazione fra candidati di producer diversi si decide in Resolution o nel consumer, mai dentro un producer. Fino ai candidati ragionare a pezzi isolati è corretto; dal consumer in poi la combinazione è inevitabile, perché una regione influisce sull'altra.
+- Il precedente è ratificato tre volte con motivazioni diverse mai ricondotte a una: Milestone 24 (`page_edge_visual`/`side_band`), Milestone 30 (`interior_visual_frame`/`table_candidate`), Milestone 33 (`column_band`/`table_candidate`). Un producer che filtra i propri candidati per anticipare una decisione del consumer viola questo invariante anche quando il filtro è editorialmente corretto.
 
 ### Coverage e ownership
 
