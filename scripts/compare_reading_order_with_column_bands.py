@@ -132,10 +132,26 @@ def _widen_band_over_visuals(
 
     Il corridoio viene RISTRETTO al piu' largo sotto-intervallo che nessuna
     primitiva di testo attraversa -- stesso principio di `_largest_free_run`
-    nel producer. Su DrW p.97 il gutter dichiarato e' x 299-323 ma sei righe
-    della colonna destra cominciano a 313; ristretto a 299-313 il corridoio e'
-    libero sull'intera pagina e la banda si estende da y 46 a 761 invece che
-    396-652.
+    nel producer.
+
+    **ROTTA. Non usare questa flag per trarre conclusioni.** Una versione
+    precedente di questa docstring affermava che su DrW p.97 la banda si
+    estende "da y 46 a 761". Misurato eseguendo il codice: si estende da
+    **-9 a 792**, cioe' l'intera pagina piu' il bleed. La guardia di occupazione
+    collassa in una sola fascia perche' fra i visuali che conta come occupanti
+    c'e' un fondino a piena pagina: il filtro sull'altezza esclude i filetti da
+    1pt ed e' cieco ai fondi. Conseguenza peggiore, misurata dalla revisione su
+    7 pagine del campione: quando una banda a un gutter si estende a tutta la
+    pagina, `_band_aware_order` le assegna ogni primitiva e le bande a piu'
+    colonne restano VUOTE -- la struttura di tabella viene distrutta, e il
+    conteggio stampato su stderr non se ne accorge perche' conta le bande
+    parsate, non quelle effettive. Il caso Lan p.253, su cui la guardia era
+    stata verificata e dichiarata funzionante, e' quello fortunato: li' non c'e'
+    un fondo a piena pagina.
+
+    Serve un segnale diverso da "esiste un visuale alto almeno un'interlinea".
+    Non corretto: la flag resta per non perdere il caso d'uso, con questo
+    avviso.
 
     Limite dichiarato: si applica solo alle bande con UN gutter. Le bande a piu'
     colonne restano invariate -- estenderle richiederebbe restringere piu'

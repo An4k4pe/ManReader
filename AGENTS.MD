@@ -160,7 +160,8 @@ osservazione backend
 - Tabelle, marginalia, callout e liste detector-side sono candidati.
 - Un candidato tabella non rimuove testo e non produce CSV definitivo prima della resolution.
 - L'isolamento fra producer è una proprietà voluta, non un limite da superare: la relazione fra candidati di producer diversi si decide in Resolution o nel consumer, mai dentro un producer. Fino ai candidati ragionare a pezzi isolati è corretto; dal consumer in poi la combinazione è inevitabile, perché una regione influisce sull'altra.
-- Il precedente è ratificato tre volte con motivazioni diverse mai ricondotte a una: Milestone 24 (`page_edge_visual`/`side_band`), Milestone 30 (`interior_visual_frame`/`table_candidate`), Milestone 33 (`column_band`/`table_candidate`). Un producer che filtra i propri candidati per anticipare una decisione del consumer viola questo invariante anche quando il filtro è editorialmente corretto.
+- Il precedente è ratificato due volte: Milestone 24 (`page_edge_visual`/`side_band`) e Milestone 30 (`interior_visual_frame`/`embedded_visual`, esplicitamente "stesso precedente" di Milestone 24). Milestone 33 ha invece **rinviato** la sovrapposizione banda/`table_candidate`/`embedded_visual` alla futura milestone del producer: è un rinvio, non una ratifica.
+- Questione aperta, non ancora un invariante: se un producer possa filtrare i propri candidati per anticipare una decisione del consumer. Il caso che la solleva è `column_band`, che scarta come `too_few_chars` gutter che il codice stesso qualifica come indizio di tabella. Il caso che la complica è `embedded_visual`, già wired, che filtra il proprio output con soglie duplicate localmente da `page_covering_visual` e `page_edge_visual` — alla lettera un filtro su criterio altrui, nello spirito ciò che tiene isolati i due producer. Finché la distinzione fra i due casi non è formulata, la regola non è applicabile e non va trattata come vincolante.
 
 ### Coverage e ownership
 
