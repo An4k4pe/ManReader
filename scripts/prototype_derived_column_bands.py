@@ -196,6 +196,8 @@ _DEFAULT_BIN_HEIGHT_Y = 2.0
 _DEFAULT_MIN_FLANKING_GROUPS = 2
 _DEFAULT_MIN_FLANKING_CHARS = 5
 _DEFAULT_MIN_GUTTER_LINES = 3.0
+_DEFAULT_MIN_COLUMN_CHARS = 15.0
+_AVERAGE_CHAR_WIDTH_RATIO = 0.5
 
 _COVERED = 0
 _GAP = 1
@@ -222,8 +224,11 @@ _GUTTER_FIELDNAMES = (
     "page_line_height",
     "left_chars_median",
     "right_chars_median",
+    "left_wordy",
+    "right_wordy",
     "page_font_size",
     "reject_reason",
+    "tree_status",
 )
 
 _TREE_FIELDNAMES = (
@@ -255,7 +260,7 @@ _BAND_FIELDNAMES = (
 class _GapRect:
     """Un candidato gutter: intervallo x contiguo, esteso su un intervallo y."""
 
-    __slots__ = ("x_bin_start", "x_bin_end", "y0", "y1", "span_y0", "span_y1")
+    __slots__ = ("x_bin_start", "x_bin_end", "y0", "y1", "span_y0", "span_y1", "tree_status")
 
     def __init__(self, x_bin_start: int, x_bin_end: int, y0: float, y1: float) -> None:
         self.x_bin_start = x_bin_start
@@ -270,6 +275,7 @@ class _GapRect:
         # corridoio non viene attraversato. E' la grandezza usata dalle bande.
         self.span_y0 = y0
         self.span_y1 = y1
+        self.tree_status = ""
 
 
 def _build_gap_grid(
@@ -347,6 +353,8 @@ class _FlankingProfile:
         "right_width_median",
         "left_chars_median",
         "right_chars_median",
+        "left_wordy",
+        "right_wordy",
         "shared_blocks",
     )
 
@@ -360,6 +368,8 @@ class _FlankingProfile:
         right_width_median: float,
         left_chars_median: float,
         right_chars_median: float,
+        left_wordy: int,
+        right_wordy: int,
         shared_blocks: int,
     ) -> None:
         self.left = left
@@ -370,11 +380,27 @@ class _FlankingProfile:
         self.right_width_median = right_width_median
         self.left_chars_median = left_chars_median
         self.right_chars_median = right_chars_median
+        self.left_wordy = left_wordy
+        self.right_wordy = right_wordy
         self.shared_blocks = shared_blocks
 
     @property
     def minimum(self) -> int:
         return min(self.left, self.right)
+
+    @property
+    def wordy_minimum(self) -> int:
+        """Quante righe, sul lato piu' povero, portano almeno il minimo di
+        caratteri richiesto. Sostituisce la MEDIANA dei caratteri, che era il
+        difetto: su una pagina a elenco puntato PyMuPDF indicizza ogni
+        marcatore come una riga di un carattere, e su DIE p.127 i marcatori
+        bastavano a trascinare la mediana a 1 e a far scartare un gutter alto
+        668pt con 102 righe a sinistra e 70 a destra. Abbassare la soglia non
+        serviva -- a 2 la pagina cadeva lo stesso. Contare le righe che portano
+        parole risponde alla domanda giusta: c'e' testo vero da entrambe le
+        parti?"""
+
+        return min(self.left_wordy, self.right_wordy)
 
     @property
     def chars_minimum(self) -> float:
@@ -456,8 +482,8 @@ def _reject_reason(
 
     if profile.minimum < min_flanking_groups:
         return "too_few_lines"
-    if profile.chars_minimum < min_flanking_chars:
-        return "too_few_chars"
+    if profile.wordy_minimum < min_flanking_groups:
+        return "too_few_wordy_lines"
     if line_height > 0 and (rect.y1 - rect.y0) < min_gutter_lines * line_height:
         return "too_short"
     return None
@@ -470,6 +496,7 @@ def _flanking_profile(
     bin_width_x: float,
     rotated_groups: set[tuple[int, int]],
     text_length_by_id: dict[str, int],
+    min_chars: float = 5.0,
 ) -> _FlankingProfile:
     """Quante righe distinte `(block_index, line_index)` fiancheggiano il gutter
     a sinistra e a destra entro la sua estensione y, quanto sono larghe, e
@@ -539,6 +566,8 @@ def _flanking_profile(
         right_width_median=median(right_widths),
         left_chars_median=median(left_chars),
         right_chars_median=median(right_chars),
+        left_wordy=sum(1 for n in left_chars if n >= min_chars),
+        right_wordy=sum(1 for n in right_chars if n >= min_chars),
         shared_blocks=len(left_blocks & right_blocks),
     )
 
@@ -740,6 +769,8 @@ def _segment_tree(
     *,
     bin_width_x: float,
     page_width: float,
+    font_size: float = 0.0,
+    min_column_chars: float = _DEFAULT_MIN_COLUMN_CHARS,
 ) -> list[dict[str, object]]:
     """Segmentazione GERARCHICA. Le bande di primo livello nascono dai soli
     gutter massimali; ogni colonna di una banda riceve ricorsivamente i gutter
@@ -756,8 +787,43 @@ def _segment_tree(
     e su una pagina a 3 colonne sopra e 2 sotto perderebbero struttura vera in
     silenzio. La conservazione e' cio' che distingue la correzione dal trucco."""
 
+    # Larghezza minima di una colonna, espressa in CARATTERI del documento e non
+    # in punti: una colonna larga otto caratteri non puo' contenere prosa. Stesso
+    # ragionamento tipografico di `too_few_wordy_lines` applicato alla larghezza.
+    # E' un criterio di BANDA, non di gutter: ha senso solo dentro un contesto x,
+    # e infatti prima della gerarchia non era calcolabile. Misurato sulle ancore:
+    # le colonne vere stanno fra 40 e 78 caratteri, la linguetta di capitolo di
+    # Fab p.139 a 8. Il default 15 sta nel vuoto, dalla parte conservativa.
+    min_column_width = (
+        min_column_chars * font_size * _AVERAGE_CHAR_WIDTH_RATIO if font_size > 0 else 0.0
+    )
+
     rows: list[dict[str, object]] = []
     counter = [0]
+    # Chi non entra nell'albero non sparisce: viene marcato. E' lo stesso
+    # principio dello scarto etichettato dei gutter -- un bordino riconosciuto
+    # come tale e' materiale per chi rileva bande di capitolo, non spazzatura.
+    dropped: dict[int, str] = {}
+
+    def wide_enough(rect: _GapRect, x0: float, x1: float) -> bool:
+        """Il minimo di larghezza si applica SOLO alle colonne che toccano il
+        bordo della pagina.
+
+        Distinzione proposta dall'utente e non ovvia: una linguetta di capitolo
+        produce una colonna strettissima **al bordo**, una tabella la produce
+        **all'interno**. Applicare il minimo ovunque scartava anche le colonne
+        di tabella (su DB p.18 la colonna "D6" e' larga 3 caratteri, su DB p.83
+        le colonne di costo circa 8) e con esse la struttura che volevamo
+        descrivere. Limitandolo ai bordi si tolgono i bordini senza toccare le
+        tabelle."""
+
+        if min_column_width <= 0:
+            return True
+        left_edge = rect.x_bin_start * bin_width_x - x0
+        right_edge = x1 - (rect.x_bin_end + 1) * bin_width_x
+        if x0 <= 0.5 and left_edge < min_column_width:
+            return False
+        return not (x1 >= page_width - 0.5 and right_edge < min_column_width)
 
     def emit(
         members: list[_GapRect],
@@ -768,10 +834,18 @@ def _segment_tree(
     ) -> None:
         if not members:
             return
+        usable = []
+        for candidate in members:
+            if wide_enough(candidate, x0, x1):
+                usable.append(candidate)
+            else:
+                dropped[id(candidate)] = "edge_strip"
+        if not usable:
+            return
         maximal = [
-            r for r in members if not any(_is_subordinate(r, other) for other in members)
+            r for r in usable if not any(_is_subordinate(r, other) for other in usable)
         ]
-        subordinate = [r for r in members if r not in maximal]
+        subordinate = [r for r in usable if r not in maximal]
         placed: set[int] = set()
 
         for band_y0, band_y1, crossing in _segment_bands(maximal, bin_width_x=bin_width_x):
@@ -816,10 +890,25 @@ def _segment_tree(
         # due tabelle restavano orfane. Si ricorre sullo stesso livello, con la
         # guardia che il sottoinsieme si riduca davvero per non ciclare.
         leftover = [r for r in subordinate if id(r) not in placed]
-        if leftover and len(leftover) < len(members):
+        if leftover and len(leftover) < len(usable):
             emit(leftover, x0, x1, parent, depth)
 
     emit(rects, 0.0, page_width, None, 0)
+
+    # Lo stato si assegna da cio' che l'albero CONTIENE davvero, non per
+    # esclusione: marcare "band" tutto cio' che non e' stato scartato
+    # esplicitamente lasciava passare i gutter che nessun ramo aveva emesso
+    # (53 pagine su cinque manuali). Un invariante verificato per assenza non
+    # e' un invariante.
+    emitted: set[str] = set()
+    for row in rows:
+        emitted.update(str(row["gutter_x_intervals"]).split())
+    for rect in rects:
+        key = f"{rect.x_bin_start * bin_width_x:.1f}-{(rect.x_bin_end + 1) * bin_width_x:.1f}"
+        if key in emitted:
+            rect.tree_status = "band"
+        else:
+            rect.tree_status = dropped.get(id(rect), "not_placed")
     return rows
 
 
@@ -859,6 +948,7 @@ def _process_page(
     min_flanking_groups: int,
     min_flanking_chars: float,
     min_gutter_lines: float,
+    min_column_chars: float = _DEFAULT_MIN_COLUMN_CHARS,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]], list[dict[str, object]]]:
     page = document.load_page(page_index)
     if page.rotation != 0 or page.mediabox != page.cropbox:
@@ -905,6 +995,34 @@ def _process_page(
     page_label = page_index + 1
     line_height = _median_line_height(groups)
     font_size = _median_font_size(primitive_page.text_primitives)
+    _pre_tree = [
+        rect
+        for rect in rects
+        if _reject_reason(
+            _flanking_profile(
+                groups,
+                rect,
+                bin_width_x=bin_width_x,
+                rotated_groups=rotated_groups,
+                text_length_by_id=text_length_by_id,
+                min_chars=min_flanking_chars,
+            ),
+            rect,
+            line_height=line_height,
+            min_flanking_groups=min_flanking_groups,
+            min_flanking_chars=min_flanking_chars,
+            min_gutter_lines=min_gutter_lines,
+        )
+        is None
+    ]
+    _segment_tree(
+        _pre_tree,
+        bin_width_x=bin_width_x,
+        page_width=page_width,
+        font_size=font_size,
+        min_column_chars=min_column_chars,
+    )
+
     gutter_rows: list[dict[str, object]] = []
     for gutter_index, rect in enumerate(rects):
         x0 = rect.x_bin_start * bin_width_x
@@ -915,6 +1033,7 @@ def _process_page(
             bin_width_x=bin_width_x,
             rotated_groups=rotated_groups,
             text_length_by_id=text_length_by_id,
+            min_chars=min_flanking_chars,
         )
         reject_reason = _reject_reason(
             profile,
@@ -945,9 +1064,12 @@ def _process_page(
                 "shared_blocks": profile.shared_blocks,
                 "left_chars_median": round(profile.left_chars_median, 1),
                 "right_chars_median": round(profile.right_chars_median, 1),
+                "left_wordy": profile.left_wordy,
+                "right_wordy": profile.right_wordy,
                 "page_line_height": round(line_height, 2),
                 "page_font_size": round(font_size, 2),
                 "reject_reason": reject_reason or "",
+                "tree_status": rect.tree_status,
             }
         )
 
@@ -962,6 +1084,7 @@ def _process_page(
                 bin_width_x=bin_width_x,
                 rotated_groups=rotated_groups,
                 text_length_by_id=text_length_by_id,
+                min_chars=min_flanking_chars,
             ),
             rect,
             line_height=line_height,
@@ -972,7 +1095,13 @@ def _process_page(
         is None
     ]
 
-    tree_rows = _segment_tree(separating, bin_width_x=bin_width_x, page_width=page_width)
+    tree_rows = _segment_tree(
+        separating,
+        bin_width_x=bin_width_x,
+        page_width=page_width,
+        font_size=font_size,
+        min_column_chars=min_column_chars,
+    )
     for row in tree_rows:
         row["manual"] = manual
         row["page"] = page_label
@@ -1025,6 +1154,13 @@ def build_argument_parser() -> argparse.ArgumentParser:
         help="Altezza minima del gutter in RIGHE DELLA PAGINA (interlinea mediana misurata, "
         "non una costante in pt). Default: 3.",
     )
+    parser.add_argument(
+        "--min-column-chars",
+        type=float,
+        default=_DEFAULT_MIN_COLUMN_CHARS,
+        help="Larghezza minima di una colonna, in CARATTERI del documento (corpo del "
+        "carattere x 0,5). Criterio di banda, non di gutter. Default: 15.",
+    )
     parser.add_argument("--bin-width-x", type=float, default=_DEFAULT_BIN_WIDTH_X)
     parser.add_argument("--bin-height-y", type=float, default=_DEFAULT_BIN_HEIGHT_Y)
     parser.add_argument(
@@ -1069,6 +1205,7 @@ def main(argv: list[str] | None = None) -> int:
                 min_flanking_groups=args.min_flanking_groups,
                 min_flanking_chars=args.min_flanking_chars,
                 min_gutter_lines=args.min_gutter_lines,
+                min_column_chars=args.min_column_chars,
             )
             all_gutters.extend(gutter_rows)
             all_bands.extend(band_rows)
