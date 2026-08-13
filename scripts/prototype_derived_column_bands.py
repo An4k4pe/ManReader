@@ -226,6 +226,20 @@ _GUTTER_FIELDNAMES = (
     "reject_reason",
 )
 
+_TREE_FIELDNAMES = (
+    "manual",
+    "page",
+    "band_id",
+    "parent_id",
+    "depth",
+    "x0",
+    "x1",
+    "y0",
+    "y1",
+    "column_count",
+    "gutter_x_intervals",
+)
+
 _BAND_FIELDNAMES = (
     "manual",
     "page",
@@ -241,13 +255,21 @@ _BAND_FIELDNAMES = (
 class _GapRect:
     """Un candidato gutter: intervallo x contiguo, esteso su un intervallo y."""
 
-    __slots__ = ("x_bin_start", "x_bin_end", "y0", "y1")
+    __slots__ = ("x_bin_start", "x_bin_end", "y0", "y1", "span_y0", "span_y1")
 
     def __init__(self, x_bin_start: int, x_bin_end: int, y0: float, y1: float) -> None:
         self.x_bin_start = x_bin_start
         self.x_bin_end = x_bin_end
+        # y0/y1: fascia in cui il gutter e' EVIDENZIATO, cioe' dove entrambi i
+        # lati sono attivi insieme. E' la grandezza usata dai criteri di
+        # ammissione, e non va toccata: allungarla gonfierebbe i conteggi di
+        # fianco e falserebbe `too_short`.
         self.y0 = y0
         self.y1 = y1
+        # span_y0/span_y1: fin dove la SEPARAZIONE vale, cioe' finche' il
+        # corridoio non viene attraversato. E' la grandezza usata dalle bande.
+        self.span_y0 = y0
+        self.span_y1 = y1
 
 
 def _build_gap_grid(
@@ -667,6 +689,140 @@ def _chain_gutters(grid: list[bytearray], *, bin_height_y: float) -> list[_GapRe
     return [g for g in closed if g.x_bin_end >= g.x_bin_start]
 
 
+def _extend_gutter_span(
+    grid: list[bytearray], rect: _GapRect, *, bin_height_y: float
+) -> None:
+    """Estende `span_y0`/`span_y1` finche' il corridoio non viene ATTRAVERSATO.
+
+    La condizione di arresto e' l'interruzione, non l'assenza di testo. Una
+    versione precedente si fermava dove finiva il testo che fiancheggia il
+    corridoio: sbagliato, perche' usa l'assenza di prova come prova di assenza
+    -- se nessuno attraversa il corridoio, la separazione fra le due colonne
+    continua a esistere anche dove i due lati tacciono. Il caso che lo mostra e'
+    Dag p.164, dove le ultime righe delle due colonne non si sovrappongono in y
+    e la banda si fermava lasciando fuori il testo che le appartiene.
+
+    Estendere era pericoloso finche' le bande erano piatte, perche' il consumer
+    assegnava ogni primitiva alla PRIMA banda che la conteneva e una banda
+    estesa svuotava le altre. Con l'albero il pericolo non c'e': l'assegnazione
+    va alla banda piu' profonda."""
+
+    core = range(rect.x_bin_start, rect.x_bin_end + 1)
+    top = max(0, int(rect.y0 / bin_height_y))
+    while top > 0 and all(grid[top - 1][x] != _COVERED for x in core):
+        top -= 1
+    bottom = min(len(grid), int(rect.y1 / bin_height_y))
+    while bottom < len(grid) and all(grid[bottom][x] != _COVERED for x in core):
+        bottom += 1
+    rect.span_y0 = top * bin_height_y
+    rect.span_y1 = bottom * bin_height_y
+
+
+def _is_subordinate(inner: _GapRect, outer: _GapRect) -> bool:
+    """`inner` vive DENTRO una colonna di `outer`: le due x sono disgiunte, le y
+    si sovrappongono, e `outer` e' piu' esteso in y.
+
+    E' un test di disgiunzione, senza soglie. Su DB p.18 il gutter di pagina
+    (x 301-320, y 488-668) ha due gutter di tabella interamente alla sua destra
+    (x 338-343 e x 398-446): sono subordinati, e non devono contribuire confini
+    al livello superiore -- e' il taglio che spezzava il flusso della colonna
+    sinistra a y 610."""
+
+    if not (inner.x_bin_end < outer.x_bin_start or inner.x_bin_start > outer.x_bin_end):
+        return False
+    if (outer.y1 - outer.y0) <= (inner.y1 - inner.y0):
+        return False
+    return inner.span_y0 < outer.span_y1 and outer.span_y0 < inner.span_y1
+
+
+def _segment_tree(
+    rects: list[_GapRect],
+    *,
+    bin_width_x: float,
+    page_width: float,
+) -> list[dict[str, object]]:
+    """Segmentazione GERARCHICA. Le bande di primo livello nascono dai soli
+    gutter massimali; ogni colonna di una banda riceve ricorsivamente i gutter
+    che le stanno dentro.
+
+    Sostituisce l'assunzione implicita che rendeva possibile il difetto: oggi
+    una banda ha estensione x pari alla pagina, quindi un gutter a destra puo'
+    tagliare la colonna di sinistra. Qui l'estensione x e' esplicita.
+
+    Invariante di conservazione, il criterio di successo fissato prima di
+    scrivere questa funzione: **ogni gutter accettato compare esattamente una
+    volta** nell'albero. Le correzioni ovvie (fondere le bande annidate, tenere
+    i soli gutter massimali) riparano DB p.18 ma SCARTANO il gutter subordinato,
+    e su una pagina a 3 colonne sopra e 2 sotto perderebbero struttura vera in
+    silenzio. La conservazione e' cio' che distingue la correzione dal trucco."""
+
+    rows: list[dict[str, object]] = []
+    counter = [0]
+
+    def emit(
+        members: list[_GapRect],
+        x0: float,
+        x1: float,
+        parent: int | None,
+        depth: int,
+    ) -> None:
+        if not members:
+            return
+        maximal = [
+            r for r in members if not any(_is_subordinate(r, other) for other in members)
+        ]
+        subordinate = [r for r in members if r not in maximal]
+        placed: set[int] = set()
+
+        for band_y0, band_y1, crossing in _segment_bands(maximal, bin_width_x=bin_width_x):
+            counter[0] += 1
+            band_id = counter[0]
+            rows.append(
+                {
+                    "band_id": band_id,
+                    "parent_id": parent if parent is not None else "",
+                    "depth": depth,
+                    "x0": round(x0, 2),
+                    "x1": round(x1, 2),
+                    "y0": round(band_y0, 2),
+                    "y1": round(band_y1, 2),
+                    "column_count": len(crossing) + 1,
+                    "gutter_x_intervals": " ".join(f"{a:.1f}-{b:.1f}" for a, b in crossing),
+                }
+            )
+            bounds = [x0] + [edge for pair in crossing for edge in pair] + [x1]
+            for index in range(0, len(bounds) - 1, 2):
+                col_x0, col_x1 = bounds[index], bounds[index + 1]
+                inside = [
+                    r
+                    for r in subordinate
+                    if id(r) not in placed
+                    and r.x_bin_start * bin_width_x >= col_x0
+                    and (r.x_bin_end + 1) * bin_width_x <= col_x1
+                    and r.span_y0 < band_y1
+                    and band_y0 < r.span_y1
+                ]
+                # Un gutter appartiene a UNA colonna sola: marcarlo qui evita che
+                # un subordinato con due padri possibili venga emesso due volte.
+                placed.update(id(r) for r in inside)
+                emit(inside, col_x0, col_x1, band_id, depth + 1)
+
+        # I subordinati che nessuna banda ha potuto ospitare NON vanno persi.
+        # La subordinazione e' una relazione globale sulla pagina, ma vale solo
+        # dentro la fascia y in cui il padre esiste davvero: sotto quella fascia
+        # un gutter "subordinato" e' a tutti gli effetti massimale nella propria
+        # regione. Misurato su DB p.83, tre tabelle impilate con colonne a x
+        # diverse: il gutter piu' alto veniva eletto padre di tutte e le altre
+        # due tabelle restavano orfane. Si ricorre sullo stesso livello, con la
+        # guardia che il sottoinsieme si riduca davvero per non ciclare.
+        leftover = [r for r in subordinate if id(r) not in placed]
+        if leftover and len(leftover) < len(members):
+            emit(leftover, x0, x1, parent, depth)
+
+    emit(rects, 0.0, page_width, None, 0)
+    return rows
+
+
 def _segment_bands(
     rects: list[_GapRect], *, bin_width_x: float
 ) -> list[tuple[float, float, list[tuple[float, float]]]]:
@@ -677,7 +833,7 @@ def _segment_bands(
     if not rects:
         return []
 
-    boundaries = sorted({rect.y0 for rect in rects} | {rect.y1 for rect in rects})
+    boundaries = sorted({rect.span_y0 for rect in rects} | {rect.span_y1 for rect in rects})
     bands: list[tuple[float, float, list[tuple[float, float]]]] = []
     for band_y0, band_y1 in zip(boundaries, boundaries[1:], strict=False):
         if band_y1 <= band_y0:
@@ -685,7 +841,7 @@ def _segment_bands(
         crossing = [
             (rect.x_bin_start * bin_width_x, (rect.x_bin_end + 1) * bin_width_x)
             for rect in rects
-            if rect.y0 <= band_y0 and rect.y1 >= band_y1
+            if rect.span_y0 <= band_y0 and rect.span_y1 >= band_y1
         ]
         if not crossing:
             continue
@@ -703,7 +859,7 @@ def _process_page(
     min_flanking_groups: int,
     min_flanking_chars: float,
     min_gutter_lines: float,
-) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+) -> tuple[list[dict[str, object]], list[dict[str, object]], list[dict[str, object]]]:
     page = document.load_page(page_index)
     if page.rotation != 0 or page.mediabox != page.cropbox:
         # Stessa precondizione degli altri script diagnostici: una pagina
@@ -712,7 +868,7 @@ def _process_page(
             f"rotation/cropbox precondition failed su p.{page_index + 1}, saltata",
             file=sys.stderr,
         )
-        return [], []
+        return [], [], []
 
     capture = capture_pymupdf_page(
         page,
@@ -728,7 +884,7 @@ def _process_page(
         primitive_page.text_primitives, page_width=page_width, page_height=page_height
     )
     if not groups:
-        return [], []
+        return [], [], []
 
     grid, _n_x_bins, _n_y_bins = _build_gap_grid(
         groups,
@@ -738,6 +894,8 @@ def _process_page(
         bin_height_y=bin_height_y,
     )
     rects = _chain_gutters(grid, bin_height_y=bin_height_y)
+    for rect in rects:
+        _extend_gutter_span(grid, rect, bin_height_y=bin_height_y)
     rects.sort(key=lambda r: (r.y1 - r.y0), reverse=True)
 
     rotated_groups = _rotated_group_ids(groups, primitive_page.text_primitives)
@@ -814,6 +972,11 @@ def _process_page(
         is None
     ]
 
+    tree_rows = _segment_tree(separating, bin_width_x=bin_width_x, page_width=page_width)
+    for row in tree_rows:
+        row["manual"] = manual
+        row["page"] = page_label
+
     band_rows: list[dict[str, object]] = []
     for band_index, (band_y0, band_y1, crossing) in enumerate(
         _segment_bands(separating, bin_width_x=bin_width_x)
@@ -831,7 +994,7 @@ def _process_page(
             }
         )
 
-    return gutter_rows, band_rows
+    return gutter_rows, band_rows, tree_rows
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
@@ -841,10 +1004,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output", type=Path, help="Write CSV here instead of stdout.")
     parser.add_argument(
         "--emit",
-        choices=("bands", "gutters"),
+        choices=("bands", "gutters", "tree"),
         default="bands",
-        help="bands: la segmentazione ricavata. gutters: i candidati gutter grezzi, "
-        "ordinati per estensione y, senza alcun filtro. Default: bands.",
+        help="bands: la segmentazione a fasce y globali (difettosa, v. docstring). "
+        "gutters: i candidati grezzi senza filtro. tree: la segmentazione GERARCHICA, "
+        "con estensione x esplicita e sotto-bande. Default: bands.",
     )
     parser.add_argument(
         "--min-flanking-chars",
@@ -885,6 +1049,7 @@ def main(argv: list[str] | None = None) -> int:
 
     all_gutters: list[dict[str, object]] = []
     all_bands: list[dict[str, object]] = []
+    all_tree: list[dict[str, object]] = []
 
     with fitz.open(pdf_path) as document:
         page_indices = (
@@ -895,7 +1060,7 @@ def main(argv: list[str] | None = None) -> int:
             if page_index < 0 or page_index >= document.page_count:
                 print(f"pagina fuori range: {page_index + 1}", file=sys.stderr)
                 return 1
-            gutter_rows, band_rows = _process_page(
+            gutter_rows, band_rows, tree_rows = _process_page(
                 document,
                 page_index,
                 manual=pdf_path.name,
@@ -907,9 +1072,12 @@ def main(argv: list[str] | None = None) -> int:
             )
             all_gutters.extend(gutter_rows)
             all_bands.extend(band_rows)
+            all_tree.extend(tree_rows)
 
-    rows = all_gutters if args.emit == "gutters" else all_bands
-    fieldnames = _GUTTER_FIELDNAMES if args.emit == "gutters" else _BAND_FIELDNAMES
+    rows = {"gutters": all_gutters, "tree": all_tree}.get(args.emit, all_bands)
+    fieldnames = {"gutters": _GUTTER_FIELDNAMES, "tree": _TREE_FIELDNAMES}.get(
+        args.emit, _BAND_FIELDNAMES
+    )
 
     handle: TextIO
     if args.output is not None:

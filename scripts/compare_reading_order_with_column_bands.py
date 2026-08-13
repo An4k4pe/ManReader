@@ -59,6 +59,105 @@ from primitive_normalizer import normalize_backend_page_capture  # noqa: E402
 from pymupdf_capture import capture_pymupdf_page  # noqa: E402
 
 
+def _tree_aware_order(
+    text_primitives: list[TextPrimitive], tree: list[dict[str, object]]
+) -> tuple[list[tuple[TextPrimitive, int]], int]:
+    """Ordina usando l'albero di bande: ogni primitiva va alla banda PIU'
+    PROFONDA che la contiene, non alla prima.
+
+    E' la differenza che rende sicura l'estensione delle bande. Con le bande
+    piatte una banda estesa si prendeva ogni primitiva e svuotava le altre
+    (misurato su 7 pagine dalla revisione architetturale); qui una banda figlia
+    vince sempre sul padre, quindi il padre puo' estendersi quanto serve senza
+    rubare niente a nessuno."""
+
+    rows = {int(cast(int, r["band_id"])): r for r in tree}
+    children: dict[int, list[int]] = {}
+    roots: list[int] = []
+    for band_id, row in rows.items():
+        parent = row.get("parent_id")
+        if parent in ("", None):
+            roots.append(band_id)
+        else:
+            children.setdefault(int(cast(int, parent)), []).append(band_id)
+
+    def contains(band_id: int, primitive: TextPrimitive) -> bool:
+        row = rows[band_id]
+        cx = (primitive.bbox[0] + primitive.bbox[2]) / 2.0
+        cy = (primitive.bbox[1] + primitive.bbox[3]) / 2.0
+        return (
+            float(cast(float, row["x0"])) <= cx < float(cast(float, row["x1"]))
+            and float(cast(float, row["y0"])) <= cy < float(cast(float, row["y1"]))
+        )
+
+    owner: dict[int, int | None] = {}
+    for index, primitive in enumerate(text_primitives):
+        best: int | None = None
+        best_depth = -1
+        for band_id, row in rows.items():
+            if contains(band_id, primitive) and int(cast(int, row["depth"])) > best_depth:
+                best, best_depth = band_id, int(cast(int, row["depth"]))
+        owner[index] = best
+
+    ordered: list[tuple[TextPrimitive, int]] = []
+    group = [0]
+    inside = [0]
+
+    def gutters_of(band_id: int) -> list[tuple[float, float]]:
+        out: list[tuple[float, float]] = []
+        for chunk in str(rows[band_id].get("gutter_x_intervals") or "").split():
+            start, _, end = chunk.partition("-")
+            try:
+                out.append((float(start), float(end)))
+            except ValueError:
+                continue
+        return sorted(out)
+
+    def emit_band(band_id: int) -> None:
+        row = rows[band_id]
+        bounds = (
+            [float(cast(float, row["x0"]))]
+            + [edge for pair in gutters_of(band_id) for edge in pair]
+            + [float(cast(float, row["x1"]))]
+        )
+        own = [text_primitives[i] for i, b in owner.items() if b == band_id]
+        for index in range(0, len(bounds) - 1, 2):
+            col_x0, col_x1 = bounds[index], bounds[index + 1]
+            group[0] += 1
+            here: list[tuple[float, int, object]] = []
+            for primitive in own:
+                cx = (primitive.bbox[0] + primitive.bbox[2]) / 2.0
+                if col_x0 <= cx < col_x1:
+                    here.append((primitive.bbox[1], 1, primitive))
+                    inside[0] += 1
+            for child in children.get(band_id, []):
+                crow = rows[child]
+                if col_x0 <= float(cast(float, crow["x0"])) and float(cast(float, crow["x1"])) <= col_x1:
+                    here.append((float(cast(float, crow["y0"])), 0, child))
+            here.sort(key=lambda item: (item[0], item[1]))
+            for _y, kind, payload in here:
+                if kind == 1:
+                    ordered.append((cast(TextPrimitive, payload), group[0]))
+                else:
+                    emit_band(cast(int, payload))
+                    group[0] += 1
+
+    entries: list[tuple[float, int, object]] = []
+    for band_id in roots:
+        entries.append((float(cast(float, rows[band_id]["y0"])), 0, band_id))
+    for index, primitive in enumerate(text_primitives):
+        if owner[index] is None:
+            entries.append((primitive.bbox[1], 1, primitive))
+    entries.sort(key=lambda item: (item[0], item[1]))
+    for _y, kind, payload in entries:
+        if kind == 1:
+            ordered.append((cast(TextPrimitive, payload), group[0]))
+        else:
+            emit_band(cast(int, payload))
+            group[0] += 1
+    return ordered, inside[0]
+
+
 def _baseline_order(text_primitives: list[TextPrimitive]) -> list[TextPrimitive]:
     """Copia invariata di `prototype_vertical_slice_page.py:219-220`."""
 
@@ -309,6 +408,12 @@ def build_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument(
+        "--use-tree",
+        action="store_true",
+        help="Usa la segmentazione GERARCHICA e assegna ogni primitiva alla banda piu' "
+        "profonda che la contiene, invece delle bande a fasce y e della prima banda.",
+    )
+    parser.add_argument(
         "--widen-bands",
         action="store_true",
         help="Estende ogni banda a un gutter finche' il corridoio resta libero da testo. "
@@ -341,7 +446,7 @@ def main(argv: list[str] | None = None) -> int:
         if not 0 <= page_index < document.page_count:
             print(f"pagina fuori range: {args.page}", file=sys.stderr)
             return 1
-        _gutters, bands = _process_page(
+        _gutters, bands, tree = _process_page(
             document,
             page_index,
             manual=pdf_path.name,
@@ -369,9 +474,12 @@ def main(argv: list[str] | None = None) -> int:
     ]
     heights = sorted(p.bbox[3] - p.bbox[1] for p in primitives if p.bbox[3] > p.bbox[1])
     line_height = heights[len(heights) // 2] if heights else 0.0
-    band_aware, inside = _band_aware_order(
-        primitives, bands, widen=args.widen_bands, visuals=visuals, line_height=line_height
-    )
+    if args.use_tree:
+        band_aware, inside = _tree_aware_order(primitives, tree)
+    else:
+        band_aware, inside = _band_aware_order(
+            primitives, bands, widen=args.widen_bands, visuals=visuals, line_height=line_height
+        )
 
     (output_dir / "order_baseline.md").write_text(_render(baseline), encoding="utf-8")
     (output_dir / "order_with_column_bands.md").write_text(_render(band_aware), encoding="utf-8")
