@@ -74,8 +74,71 @@ def _column_of(primitive: TextPrimitive, gutters: list[tuple[float, float]]) -> 
     return sum(1 for _, gap_end in gutters if center >= gap_end)
 
 
+def _widen_band_over_visuals(
+    band: tuple[float, float, list[tuple[float, float]]],
+    text_primitives: list[TextPrimitive],
+) -> tuple[float, float, list[tuple[float, float]]]:
+    """Estende verticalmente una banda a UNA sola colonna di stacco, finche' il
+    corridoio del gutter resta libero da testo.
+
+    Perche' serve, misurato su DrW p.97: la banda si ferma dove una delle due
+    colonne smette di avere TESTO, ma li' la colonna non e' finita -- e'
+    occupata da un'immagine (x 57-299, y 45-386). Il producer non puo'
+    accorgersene, perche' un gutter richiede testo da entrambe le parti; il
+    consumer si', perche' vede tutta la pagina. E' l'invariante di
+    `AGENTS.MD` §Layout e candidati applicato: la combinazione fra regioni di
+    producer diversi si fa qui, non dentro il producer.
+
+    Il corridoio viene RISTRETTO al piu' largo sotto-intervallo che nessuna
+    primitiva di testo attraversa -- stesso principio di `_largest_free_run`
+    nel producer. Su DrW p.97 il gutter dichiarato e' x 299-323 ma sei righe
+    della colonna destra cominciano a 313; ristretto a 299-313 il corridoio e'
+    libero sull'intera pagina e la banda si estende da y 46 a 761 invece che
+    396-652.
+
+    Limite dichiarato: si applica solo alle bande con UN gutter. Le bande a piu'
+    colonne restano invariate -- estenderle richiederebbe restringere piu'
+    corridoi insieme, non misurato."""
+
+    y0, y1, gutters = band
+    if len(gutters) != 1:
+        return band
+    gap_start, gap_end = gutters[0]
+
+    crossing = [
+        p for p in text_primitives if p.bbox[0] < gap_end and p.bbox[2] > gap_start
+    ]
+    while crossing and gap_end - gap_start > 1.0:
+        # Restringe dal lato da cui il testo sborda di meno.
+        left_push = max((p.bbox[2] for p in crossing if p.bbox[2] <= (gap_start + gap_end) / 2), default=None)
+        right_push = min((p.bbox[0] for p in crossing if p.bbox[0] > (gap_start + gap_end) / 2), default=None)
+        if left_push is not None and (right_push is None or left_push - gap_start <= gap_end - right_push):
+            gap_start = left_push
+        elif right_push is not None:
+            gap_end = right_push
+        else:
+            return band
+        crossing = [
+            p for p in text_primitives if p.bbox[0] < gap_end and p.bbox[2] > gap_start
+        ]
+    if crossing:
+        return band
+
+    flanking = [p for p in text_primitives if p.bbox[2] <= gap_start or p.bbox[0] >= gap_end]
+    if not flanking:
+        return band
+    return (
+        min(y0, min(p.bbox[1] for p in flanking)),
+        max(y1, max(p.bbox[3] for p in flanking)),
+        [(gap_start, gap_end)],
+    )
+
+
 def _band_aware_order(
-    text_primitives: list[TextPrimitive], bands: list[dict[str, object]]
+    text_primitives: list[TextPrimitive],
+    bands: list[dict[str, object]],
+    *,
+    widen: bool = False,
 ) -> tuple[list[tuple[TextPrimitive, int]], int]:
     """Ordine a bande. Restituisce (primitiva, id_colonna) dove id_colonna
     cambia a ogni cambio di colonna o di banda, cosi' il renderer sa dove
@@ -93,6 +156,8 @@ def _band_aware_order(
             except ValueError:
                 continue
         parsed.append((float(cast(float, band["y0"])), float(cast(float, band["y1"])), sorted(intervals)))
+    if widen:
+        parsed = [_widen_band_over_visuals(band, text_primitives) for band in parsed]
     parsed.sort()
 
     assigned: dict[int, list[TextPrimitive]] = {}
@@ -176,6 +241,13 @@ def build_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument(
+        "--widen-bands",
+        action="store_true",
+        help="Estende ogni banda a un gutter finche' il corridoio resta libero da testo. "
+        "Recupera le colonne in cui una delle due e' occupata da un'immagine invece che "
+        "da testo -- combinazione fra regioni, quindi lavoro del consumer e non del producer.",
+    )
+    parser.add_argument(
         "--min-flanking-chars",
         type=float,
         default=5.0,
@@ -223,7 +295,7 @@ def main(argv: list[str] | None = None) -> int:
     primitives = list(primitive_page.text_primitives)
 
     baseline = [(p, 0) for p in _baseline_order(primitives)]
-    band_aware, inside = _band_aware_order(primitives, bands)
+    band_aware, inside = _band_aware_order(primitives, bands, widen=args.widen_bands)
 
     (output_dir / "order_baseline.md").write_text(_render(baseline), encoding="utf-8")
     (output_dir / "order_with_column_bands.md").write_text(_render(band_aware), encoding="utf-8")
