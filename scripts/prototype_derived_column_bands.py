@@ -736,13 +736,45 @@ def _extend_gutter_span(
     estesa svuotava le altre. Con l'albero il pericolo non c'e': l'assegnazione
     va alla banda piu' profonda."""
 
-    core = range(rect.x_bin_start, rect.x_bin_end + 1)
+    start, end = rect.x_bin_start, rect.x_bin_end
+
+    def free_row(row: bytearray, lo: int, hi: int) -> tuple[int, int] | None:
+        """Il nucleo sopravvive se resta un tratto contiguo non coperto. Stesso
+        principio di `_largest_free_run` durante l'incatenamento: si restringe,
+        non si chiude. Su DrW p.97 il nucleo fissato sull'estensione probatoria
+        e' 299-323, ma sei righe della colonna destra cominciano a 313; senza
+        restringimento l'estensione si ferma a y 378 e lascia fuori 64
+        primitive su 171, mentre il corridoio 299-313 e' libero su tutta la
+        pagina."""
+
+        best: tuple[int, int] | None = None
+        run: int | None = None
+        for x in range(lo, hi + 2):
+            covered = x > hi or row[x] == _COVERED
+            if not covered and run is None:
+                run = x
+            elif covered and run is not None:
+                if best is None or (x - run) > (best[1] - best[0] + 1):
+                    best = (run, x - 1)
+                run = None
+        return best
+
     top = max(0, int(rect.y0 / bin_height_y))
-    while top > 0 and all(grid[top - 1][x] != _COVERED for x in core):
+    while top > 0:
+        survivor = free_row(grid[top - 1], start, end)
+        if survivor is None:
+            break
+        start, end = survivor
         top -= 1
     bottom = min(len(grid), int(rect.y1 / bin_height_y))
-    while bottom < len(grid) and all(grid[bottom][x] != _COVERED for x in core):
+    while bottom < len(grid):
+        survivor = free_row(grid[bottom], start, end)
+        if survivor is None:
+            break
+        start, end = survivor
         bottom += 1
+
+    rect.x_bin_start, rect.x_bin_end = start, end
     rect.span_y0 = top * bin_height_y
     rect.span_y1 = bottom * bin_height_y
 
