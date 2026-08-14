@@ -6,8 +6,15 @@ si legge".
 
 Cosa cambia fra i due output, e nient'altro: l'ORDINAMENTO delle TextPrimitive.
 
-  baseline   `(y0, x0)` -- identico a `prototype_vertical_slice_page.py:219-220`,
-             copiato qui invariato perche' il confronto sia equo.
+  baseline        `(y0, x0)` -- identico a
+                  `prototype_vertical_slice_page.py:219-220`, copiato invariato:
+                  e' cio' che la pipeline fa OGGI, non un confronto equo.
+  baseline_lines  la stessa, con la sola correzione dell'ordinamento per riga
+                  visiva e NESSUNA banda. E' il termine di paragone equo: il
+                  guadagno del ramo a bande va misurato contro questa, altrimenti
+                  gli si attribuisce anche il merito della correzione di riga --
+                  su DIE p.127 l'85% delle primitive cambia posizione per quella
+                  sola.
   a bande    dentro ogni banda di `prototype_derived_column_bands.py` le
              primitive sono divise in colonne dai gutter e ogni colonna viene
              emessa per intero prima della successiva; fuori dalle bande resta
@@ -529,6 +536,13 @@ def main(argv: list[str] | None = None) -> int:
     primitives = list(primitive_page.text_primitives)
 
     baseline = [(p, 0) for p in _baseline_order(primitives)]
+    # Terza uscita: la baseline CON la sola correzione per riga visiva, senza
+    # bande. Serve ad attribuire il guadagno alla causa giusta. Confrontare il
+    # ramo a bande (che ha la correzione) con la baseline grezza (che non ce
+    # l'ha) misura le due cose insieme e le attribuisce entrambe a
+    # `column_band`: su DIE p.127 l'85% delle primitive cambia posizione per la
+    # sola correzione di riga. Rilievo di Chat B, verificato.
+    baseline_lines = [(p, 0) for p in _by_visual_line(primitives)]
     visuals = [
         (p.bbox[0], p.bbox[1], p.bbox[2], p.bbox[3])
         for p in list(primitive_page.image_primitives) + list(primitive_page.drawing_primitives)
@@ -543,6 +557,9 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     (output_dir / "order_baseline.md").write_text(_render(baseline), encoding="utf-8")
+    (output_dir / "order_baseline_lines.md").write_text(
+        _render(baseline_lines), encoding="utf-8"
+    )
     (output_dir / "order_with_column_bands.md").write_text(_render(band_aware), encoding="utf-8")
 
     base_chars = sum(len((p.text or "").strip()) for p, _ in baseline)

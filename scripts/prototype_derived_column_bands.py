@@ -196,7 +196,7 @@ _DEFAULT_BIN_HEIGHT_Y = 2.0
 _DEFAULT_MIN_FLANKING_GROUPS = 2
 _DEFAULT_MIN_FLANKING_CHARS = 5
 _DEFAULT_MIN_GUTTER_LINES = 3.0
-_DEFAULT_MIN_COLUMN_CHARS = 15.0
+_DEFAULT_MIN_COLUMN_CHARS = 10.0
 _AVERAGE_CHAR_WIDTH_RATIO = 0.5
 
 _COVERED = 0
@@ -480,6 +480,14 @@ def _reject_reason(
                             e' l'interlinea misurata, non una costante in pt.
     """
 
+    # NOTA, misurata da Chat B e verificata: questo criterio non scarta MAI in
+    # esclusiva. Le righe "wordy" sono un sottoinsieme di quelle contate qui e
+    # usano lo stesso N, quindi `too_few_lines` implica sempre
+    # `too_few_wordy_lines`: 0 scarti esclusivi su 19.939 gutter. Resta come
+    # ETICHETTA, perche' distingue "zero righe da un lato" da "righe senza
+    # parole" ed e' materiale per i producer a valle, ma non decide nulla.
+    # Chi crede che sia questo a imporre "una colonna ha piu' di una riga" si
+    # sbaglia: e' `too_short`, che misura la stessa cosa in righe di pagina.
     if profile.minimum < min_flanking_groups:
         return "too_few_lines"
     if profile.wordy_minimum < min_flanking_groups:
@@ -825,7 +833,14 @@ def _segment_tree(
     # E' un criterio di BANDA, non di gutter: ha senso solo dentro un contesto x,
     # e infatti prima della gerarchia non era calcolabile. Misurato sulle ancore:
     # le colonne vere stanno fra 40 e 78 caratteri, la linguetta di capitolo di
-    # Fab p.139 a 8. Il default 15 sta nel vuoto, dalla parte conservativa.
+    # Fab p.139 a 8. Il default era 15 e una versione precedente di questo
+    # commento lo diceva "dalla parte conservativa": rovesciato. Misurato sul
+    # corpus da Chat B: 18 colonne VERE stanno fra 15,0 e 16,0 caratteri, quindi
+    # 15 ha margine zero verso l'alto, e l'errore che produce e' un falso
+    # negativo -- quello che nessun livello a valle recupera. Inoltre il modo
+    # basso viene quasi tutto da un solo manuale (159 casi su 162 da Fab, la sua
+    # linguetta). Portato a 10: le ancore restano identiche e il corpus perde 3
+    # casi su 11.846.
     min_column_width = (
         min_column_chars * font_size * _AVERAGE_CHAR_WIDTH_RATIO if font_size > 0 else 0.0
     )
