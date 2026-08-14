@@ -59,6 +59,49 @@ from primitive_normalizer import normalize_backend_page_capture  # noqa: E402
 from pymupdf_capture import capture_pymupdf_page  # noqa: E402
 
 
+def _by_visual_line(primitives: list[TextPrimitive]) -> list[TextPrimitive]:
+    """Ordina raggruppando prima in righe visive, poi per x dentro la riga.
+
+    Ordinare per `(y0, x0)` sembra corretto e non lo e': gli span di una stessa
+    riga tipografica hanno y leggermente diverse (corsivo, grassetto, corpo
+    diverso) e finiscono in ordine sbagliato. Misurato su Dag p.48: sette span
+    della stessa riga con y fra 410,89 e 411,01 -- 0,12pt di differenza --
+    uscivano come "' spendere una Speranza il vostro Focus , potete ." invece di
+    "il vostro Focus, potete spendere una Speranza. Se l'attacco ha".
+
+    Due span appartengono alla stessa riga se le loro y si sovrappongono. Il
+    difetto e' del consumer e riguarda anche la baseline `(y0, x0)` copiata
+    dalla fetta verticale: non c'entra `column_band`."""
+
+    return [p for line in _group_visual_lines(primitives) for p in line]
+
+
+def _group_visual_lines(primitives: list[TextPrimitive]) -> list[list[TextPrimitive]]:
+    """Le righe visive come unita', ciascuna gia' ordinata per x. Serve dove la
+    riga deve restare indivisa: mescolare le primitive con altri elementi e poi
+    riordinare per y disferebbe l'ordine appena messo."""
+
+    def same_line(a: TextPrimitive, b: TextPrimitive) -> bool:
+        a_mid = (a.bbox[1] + a.bbox[3]) / 2.0
+        b_mid = (b.bbox[1] + b.bbox[3]) / 2.0
+        return (b.bbox[1] <= a_mid < b.bbox[3]) or (a.bbox[1] <= b_mid < a.bbox[3])
+
+    remaining = sorted(primitives, key=lambda p: (p.bbox[1], p.bbox[0]))
+    lines: list[list[TextPrimitive]] = []
+    while remaining:
+        first = remaining[0]
+        line = [first]
+        rest: list[TextPrimitive] = []
+        for candidate in remaining[1:]:
+            if same_line(first, candidate):
+                line.append(candidate)
+            else:
+                rest.append(candidate)
+        lines.append(sorted(line, key=lambda p: p.bbox[0]))
+        remaining = rest
+    return lines
+
+
 def _tree_aware_order(
     text_primitives: list[TextPrimitive], tree: list[dict[str, object]]
 ) -> tuple[list[tuple[TextPrimitive, int]], int]:
@@ -125,15 +168,28 @@ def _tree_aware_order(
             col_x0, col_x1 = bounds[index], bounds[index + 1]
             group[0] += 1
             here: list[tuple[float, int, object]] = []
-            for primitive in own:
-                cx = (primitive.bbox[0] + primitive.bbox[2]) / 2.0
-                if col_x0 <= cx < col_x1:
-                    here.append((primitive.bbox[1], 1, primitive))
-                    inside[0] += 1
+            in_column = [
+                primitive
+                for primitive in own
+                if col_x0 <= (primitive.bbox[0] + primitive.bbox[2]) / 2.0 < col_x1
+            ]
+            inside[0] += len(in_column)
+            # L'indice nella sequenza per riga visiva diventa la chiave di
+            # ordinamento, cosi' gli span di una stessa riga restano in ordine
+            # di x anche quando le loro y differiscono di frazioni di punto.
+            for position, primitive in enumerate(_by_visual_line(in_column)):
+                here.append((float(position), 1, primitive))
+            ordered_in_column = [item for item in here]
             for child in children.get(band_id, []):
                 crow = rows[child]
                 if col_x0 <= float(cast(float, crow["x0"])) and float(cast(float, crow["x1"])) <= col_x1:
-                    here.append((float(cast(float, crow["y0"])), 0, child))
+                    # Il figlio si inserisce dove cadono le primitive alla sua y.
+                    before = sum(
+                        1
+                        for _pos, _kind, prim in ordered_in_column
+                        if cast(TextPrimitive, prim).bbox[1] < float(cast(float, crow["y0"]))
+                    )
+                    here.append((before - 0.5, 0, child))
             here.sort(key=lambda item: (item[0], item[1]))
             for _y, kind, payload in here:
                 if kind == 1:
@@ -142,16 +198,21 @@ def _tree_aware_order(
                     emit_band(cast(int, payload))
                     group[0] += 1
 
+    # Anche le primitive fuori da ogni banda vanno raggruppate in righe visive:
+    # senza, una pagina che non produce bande (BoB p.417, tre blocchi di prosa a
+    # colonna unica) esce con gli span della stessa riga in ordine di y invece
+    # che di x, e i grassetti finiscono attaccati fra loro.
+    loose = [text_primitives[i] for i, b in owner.items() if b is None]
     entries: list[tuple[float, int, object]] = []
     for band_id in roots:
         entries.append((float(cast(float, rows[band_id]["y0"])), 0, band_id))
-    for index, primitive in enumerate(text_primitives):
-        if owner[index] is None:
-            entries.append((primitive.bbox[1], 1, primitive))
+    for line in _group_visual_lines(loose):
+        entries.append((min(p.bbox[1] for p in line), 1, line))
     entries.sort(key=lambda item: (item[0], item[1]))
     for _y, kind, payload in entries:
         if kind == 1:
-            ordered.append((cast(TextPrimitive, payload), group[0]))
+            for primitive in cast(list, payload):
+                ordered.append((primitive, group[0]))
         else:
             emit_band(cast(int, payload))
             group[0] += 1
