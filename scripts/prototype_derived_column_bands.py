@@ -194,7 +194,7 @@ _DEFAULT_BIN_WIDTH_X = 1.0
 _DEFAULT_BIN_HEIGHT_Y = 2.0
 
 _DEFAULT_MIN_FLANKING_GROUPS = 2
-_DEFAULT_MIN_FLANKING_CHARS = 4
+_DEFAULT_MIN_FLANKING_CHARS = 5
 _DEFAULT_MIN_GUTTER_LINES = 3.0
 _DEFAULT_MIN_COLUMN_CHARS = 10.0
 _AVERAGE_CHAR_WIDTH_RATIO = 0.5
@@ -1169,15 +1169,20 @@ def build_argument_parser() -> argparse.ArgumentParser:
         default=_DEFAULT_MIN_FLANKING_CHARS,
         help="Caratteri richiesti perche' una riga conti come portatrice di parole. Vincolo "
         "tipografico, non geometrico: non si va a capo dopo una lettera o un articolo. "
-        "Default: 4. Storia, perche' e' istruttiva: era 5; la revisione propose 2 misurando "
-        "sulle sue sei ancore; M=2 rompe Lan p.84 (tabella 1d20, i numeri a due cifre "
-        "contano come righe con parole e la colonna dei numeri diventa una banda) e fu "
-        "portato a 3 dichiarando che 3, 4 e 5 fossero identici 'su tutte e sedici' -- vero "
-        "sulle ancore di sviluppo, FALSO sulle sedici del campione cieco: M=3 rompe "
-        "Vil p.223 nello stesso identico modo, e con esso circa dodici pagine del bestiario "
-        "Vil che ripetono la stessa tabella di dadi. 4 e' il primo valore che rifiuta "
-        "entrambi. Non e' un valore verificato: e' il pavimento sui casi guardati finora, "
-        "e i gutter che 4 e 5 separano non sono stati ispezionati.",
+        "Default: 5, dopo un giro completo 5 -> 2 -> 3 -> 4 -> 5. La storia vale piu' del "
+        "valore. La revisione propose 2 misurando sulle sue sei ancore; 2 rompe Lan p.84, "
+        "tabella 1d20. Portato a 3 dichiarando 3/4/5 identici 'su tutte e sedici': vero "
+        "sulle ancore di sviluppo, falso sulle sedici cieche, dove 3 rompe Vil p.223 e con "
+        "essa dodici pagine del bestiario. Portato a 4, e le undici pagine che 4 aggiunge "
+        "rispetto a 5 sono state ISPEZIONATE A VISTA dall'utente: Vil p.149 e' una timeline "
+        "con i numeri a sinistra e non due colonne, Dag p.117 prende UNA colonna di una "
+        "tabella e non le sorelle, Fab p.188 separa colonne di elenchi. Nessun recupero "
+        "utile. CONCLUSIONE, che non e' una taratura: il criterio NON discrimina la classe "
+        "giusta -- una soglia che accetta una colonna di tabella e ne rifiuta le sorelle non "
+        "sta misurando la proprieta' che crede, e i casi che 4 aggiunge stanno dallo stesso "
+        "lato di quelli che tiene pur essendo cose opposte. Tornato a 5, il valore piu' "
+        "conservativo fra quelli che non rompono nulla di noto; la distinzione "
+        "numeri-di-tabella contro colonne-di-prosa resta a chi ha gli strumenti per farla.",
     )
     parser.add_argument(
         "--min-gutter-lines",

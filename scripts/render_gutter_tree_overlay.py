@@ -43,12 +43,17 @@ SCRIPTS_DIR = PROJECT_ROOT / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
-from prototype_derived_column_bands import _process_page  # noqa: E402
+from prototype_derived_column_bands import (  # noqa: E402
+    _DEFAULT_MIN_FLANKING_CHARS,
+    _process_page,
+)
 
 _ACCEPTED = (0.0, 0.65, 0.0)
 _REJECTED = (0.85, 0.1, 0.1)
 _BAND = (0.0, 0.25, 0.9)
 _SUBBAND = (0.95, 0.5, 0.0)
+_ADDED = (0.85, 0.0, 0.85)
+_MIN_DRAWN_WIDTH = 4.0
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
@@ -62,6 +67,20 @@ def build_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--zoom", type=float, default=2.0)
+    parser.add_argument(
+        "--compare-chars",
+        type=float,
+        default=None,
+        help="Ricalcola i gutter anche con questo --min-flanking-chars e disegna in MAGENTA "
+        "quelli presenti con il valore corrente ma assenti con questo. Serve a vedere cosa "
+        "aggiunge una soglia rispetto a un'altra.",
+    )
+    parser.add_argument(
+        "--min-flanking-chars",
+        type=float,
+        default=None,
+        help="Passato al meccanismo. Default: quello del meccanismo.",
+    )
     parser.add_argument(
         "--hide-rejected",
         action="store_true",
@@ -82,16 +101,38 @@ def main(argv: list[str] | None = None) -> int:
         if not 0 <= page_index < document.page_count:
             print(f"pagina fuori range: {args.page}", file=sys.stderr)
             return 1
-        gutters, _bands, tree = _process_page(
-            document,
-            page_index,
-            manual=pdf_path.name,
-            bin_width_x=1.0,
-            bin_height_y=2.0,
-            min_flanking_groups=2,
-            min_flanking_chars=5.0,
-            min_gutter_lines=3.0,
-        )
+        kwargs = {
+            "manual": pdf_path.name,
+            "bin_width_x": 1.0,
+            "bin_height_y": 2.0,
+            "min_flanking_groups": 2,
+            "min_gutter_lines": 3.0,
+            "min_flanking_chars": (
+                args.min_flanking_chars
+                if args.min_flanking_chars is not None
+                else float(_DEFAULT_MIN_FLANKING_CHARS)
+            ),
+        }
+        gutters, _bands, tree = _process_page(document, page_index, **kwargs)
+
+        # Gutter presenti ora e assenti con la soglia di confronto: sono cio' che
+        # la soglia corrente AGGIUNGE, ed e' la sola cosa da guardare quando si
+        # decide fra due valori.
+        added: set[tuple[float, float]] = set()
+        if args.compare_chars is not None:
+            other_kwargs = dict(kwargs)
+            other_kwargs["min_flanking_chars"] = args.compare_chars
+            other_gutters, _ob, _ot = _process_page(document, page_index, **other_kwargs)
+            other_keys = {
+                (float(cast(float, r["x0"])), float(cast(float, r["x1"])))
+                for r in other_gutters
+                if not r["reject_reason"]
+            }
+            added = {
+                (float(cast(float, r["x0"])), float(cast(float, r["x1"])))
+                for r in gutters
+                if not r["reject_reason"]
+            } - other_keys
         page = document.load_page(page_index)
 
         for row in gutters:
@@ -104,7 +145,18 @@ def main(argv: list[str] | None = None) -> int:
                 float(cast(float, row["x1"])),
                 float(cast(float, row["y1"])),
             )
-            colour = _REJECTED if rejected else _ACCEPTED
+            key = (float(cast(float, row["x0"])), float(cast(float, row["x1"])))
+            if rejected:
+                colour = _REJECTED
+            elif key in added:
+                colour = _ADDED
+            else:
+                colour = _ACCEPTED
+            # I gutter sottili sono invisibili a schermo: si allargano solo per il
+            # disegno, simmetricamente, senza toccare il dato.
+            if rect.width < _MIN_DRAWN_WIDTH:
+                pad = (_MIN_DRAWN_WIDTH - rect.width) / 2.0
+                rect = fitz.Rect(rect.x0 - pad, rect.y0, rect.x1 + pad, rect.y1)
             annotation = page.draw_rect(rect, color=colour, fill=colour, fill_opacity=0.30, width=0.4)
             del annotation
             if rejected:
