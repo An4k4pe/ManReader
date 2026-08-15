@@ -140,13 +140,35 @@ def _tree_aware_order(
             and float(cast(float, row["y0"])) <= cy < float(cast(float, row["y1"]))
         )
 
+    # Quale livello vince, quando piu' bande contengono la stessa primitiva.
+    #
+    # "La piu' profonda" era la regola originale, introdotta per impedire che una
+    # banda estesa svuotasse le figlie. E' sbagliata quasi sempre, e l'argomento
+    # e' dell'utente: in prosa un annidamento profondo non ha ragione di esistere
+    # (se compare e' spurio, e il gutter esterno E' il separatore); in una tabella
+    # l'annidamento e' reale ma l'ordine di lettura corretto resta per righe,
+    # quindi serve comunque il livello esterno. In entrambi i casi vince l'esterna.
+    #
+    # Non e' possibile distinguere i due casi chiedendolo a `table_candidate`:
+    # quel producer emette candidati anche sulle pagine di prosa (Dag p.140 e
+    # DrW p.97, due colonne senza annidamento, ne producono 2 ciascuna), ed e' il
+    # problema del tasso di base gia' registrato in Milestone 35. La regola
+    # "vince l'esterna" ha il pregio di non aver bisogno di quella distinzione.
+    #
+    # Costo dichiarato: una colonna che ne contiene altre e NON e' una tabella --
+    # un riquadro a due sotto-colonne dentro una colonna -- viene letta riga per
+    # riga e le sue sotto-colonne si interlacciano. Caso raro e non misurato.
+    outermost = True
     owner: dict[int, int | None] = {}
     for index, primitive in enumerate(text_primitives):
         best: int | None = None
         best_depth = -1
         for band_id, row in rows.items():
-            if contains(band_id, primitive) and int(cast(int, row["depth"])) > best_depth:
-                best, best_depth = band_id, int(cast(int, row["depth"]))
+            depth_here = int(cast(int, row["depth"]))
+            if not contains(band_id, primitive):
+                continue
+            if best is None or (depth_here < best_depth if outermost else depth_here > best_depth):
+                best, best_depth = band_id, depth_here
         owner[index] = best
 
     ordered: list[tuple[TextPrimitive, int]] = []
