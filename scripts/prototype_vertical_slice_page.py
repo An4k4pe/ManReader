@@ -294,6 +294,151 @@ def _build_markdown_body(
     return "\n\n".join(lines) + "\n"
 
 
+def _corridor_blockers(
+    *,
+    primitive_page: NormalizedPrimitivePage,
+    analyses: tuple[PageAnalysis, ...],
+) -> list[tuple[float, float, float, float]]:
+    """Cio' che puo' interrompere un corridoio, come bbox (x0, y0, x1, y1).
+
+    Criterio_InterruzioneCorridoio_v1.md §2. Qui si RACCOGLIE soltanto; se una
+    di queste cose attraversi davvero un dato gutter lo decide
+    ``_split_bands_at_crossings``, perche' dipende dall'intervallo x di quel
+    gutter.
+
+    Tre sorgenti e una esclusione:
+
+    - i candidati ``layout.embedded_visual``, cioe' il producer che dice dove
+      sono le figure, con le soglie ratificate in Milestone 27/28;
+    - MAI i candidati ``layout.page_covering_visual``: sono il fondo pagina, e
+      contarli bloccherebbe qualunque corridoio -- la trappola gia' vista da
+      ``--widen-bands``;
+    - le ``DrawingPrimitive`` piu' basse della riga di testo piu' bassa della
+      pagina: non possono contenere testo, quindi sono separatori e non
+      regioni. La soglia e' desunta dalla pagina, non fissata.
+
+    Le ``DrawingPrimitive`` piu' alte di cosi' NON contano: sono regioni, e le
+    regioni devono arrivare da ``embedded_visual``. Se una non arriva e'
+    un buco di quel producer, e va chiuso li' invece di costruire qui un
+    secondo rilevatore di visuali.
+
+    Il testo non compare perche' e' gia' coperto: un corridoio esiste solo dove
+    il testo non copre il suo intervallo x.
+    """
+
+    blockers: list[tuple[float, float, float, float]] = []
+
+    for analysis in analyses:
+        for candidate in analysis.candidates:
+            if candidate.proposed_structural_kind == "layout.embedded_visual":
+                blockers.append(candidate.bbox)
+
+    text_heights = [
+        primitive.bbox[3] - primitive.bbox[1]
+        for primitive in primitive_page.text_primitives
+        if primitive.bbox[3] > primitive.bbox[1]
+    ]
+    if text_heights:
+        shortest_line = min(text_heights)
+        blockers.extend(
+            primitive.bbox
+            for primitive in primitive_page.drawing_primitives
+            if primitive.bbox[3] - primitive.bbox[1] < shortest_line
+        )
+
+    return blockers
+
+
+def _split_bands_at_crossings(
+    tree: list[dict[str, object]],
+    blockers: list[tuple[float, float, float, float]],
+) -> list[dict[str, object]]:
+    """Spezza ogni banda dove un blocker ATTRAVERSA uno dei suoi gutter.
+
+    Attraversare = coprire per intero l'intervallo x del gutter. Costeggiare
+    non basta: su DrW p.97 l'immagine finisce a x 299 e il gutter comincia a
+    299, e quella pagina deve restare intatta.
+
+    Spezza, non tronca (§3 del criterio). Troncare manderebbe fuori banda tutto
+    cio' che sta sotto l'interruzione, e dove le colonne proseguono quelle
+    primitive tornerebbero a ``(y0, x0)`` mescolandosi riga per riga: un falso
+    negativo su regione multicolonna, la classe non recuperabile.
+
+    ``column_band`` non viene toccato: da qui non esce nessun gutter nuovo e
+    nessuna banda che il producer non avesse gia' emesso -- solo pezzi di
+    quelle.
+    """
+
+    out: list[dict[str, object]] = []
+    next_band_id = max((int(cast(int, r["band_id"])) for r in tree), default=0) + 1
+    renamed: dict[int, list[dict[str, object]]] = {}
+
+    for row in tree:
+        band_id = int(cast(int, row["band_id"]))
+        y0, y1 = float(cast(float, row["y0"])), float(cast(float, row["y1"]))
+        gutters: list[tuple[float, float]] = []
+        for chunk in str(row.get("gutter_x_intervals") or "").split():
+            start, _, end = chunk.partition("-")
+            try:
+                gutters.append((float(start), float(end)))
+            except ValueError:
+                continue
+
+        blocked: list[tuple[float, float]] = []
+        for bx0, by0, bx1, by1 in blockers:
+            crosses = any(bx0 <= gx0 and bx1 >= gx1 for gx0, gx1 in gutters)
+            if crosses and by1 > y0 and by0 < y1:
+                blocked.append((max(by0, y0), min(by1, y1)))
+
+        if not blocked:
+            out.append(row)
+            renamed[band_id] = [row]
+            continue
+
+        # Le fette che sopravvivono: [y0, y1] meno gli intervalli bloccati.
+        blocked.sort()
+        pieces: list[tuple[float, float]] = []
+        cursor = y0
+        for block_y0, block_y1 in blocked:
+            if block_y0 > cursor:
+                pieces.append((cursor, block_y0))
+            cursor = max(cursor, block_y1)
+        if cursor < y1:
+            pieces.append((cursor, y1))
+
+        produced: list[dict[str, object]] = []
+        for index, (piece_y0, piece_y1) in enumerate(pieces):
+            piece = dict(row)
+            piece["y0"], piece["y1"] = piece_y0, piece_y1
+            if index > 0:
+                piece["band_id"] = next_band_id
+                next_band_id += 1
+            produced.append(piece)
+            out.append(piece)
+        renamed[band_id] = produced
+
+    # Un figlio si riaggancia al pezzo di padre che lo contiene: la
+    # subordinazione vale dove il padre esiste ancora, che e' la stessa regola
+    # con cui _segment_tree ritratta gli orfani.
+    for row in out:
+        parent = row.get("parent_id")
+        if parent in ("", None):
+            continue
+        candidates = renamed.get(int(cast(int, parent)), [])
+        if not candidates:
+            continue
+        midpoint = (float(cast(float, row["y0"])) + float(cast(float, row["y1"]))) / 2.0
+        for piece in candidates:
+            if float(cast(float, piece["y0"])) <= midpoint < float(cast(float, piece["y1"])):
+                row["parent_id"] = piece["band_id"]
+                break
+        else:
+            row["parent_id"] = ""
+            row["depth"] = 0
+
+    return out
+
+
 def _asset_marker_line(entry: dict[str, object]) -> str:
     return (
         f"{_ASSET_MARKER_PREFIX} primitive_id={entry['primitive_id']} "
@@ -386,6 +531,7 @@ def run(
     page_number: int,
     output_dir: Path,
     emit_order_variants: bool = False,
+    interrupt_corridor: bool = False,
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -636,6 +782,32 @@ def run(
                 f"primitives_in_band={inside}/{len(primitive_page.text_primitives)}",
                 file=sys.stderr,
             )
+
+            # Criterio_InterruzioneCorridoio_v1.md. Emette SEMPRE anche la
+            # variante non tagliata, sopra: il confronto va fatto fra le due, e
+            # su DrW p.97 il criterio predice che siano identiche.
+            if interrupt_corridor:
+                blockers = _corridor_blockers(
+                    primitive_page=primitive_page, analyses=analyses
+                )
+                cut_tree = _split_bands_at_crossings(tree, blockers)
+                cut_ordered, cut_inside = _tree_aware_order(
+                    list(primitive_page.text_primitives), cut_tree
+                )
+                cut_body = _ordered_markdown_body(
+                    ordered=cut_ordered, note_entries=note_entries
+                )
+                cut_path = output_dir / "page_bands_cut.md"
+                cut_path.write_text(cut_body, encoding="utf-8")
+                variant_paths.append(cut_path)
+                _verify_content_conservation(primitive_page.text_primitives, cut_body)
+                print(
+                    f"corridor_interrupt: blockers={len(blockers)} "
+                    f"bands={len(tree)}->{len(cut_tree)} "
+                    f"primitives_in_band={inside}->{cut_inside} "
+                    f"identical={'yes' if cut_body == bands_body else 'NO'}",
+                    file=sys.stderr,
+                )
             print(
                 "OK: wrote " + ", ".join(str(path) for path in variant_paths),
                 file=sys.stderr,
@@ -734,6 +906,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--page-number", type=int, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument(
+        "--interrupt-corridor",
+        action="store_true",
+        help=(
+            "spezza le bande dove un embedded_visual o un filetto attraversa il "
+            "corridoio (Criterio_InterruzioneCorridoio_v1.md). Emette "
+            "page_bands_cut.md accanto a page_bands.md, mai al posto suo. "
+            "Richiede --emit-order-variants."
+        ),
+    )
+    parser.add_argument(
         "--emit-order-variants",
         action="store_true",
         help=(
@@ -752,6 +934,7 @@ def main() -> None:
         args.page_number,
         args.output_dir,
         emit_order_variants=args.emit_order_variants,
+        interrupt_corridor=args.interrupt_corridor,
     )
 
 
