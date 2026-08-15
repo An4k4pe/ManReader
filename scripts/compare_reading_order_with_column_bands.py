@@ -59,7 +59,10 @@ SCRIPTS_DIR = PROJECT_ROOT / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
-from prototype_derived_column_bands import _process_page  # noqa: E402
+from prototype_derived_column_bands import (  # noqa: E402
+    _DEFAULT_MIN_FLANKING_CHARS,
+    _process_page,
+)
 
 from primitive_model import TextPrimitive  # noqa: E402
 from primitive_normalizer import normalize_backend_page_capture  # noqa: E402
@@ -158,7 +161,6 @@ def _tree_aware_order(
     # Costo dichiarato: una colonna che ne contiene altre e NON e' una tabella --
     # un riquadro a due sotto-colonne dentro una colonna -- viene letta riga per
     # riga e le sue sotto-colonne si interlacciano. Caso raro e non misurato.
-    outermost = True
     owner: dict[int, int | None] = {}
     for index, primitive in enumerate(text_primitives):
         best: int | None = None
@@ -167,7 +169,7 @@ def _tree_aware_order(
             depth_here = int(cast(int, row["depth"]))
             if not contains(band_id, primitive):
                 continue
-            if best is None or (depth_here < best_depth if outermost else depth_here > best_depth):
+            if best is None or depth_here < best_depth:
                 best, best_depth = band_id, depth_here
         owner[index] = best
 
@@ -500,8 +502,8 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--use-tree",
         action="store_true",
-        help="Usa la segmentazione GERARCHICA e assegna ogni primitiva alla banda piu' "
-        "profonda che la contiene, invece delle bande a fasce y e della prima banda.",
+        help="Usa la segmentazione GERARCHICA e assegna ogni primitiva alla banda ESTERNA "
+        "che la contiene, invece delle bande a fasce y.",
     )
     parser.add_argument(
         "--widen-bands",
@@ -513,7 +515,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--min-flanking-chars",
         type=float,
-        default=5.0,
+        default=float(_DEFAULT_MIN_FLANKING_CHARS),
         help="Passato invariato al meccanismo. A 0 il criterio dei caratteri e' "
         "disattivato: serve per vedere l'effetto del bug della mediana su pagine a "
         "elenco puntato, dove i marcatori sono righe di un carattere.",

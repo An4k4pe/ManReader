@@ -152,7 +152,7 @@ per quanto durano.
 
 - ATTENZIONE, la sezione "Il metodo" qui sopra descrive un solo criterio di
   ammissione (`--min-flanking-groups`) mentre il codice ne ha TRE
-  (`too_few_lines`, `too_few_chars`, `too_short`, v. `_reject_reason`). La
+  (`too_few_lines`, `too_few_wordy_lines`, `too_short`, v. `_reject_reason`). La
   descrizione e' rimasta indietro rispetto al meccanismo. Rilievo della
   revisione del diff, non ancora sanato riscrivendo la sezione.
 
@@ -194,7 +194,7 @@ _DEFAULT_BIN_WIDTH_X = 1.0
 _DEFAULT_BIN_HEIGHT_Y = 2.0
 
 _DEFAULT_MIN_FLANKING_GROUPS = 2
-_DEFAULT_MIN_FLANKING_CHARS = 3
+_DEFAULT_MIN_FLANKING_CHARS = 4
 _DEFAULT_MIN_GUTTER_LINES = 3.0
 _DEFAULT_MIN_COLUMN_CHARS = 10.0
 _AVERAGE_CHAR_WIDTH_RATIO = 0.5
@@ -460,8 +460,8 @@ def _reject_reason(
     Nessuno dei tre criteri e' una soglia geometrica in punti:
       - ``too_few_lines``   meno di N righe per lato: una colonna di una riga
                             non e' una colonna.
-      - ``too_few_chars``   meno di N caratteri per riga sul lato piu' povero:
-                            non si va a capo dopo un articolo.
+      - ``too_few_wordy_lines`` meno di N righe per lato che portino almeno M
+                            caratteri: non si va a capo dopo un articolo.
       - ``too_short``       gutter piu' basso di N righe DELLA PAGINA: l'unita'
                             e' l'interlinea misurata, non una costante in pt.
     """
@@ -490,7 +490,7 @@ def _flanking_profile(
     bin_width_x: float,
     rotated_groups: set[tuple[int, int]],
     text_length_by_id: dict[str, int],
-    min_chars: float = 5.0,
+    min_chars: float = float(_DEFAULT_MIN_FLANKING_CHARS),
 ) -> _FlankingProfile:
     """Quante righe distinte `(block_index, line_index)` fiancheggiano il gutter
     a sinistra e a destra entro la sua estensione y, quanto sono larghe, e
@@ -1169,13 +1169,15 @@ def build_argument_parser() -> argparse.ArgumentParser:
         default=_DEFAULT_MIN_FLANKING_CHARS,
         help="Caratteri richiesti perche' una riga conti come portatrice di parole. Vincolo "
         "tipografico, non geometrico: non si va a capo dopo una lettera o un articolo. "
-        "Default: 3. Era 5. La revisione proponeva 2, misurando che i gutter accettati "
-        "sulle SUE sei ancore erano identici da 1 a 5; su sedici ancore ispezionate a vista "
-        "M=2 rompe Lan p.84, la tabella 1d20, perche' i numeri a due cifre contano come "
-        "righe con parole e la colonna dei numeri diventa una banda. M=3, 4 e 5 danno "
-        "risultati IDENTICI su tutte e sedici, quindi 3 e' il pavimento. Scelto il pavimento "
-        "e non il soffitto perche' abbassare M recupera gutter (254 fra 5 e 3) e va quindi "
-        "nella direzione che riduce i falsi negativi, l'errore che nessun livello recupera.",
+        "Default: 4. Storia, perche' e' istruttiva: era 5; la revisione propose 2 misurando "
+        "sulle sue sei ancore; M=2 rompe Lan p.84 (tabella 1d20, i numeri a due cifre "
+        "contano come righe con parole e la colonna dei numeri diventa una banda) e fu "
+        "portato a 3 dichiarando che 3, 4 e 5 fossero identici 'su tutte e sedici' -- vero "
+        "sulle ancore di sviluppo, FALSO sulle sedici del campione cieco: M=3 rompe "
+        "Vil p.223 nello stesso identico modo, e con esso circa dodici pagine del bestiario "
+        "Vil che ripetono la stessa tabella di dadi. 4 e' il primo valore che rifiuta "
+        "entrambi. Non e' un valore verificato: e' il pavimento sui casi guardati finora, "
+        "e i gutter che 4 e 5 separano non sono stati ispezionati.",
     )
     parser.add_argument(
         "--min-gutter-lines",
