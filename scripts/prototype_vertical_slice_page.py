@@ -298,6 +298,7 @@ def _corridor_blockers(
     *,
     primitive_page: NormalizedPrimitivePage,
     analyses: tuple[PageAnalysis, ...],
+    sources: str = "both",
 ) -> list[tuple[float, float, float, float]]:
     """Cio' che puo' interrompere un corridoio, come bbox (x0, y0, x1, y1).
 
@@ -328,10 +329,14 @@ def _corridor_blockers(
 
     blockers: list[tuple[float, float, float, float]] = []
 
-    for analysis in analyses:
-        for candidate in analysis.candidates:
-            if candidate.proposed_structural_kind == "layout.embedded_visual":
-                blockers.append(candidate.bbox)
+    if sources in ("both", "visuals"):
+        for analysis in analyses:
+            for candidate in analysis.candidates:
+                if candidate.proposed_structural_kind == "layout.embedded_visual":
+                    blockers.append(candidate.bbox)
+
+    if sources == "visuals":
+        return blockers
 
     text_heights = [
         primitive.bbox[3] - primitive.bbox[1]
@@ -391,8 +396,10 @@ def _split_bands_at_crossings(
                 blocked.append((max(by0, y0), min(by1, y1)))
 
         if not blocked:
-            out.append(row)
-            renamed[band_id] = [row]
+            kept_row = dict(row)
+            kept_row["origin_band_id"] = band_id
+            out.append(kept_row)
+            renamed[band_id] = [kept_row]
             continue
 
         # Le fette che sopravvivono: [y0, y1] meno gli intervalli bloccati.
@@ -410,6 +417,10 @@ def _split_bands_at_crossings(
         for index, (piece_y0, piece_y1) in enumerate(pieces):
             piece = dict(row)
             piece["y0"], piece["y1"] = piece_y0, piece_y1
+            # Da quale banda originale viene questo pezzo. Serve a chi misura:
+            # risalire per contenimento sbaglia, perche' dentro l'intervallo di
+            # una banda cadono anche i pezzi delle sue figlie.
+            piece["origin_band_id"] = band_id
             if index > 0:
                 piece["band_id"] = next_band_id
                 next_band_id += 1
@@ -531,7 +542,7 @@ def run(
     page_number: int,
     output_dir: Path,
     emit_order_variants: bool = False,
-    interrupt_corridor: bool = False,
+    interrupt_corridor: str = "",
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -788,7 +799,9 @@ def run(
             # su DrW p.97 il criterio predice che siano identiche.
             if interrupt_corridor:
                 blockers = _corridor_blockers(
-                    primitive_page=primitive_page, analyses=analyses
+                    primitive_page=primitive_page,
+                    analyses=analyses,
+                    sources=interrupt_corridor,
                 )
                 cut_tree = _split_bands_at_crossings(tree, blockers)
                 cut_ordered, cut_inside = _tree_aware_order(
@@ -907,7 +920,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument(
         "--interrupt-corridor",
-        action="store_true",
+        choices=("both", "drawings", "visuals"),
+        default="",
         help=(
             "spezza le bande dove un embedded_visual o un filetto attraversa il "
             "corridoio (Criterio_InterruzioneCorridoio_v1.md). Emette "
