@@ -36,12 +36,45 @@ SCRIPTS_DIR = PROJECT_ROOT / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
-from compare_reading_order_with_column_bands import _group_visual_lines  # noqa: E402
 from primitive_model import TextPrimitive  # noqa: E402
 from primitive_normalizer import normalize_backend_page_capture  # noqa: E402
 from pymupdf_capture import capture_pymupdf_page  # noqa: E402
 
 _OBSERVATION_ID = re.compile(r"^text:b(\d+):l(\d+):s(\d+)$")
+
+
+def _group_visual_lines(primitives: list[TextPrimitive]) -> list[list[TextPrimitive]]:
+    """L'assemblaggio geometrico SOSTITUITO, conservato qui come termine di
+    paragone.
+
+    Era `_group_visual_lines` in `compare_reading_order_with_column_bands.py`,
+    rimosso da li' quando la riga e' passata alla sorgente. Sta qui perche'
+    questo script e' il verbale della sostituzione e deve continuare a
+    riprodurre i propri numeri: importarlo dal chiamante lo renderebbe identico
+    al raggruppamento di sorgente e il confronto misurerebbe nulla.
+
+    Copiato invariato, difetto incluso: `same_line` confronta ogni candidato
+    solo contro il PRIMO elemento della riga, mai contro la riga che cresce."""
+
+    def same_line(a: TextPrimitive, b: TextPrimitive) -> bool:
+        a_mid = (a.bbox[1] + a.bbox[3]) / 2.0
+        b_mid = (b.bbox[1] + b.bbox[3]) / 2.0
+        return (b.bbox[1] <= a_mid < b.bbox[3]) or (a.bbox[1] <= b_mid < a.bbox[3])
+
+    remaining = sorted(primitives, key=lambda p: (p.bbox[1], p.bbox[0]))
+    lines: list[list[TextPrimitive]] = []
+    while remaining:
+        first = remaining[0]
+        line = [first]
+        rest: list[TextPrimitive] = []
+        for candidate in remaining[1:]:
+            if same_line(first, candidate):
+                line.append(candidate)
+            else:
+                rest.append(candidate)
+        lines.append(sorted(line, key=lambda p: p.bbox[0]))
+        remaining = rest
+    return lines
 
 
 def _source_line_key(primitive: TextPrimitive) -> tuple[int, int] | None:

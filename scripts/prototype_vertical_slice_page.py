@@ -60,6 +60,21 @@ from pdfplumber.page import Page as PlumberPage
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+SCRIPTS_DIR = PROJECT_ROOT / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+# Diagnostica su diagnostica: le due varianti d'ordine di `--emit-order-variants`
+# vengono dagli stessi artefatti gia' committati, non da una seconda
+# implementazione. Nessuno dei due e' un producer e nessuno e' wired.
+from compare_reading_order_with_column_bands import (  # noqa: E402
+    _by_source_line,
+    _tree_aware_order,
+)
+from prototype_derived_column_bands import (  # noqa: E402
+    _DEFAULT_MIN_FLANKING_CHARS,
+    _process_page,
+)
 
 from page_analysis_co_reference import build_co_referenced_page_analyses  # noqa: E402
 from page_analysis_co_reference_binding import bind_co_referenced_page_analyses  # noqa: E402
@@ -279,6 +294,85 @@ def _build_markdown_body(
     return "\n\n".join(lines) + "\n"
 
 
+def _asset_marker_line(entry: dict[str, object]) -> str:
+    return (
+        f"{_ASSET_MARKER_PREFIX} primitive_id={entry['primitive_id']} "
+        f"digest={entry['digest']} candidate_id={entry['candidate_id']} "
+        f"asset_file={entry['asset_file']}"
+    )
+
+
+def _ordered_markdown_body(
+    *,
+    ordered: list[tuple[TextPrimitive, int]],
+    note_entries: list[dict[str, object]],
+) -> str:
+    """Come ``_build_markdown_body`` ma su un ordine GIA' stabilito.
+
+    ``_build_markdown_body`` riordina per ``(y0, x0)`` dopo aver mescolato testo
+    e note: passargli una sequenza gia' ordinata a bande la disferebbe. Qui
+    l'ordine del testo e' quello ricevuto e non viene toccato.
+
+    Un solo adattamento, lo stesso gia' dichiarato in
+    ``compare_reading_order_with_column_bands.py``: il cambio di colonna forza
+    un paragrafo. Senza, l'ultima riga di una colonna si fonde con la prima
+    della successiva e il confronto sarebbe truccato a sfavore del ramo a bande.
+
+    Le note si inseriscono prima della prima primitiva testuale che le segue in
+    ``y``; se nessuna le segue, in fondo. Il testo non si sposta: le note si
+    accomodano attorno a lui, mai il contrario.
+    """
+
+    items: list[tuple[int, int, str, object]] = []
+    items.extend(
+        (rank, 1, "text", payload) for rank, payload in enumerate(ordered)
+    )
+    for entry in note_entries:
+        note_y0 = cast(float, entry["y0"])
+        rank = next(
+            (r for r, (primitive, _g) in enumerate(ordered) if primitive.bbox[1] > note_y0),
+            len(ordered),
+        )
+        items.append((rank, 0, "note", entry))
+    items.sort(key=lambda item: (item[0], item[1]))
+
+    paragraphs: list[str] = []
+    words: list[str] = []
+    previous: TextPrimitive | None = None
+    previous_group: int | None = None
+
+    def flush() -> None:
+        if words:
+            paragraphs.append(" ".join(words))
+            words.clear()
+
+    for _rank, _kind_order, kind, payload in items:
+        if kind == "text":
+            primitive, group = cast("tuple[TextPrimitive, int]", payload)
+            starts_new = previous is None or previous_group != group
+            if previous is not None and not starts_new:
+                overlaps = (
+                    primitive.bbox[1] < previous.bbox[3]
+                    and previous.bbox[1] < primitive.bbox[3]
+                )
+                starts_new = not overlaps
+            if starts_new:
+                flush()
+            text = (primitive.text or "").strip()
+            if text:
+                words.append(text)
+            previous = primitive
+            previous_group = group
+        else:
+            flush()
+            paragraphs.append(_asset_marker_line(cast(dict, payload)))
+            previous = None
+            previous_group = None
+
+    flush()
+    return "\n\n".join(paragraphs) + "\n"
+
+
 def _strip_asset_markers(body: str) -> str:
     return _ASSET_MARKER_LINE_PATTERN.sub("", body)
 
@@ -287,7 +381,12 @@ def _non_space_multiset(text: str) -> Counter[str]:
     return Counter(character for character in text if not character.isspace())
 
 
-def run(pdf_path: Path, page_number: int, output_dir: Path) -> None:
+def run(
+    pdf_path: Path,
+    page_number: int,
+    output_dir: Path,
+    emit_order_variants: bool = False,
+) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     with (
@@ -490,6 +589,58 @@ def run(pdf_path: Path, page_number: int, output_dir: Path) -> None:
             asset_count=len(assets),
         )
 
+        # === Varianti d'ordine (Criterio_GiunzioneFettaVerticale_v1.md §5) ===
+        # `page.md` sopra NON viene toccato: e' la precondizione P0, cioe' che
+        # questo flag non possa cambiare Milestone 36 in silenzio.
+        #
+        # Il termine di paragone del ramo a bande e' `page_lines.md`, MAI
+        # `page.md`: confrontare le bande (che hanno la riga di sorgente) con
+        # l'ordinamento grezzo (che non ce l'ha) misura due cose insieme e le
+        # attribuisce entrambe alle bande. E' il trucco gia' trovato al quinto
+        # giro di revisione.
+        if emit_order_variants:
+            variant_paths: list[Path] = []
+
+            lines_ordered = [(p, 0) for p in _by_source_line(list(primitive_page.text_primitives))]
+            lines_body = _ordered_markdown_body(
+                ordered=lines_ordered, note_entries=note_entries
+            )
+            lines_path = output_dir / "page_lines.md"
+            lines_path.write_text(lines_body, encoding="utf-8")
+            variant_paths.append(lines_path)
+            _verify_content_conservation(primitive_page.text_primitives, lines_body)
+
+            _gutters, _bands, tree = _process_page(
+                fitz_document,
+                page_index,
+                manual=pdf_path.name,
+                bin_width_x=1.0,
+                bin_height_y=2.0,
+                min_flanking_groups=2,
+                min_flanking_chars=_DEFAULT_MIN_FLANKING_CHARS,
+                min_gutter_lines=3.0,
+            )
+            bands_ordered, inside = _tree_aware_order(
+                list(primitive_page.text_primitives), tree
+            )
+            bands_body = _ordered_markdown_body(
+                ordered=bands_ordered, note_entries=note_entries
+            )
+            bands_path = output_dir / "page_bands.md"
+            bands_path.write_text(bands_body, encoding="utf-8")
+            variant_paths.append(bands_path)
+            _verify_content_conservation(primitive_page.text_primitives, bands_body)
+
+            print(
+                f"order_variants: bands={len(tree)} "
+                f"primitives_in_band={inside}/{len(primitive_page.text_primitives)}",
+                file=sys.stderr,
+            )
+            print(
+                "OK: wrote " + ", ".join(str(path) for path in variant_paths),
+                file=sys.stderr,
+            )
+
         # Non-blocking measures.
         stripped_body = _strip_asset_markers(body)
         note_count = len(note_entries)
@@ -582,12 +733,26 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--pdf", type=Path, required=True)
     parser.add_argument("--page-number", type=int, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument(
+        "--emit-order-variants",
+        action="store_true",
+        help=(
+            "scrive anche page_lines.md (riga dalla sorgente, nessuna banda) e "
+            "page_bands.md (ordinamento ad albero di column_band). page.md resta "
+            "invariato: e' la precondizione P0 del criterio."
+        ),
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    run(args.pdf, args.page_number, args.output_dir)
+    run(
+        args.pdf,
+        args.page_number,
+        args.output_dir,
+        emit_order_variants=args.emit_order_variants,
+    )
 
 
 if __name__ == "__main__":

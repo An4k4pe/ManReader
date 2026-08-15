@@ -9,11 +9,12 @@ Cosa cambia fra i due output, e nient'altro: l'ORDINAMENTO delle TextPrimitive.
   baseline        `(y0, x0)` -- identico a
                   `prototype_vertical_slice_page.py:219-220`, copiato invariato:
                   e' cio' che la pipeline fa OGGI, non un confronto equo.
-  baseline_lines  la stessa, con la sola correzione dell'ordinamento per riga
-                  visiva e NESSUNA banda. E' il termine di paragone equo: il
-                  guadagno del ramo a bande va misurato contro questa, altrimenti
-                  gli si attribuisce anche il merito della correzione di riga --
-                  su DIE p.127 l'85% delle primitive cambia posizione per quella
+  baseline_lines  la stessa, con la sola riga tipografica presa dalla SORGENTE
+                  (`block_index`/`line_index`, vedi `_source_text_lines`) e
+                  NESSUNA banda. E' il termine di paragone equo: il guadagno del
+                  ramo a bande va misurato contro questa, altrimenti gli si
+                  attribuisce anche il merito della correzione di riga -- su
+                  DIE p.127 l'85% delle primitive cambia posizione per quella
                   sola.
   a bande    dentro ogni banda di `prototype_derived_column_bands.py` le
              primitive sono divise in colonne dai gutter e ogni colonna viene
@@ -41,6 +42,7 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 from typing import cast
@@ -69,46 +71,74 @@ from primitive_normalizer import normalize_backend_page_capture  # noqa: E402
 from pymupdf_capture import capture_pymupdf_page  # noqa: E402
 
 
-def _by_visual_line(primitives: list[TextPrimitive]) -> list[TextPrimitive]:
-    """Ordina raggruppando prima in righe visive, poi per x dentro la riga.
+_OBSERVATION_ID = re.compile(r"^text:b(\d+):l(\d+):s(\d+)$")
+
+
+def _source_line_key(primitive: TextPrimitive) -> tuple[int, int, int] | None:
+    """`(block_index, line_index, span_index)` letti dall'id di osservazione."""
+
+    match = _OBSERVATION_ID.match(primitive.source_observation_id or "")
+    if match is None:
+        return None
+    return int(match.group(1)), int(match.group(2)), int(match.group(3))
+
+
+def _by_source_line(primitives: list[TextPrimitive]) -> list[TextPrimitive]:
+    """Ordina per riga tipografica, prendendo la riga dalla sorgente.
 
     Ordinare per `(y0, x0)` sembra corretto e non lo e': gli span di una stessa
-    riga tipografica hanno y leggermente diverse (corsivo, grassetto, corpo
-    diverso) e finiscono in ordine sbagliato. Misurato su Dag p.48: sette span
-    della stessa riga con y fra 410,89 e 411,01 -- 0,12pt di differenza --
-    uscivano come "' spendere una Speranza il vostro Focus , potete ." invece di
-    "il vostro Focus, potete spendere una Speranza. Se l'attacco ha".
+    riga hanno y leggermente diverse (corsivo, grassetto, corpo diverso) e
+    finiscono mescolati con quelli delle righe vicine. Misurato su Dag p.48:
+    sette span della stessa riga con y fra 410,89 e 411,01 -- 0,12pt."""
 
-    Due span appartengono alla stessa riga se le loro y si sovrappongono. Il
-    difetto e' del consumer e riguarda anche la baseline `(y0, x0)` copiata
-    dalla fetta verticale: non c'entra `column_band`."""
-
-    return [p for line in _group_visual_lines(primitives) for p in line]
+    return [p for line in _source_text_lines(primitives) for p in line]
 
 
-def _group_visual_lines(primitives: list[TextPrimitive]) -> list[list[TextPrimitive]]:
-    """Le righe visive come unita', ciascuna gia' ordinata per x. Serve dove la
-    riga deve restare indivisa: mescolare le primitive con altri elementi e poi
-    riordinare per y disferebbe l'ordine appena messo."""
+def _source_text_lines(primitives: list[TextPrimitive]) -> list[list[TextPrimitive]]:
+    """Le righe tipografiche come unita', prese da `(block_index, line_index)`.
 
-    def same_line(a: TextPrimitive, b: TextPrimitive) -> bool:
-        a_mid = (a.bbox[1] + a.bbox[3]) / 2.0
-        b_mid = (b.bbox[1] + b.bbox[3]) / 2.0
-        return (b.bbox[1] <= a_mid < b.bbox[3]) or (a.bbox[1] <= b_mid < a.bbox[3])
+    La riga NON si ricostruisce geometricamente: `pymupdf_capture.py:123-125`
+    emette una primitiva per span e la riga sta gia' nell'id di osservazione
+    (`text:b{block}:l{line}:s{span}`). Ricavarla dalla sovrapposizione delle y
+    reinventa peggio un'informazione gia' disponibile -- `AGENTS.MD` §Layout e
+    candidati -- ed e' anche sbagliato: la versione precedente confrontava ogni
+    span solo contro il PRIMO della riga e fondeva righe di blocchi diversi.
+    Misurato su Dag p.48 (54 righe geometriche contro 75 di sorgente, 21
+    fusioni) e Dag p.164 (50 contro 75, 25 fusioni): su Dag p.48 il titolo
+    SOTTOCLASSI DEL RANGER finiva nella stessa "riga" del corpo. Una riga a
+    cavallo di due colonne non e' assegnabile a nessuna banda. Verbale in
+    `scripts/inspect_span_line_identity.py`, che conserva l'implementazione
+    geometrica e la rimisura contro questa.
 
-    remaining = sorted(primitives, key=lambda p: (p.bbox[1], p.bbox[0]))
+    Dentro la riga l'ordine e' `span_index`, cioe' quello dichiarato dalla
+    sorgente. Divergere da `x0` e' raro (2 righe multi-span su 6.335, 0,03% su
+    cinque manuali): la scelta non e' portante.
+
+    Le righe escono ordinate dall'alto, perche' l'ordine dei blocchi della
+    sorgente non e' garantito essere quello visivo."""
+
+    grouped: dict[tuple[int, int], list[tuple[int, TextPrimitive]]] = {}
     lines: list[list[TextPrimitive]] = []
-    while remaining:
-        first = remaining[0]
-        line = [first]
-        rest: list[TextPrimitive] = []
-        for candidate in remaining[1:]:
-            if same_line(first, candidate):
-                line.append(candidate)
-            else:
-                rest.append(candidate)
-        lines.append(sorted(line, key=lambda p: p.bbox[0]))
-        remaining = rest
+    for primitive in primitives:
+        key = _source_line_key(primitive)
+        if key is None:
+            # Id non interpretabile: riga a se'. Non si indovina un
+            # raggruppamento, perche' sbagliarlo fonde righe di colonne diverse
+            # ed e' il difetto che questa funzione esiste per non avere.
+            lines.append([primitive])
+            continue
+        grouped.setdefault((key[0], key[1]), []).append((key[2], primitive))
+
+    lines.extend(
+        [primitive for _span_index, primitive in sorted(spans, key=lambda item: item[0])]
+        for spans in grouped.values()
+    )
+    lines.sort(
+        key=lambda line: (
+            min(p.bbox[1] for p in line),
+            min(p.bbox[0] for p in line),
+        )
+    )
     return lines
 
 
@@ -217,7 +247,7 @@ def _tree_aware_order(
             # L'indice nella sequenza per riga visiva diventa la chiave di
             # ordinamento, cosi' gli span di una stessa riga restano in ordine
             # di x anche quando le loro y differiscono di frazioni di punto.
-            for position, primitive in enumerate(_by_visual_line(in_column)):
+            for position, primitive in enumerate(_by_source_line(in_column)):
                 here.append((float(position), 1, primitive))
             ordered_in_column = [item for item in here]
             for child in children.get(band_id, []):
@@ -246,7 +276,7 @@ def _tree_aware_order(
     entries: list[tuple[float, int, object]] = []
     for band_id in roots:
         entries.append((float(cast(float, rows[band_id]["y0"])), 0, band_id))
-    for line in _group_visual_lines(loose):
+    for line in _source_text_lines(loose):
         entries.append((min(p.bbox[1] for p in line), 1, line))
     entries.sort(key=lambda item: (item[0], item[1]))
     for _y, kind, payload in entries:
@@ -575,7 +605,7 @@ def main(argv: list[str] | None = None) -> int:
     # l'ha) misura le due cose insieme e le attribuisce entrambe a
     # `column_band`: su DIE p.127 l'85% delle primitive cambia posizione per la
     # sola correzione di riga. Rilievo di Chat B, verificato.
-    baseline_lines = [(p, 0) for p in _by_visual_line(primitives)]
+    baseline_lines = [(p, 0) for p in _by_source_line(primitives)]
     visuals = [
         (p.bbox[0], p.bbox[1], p.bbox[2], p.bbox[3])
         for p in list(primitive_page.image_primitives) + list(primitive_page.drawing_primitives)
