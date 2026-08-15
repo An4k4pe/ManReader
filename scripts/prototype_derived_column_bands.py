@@ -194,7 +194,7 @@ _DEFAULT_BIN_WIDTH_X = 1.0
 _DEFAULT_BIN_HEIGHT_Y = 2.0
 
 _DEFAULT_MIN_FLANKING_GROUPS = 2
-_DEFAULT_MIN_FLANKING_CHARS = 5
+_DEFAULT_MIN_FLANKING_CHARS = 3
 _DEFAULT_MIN_GUTTER_LINES = 3.0
 _DEFAULT_MIN_COLUMN_CHARS = 10.0
 _AVERAGE_CHAR_WIDTH_RATIO = 0.5
@@ -355,7 +355,6 @@ class _FlankingProfile:
         "right_chars_median",
         "left_wordy",
         "right_wordy",
-        "shared_blocks",
     )
 
     def __init__(
@@ -370,7 +369,6 @@ class _FlankingProfile:
         right_chars_median: float,
         left_wordy: int,
         right_wordy: int,
-        shared_blocks: int,
     ) -> None:
         self.left = left
         self.right = right
@@ -382,7 +380,6 @@ class _FlankingProfile:
         self.right_chars_median = right_chars_median
         self.left_wordy = left_wordy
         self.right_wordy = right_wordy
-        self.shared_blocks = shared_blocks
 
     @property
     def minimum(self) -> int:
@@ -402,16 +399,6 @@ class _FlankingProfile:
 
         return min(self.left_wordy, self.right_wordy)
 
-    @property
-    def chars_minimum(self) -> float:
-        """Caratteri per riga sul lato PIU' POVERO. Un separatore di colonna ha
-        parole da entrambe le parti; un punto decorativo, un numero di elenco o
-        l'etichetta di una linguetta no. Il vincolo non e' arbitrario ma
-        tipografico: non si va a capo dopo una lettera o un articolo, quindi una
-        colonna larga uno o due caratteri o non e' una colonna, o e' cosi'
-        stretta che sbagliarla e' un errore trascurabile e correggibile dopo."""
-
-        return min(self.left_chars_median, self.right_chars_median)
 
 
 def _rotated_group_ids(
@@ -459,7 +446,6 @@ def _reject_reason(
     *,
     line_height: float,
     min_flanking_groups: int,
-    min_flanking_chars: float,
     min_gutter_lines: float,
 ) -> str | None:
     """Perche' questo gutter NON e' un separatore di colonna, o ``None`` se lo e'.
@@ -527,8 +513,6 @@ def _flanking_profile(
     gutter_x1 = (rect.x_bin_end + 1) * bin_width_x
     left_widths: list[float] = []
     right_widths: list[float] = []
-    left_blocks: set[int] = set()
-    right_blocks: set[int] = set()
     left_rotated = 0
     right_rotated = 0
     left_chars: list[float] = []
@@ -545,7 +529,6 @@ def _flanking_profile(
                 left_rotated += 1
             else:
                 left_widths.append(group_x1 - group_x0)
-                left_blocks.add(group.block_index)
                 left_chars.append(
                     sum(text_length_by_id.get(i, 0) for i in group.primitive_ids)
                 )
@@ -554,7 +537,6 @@ def _flanking_profile(
                 right_rotated += 1
             else:
                 right_widths.append(group_x1 - group_x0)
-                right_blocks.add(group.block_index)
                 right_chars.append(
                     sum(text_length_by_id.get(i, 0) for i in group.primitive_ids)
                 )
@@ -576,7 +558,6 @@ def _flanking_profile(
         right_chars_median=median(right_chars),
         left_wordy=sum(1 for n in left_chars if n >= min_chars),
         right_wordy=sum(1 for n in right_chars if n >= min_chars),
-        shared_blocks=len(left_blocks & right_blocks),
     )
 
 
@@ -1057,7 +1038,6 @@ def _process_page(
             rect,
             line_height=line_height,
             min_flanking_groups=min_flanking_groups,
-            min_flanking_chars=min_flanking_chars,
             min_gutter_lines=min_gutter_lines,
         )
         is None
@@ -1087,7 +1067,6 @@ def _process_page(
             rect,
             line_height=line_height,
             min_flanking_groups=min_flanking_groups,
-            min_flanking_chars=min_flanking_chars,
             min_gutter_lines=min_gutter_lines,
         )
         gutter_rows.append(
@@ -1108,7 +1087,6 @@ def _process_page(
                 "right_rotated": profile.right_rotated,
                 "left_width_median": round(profile.left_width_median, 2),
                 "right_width_median": round(profile.right_width_median, 2),
-                "shared_blocks": profile.shared_blocks,
                 "left_chars_median": round(profile.left_chars_median, 1),
                 "right_chars_median": round(profile.right_chars_median, 1),
                 "left_wordy": profile.left_wordy,
@@ -1136,7 +1114,6 @@ def _process_page(
             rect,
             line_height=line_height,
             min_flanking_groups=min_flanking_groups,
-            min_flanking_chars=min_flanking_chars,
             min_gutter_lines=min_gutter_lines,
         )
         is None
@@ -1190,9 +1167,15 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--min-flanking-chars",
         type=float,
         default=_DEFAULT_MIN_FLANKING_CHARS,
-        help="Caratteri per riga richiesti sul lato piu' povero. Vincolo tipografico, non "
-        "geometrico: non si va a capo dopo una lettera o un articolo. Scarta i punti "
-        "decorativi, le colonne di numeri di tabella e le etichette di linguetta. Default: 5.",
+        help="Caratteri richiesti perche' una riga conti come portatrice di parole. Vincolo "
+        "tipografico, non geometrico: non si va a capo dopo una lettera o un articolo. "
+        "Default: 3. Era 5. La revisione proponeva 2, misurando che i gutter accettati "
+        "sulle SUE sei ancore erano identici da 1 a 5; su sedici ancore ispezionate a vista "
+        "M=2 rompe Lan p.84, la tabella 1d20, perche' i numeri a due cifre contano come "
+        "righe con parole e la colonna dei numeri diventa una banda. M=3, 4 e 5 danno "
+        "risultati IDENTICI su tutte e sedici, quindi 3 e' il pavimento. Scelto il pavimento "
+        "e non il soffitto perche' abbassare M recupera gutter (254 fra 5 e 3) e va quindi "
+        "nella direzione che riduce i falsi negativi, l'errore che nessun livello recupera.",
     )
     parser.add_argument(
         "--min-gutter-lines",
