@@ -143,24 +143,33 @@ def _tree_aware_order(
             and float(cast(float, row["y0"])) <= cy < float(cast(float, row["y1"]))
         )
 
-    # Quale livello vince, quando piu' bande contengono la stessa primitiva.
+    # Quale livello vince, quando piu' bande contengono la stessa primitiva:
+    # la piu' PROFONDA.
     #
-    # "La piu' profonda" era la regola originale, introdotta per impedire che una
-    # banda estesa svuotasse le figlie. E' sbagliata quasi sempre, e l'argomento
-    # e' dell'utente: in prosa un annidamento profondo non ha ragione di esistere
-    # (se compare e' spurio, e il gutter esterno E' il separatore); in una tabella
-    # l'annidamento e' reale ma l'ordine di lettura corretto resta per righe,
-    # quindi serve comunque il livello esterno. In entrambi i casi vince l'esterna.
+    # Ripristinata dopo essere stata rovesciata in "vince l'esterna" sulla base
+    # di due argomenti di Chat A, entrambi sbagliati e corretti dall'utente.
     #
-    # Non e' possibile distinguere i due casi chiedendolo a `table_candidate`:
-    # quel producer emette candidati anche sulle pagine di prosa (Dag p.140 e
-    # DrW p.97, due colonne senza annidamento, ne producono 2 ciascuna), ed e' il
-    # problema del tasso di base gia' registrato in Milestone 35. La regola
-    # "vince l'esterna" ha il pregio di non aver bisogno di quella distinzione.
+    # Primo argomento, che la banda esterna desse lettura per righe sulle
+    # tabelle: falso, da' lettura per colonne al gutter piu' esterno. Ma la
+    # correzione vera e' un'altra, ed e' che la domanda era mal posta:
+    # `column_band` NON deve leggere le tabelle. Deve dire dove sono i confini
+    # di colonna; se una regione e' una tabella la gestisce il consumer di
+    # tabelle, aiutato proprio da questi gutter. Giudicare il meccanismo su
+    # quanto legge male una tabella era giudicarlo su un compito che non ha, e i
+    # sette gutter annidati di DB p.76 non sono una patologia: sono la
+    # descrizione corretta di una tabella a nove colonne.
     #
-    # Costo dichiarato: una colonna che ne contiene altre e NON e' una tabella --
-    # un riquadro a due sotto-colonne dentro una colonna -- viene letta riga per
-    # riga e le sue sotto-colonne si interlacciano. Caso raro e non misurato.
+    # Secondo argomento, che una banda estesa "rubi" le primitive alle figlie:
+    # formulazione confusa. La regola non sottrae niente, sceglie soltanto quale
+    # struttura di colonne ordina una primitiva. Il pericolo dello svuotamento
+    # veniva dalle bande PIATTE con "vince la prima", dove non esisteva
+    # gerarchia; con l'albero quel meccanismo non c'e' piu'. Era la paura di un
+    # problema trasportata in un contesto dove era gia' risolto.
+    #
+    # Cosa fa quindi la regola, nella formulazione dell'utente: le bande piu'
+    # profonde definiscono quali sono le colonne maggiori, e se dentro ne
+    # compaiono altre sono tabelle o gutter subordinati -- materiale per chi di
+    # dovere, non un ordine di lettura da imporre qui.
     owner: dict[int, int | None] = {}
     for index, primitive in enumerate(text_primitives):
         best: int | None = None
@@ -169,7 +178,7 @@ def _tree_aware_order(
             depth_here = int(cast(int, row["depth"]))
             if not contains(band_id, primitive):
                 continue
-            if best is None or depth_here < best_depth:
+            if best is None or depth_here > best_depth:
                 best, best_depth = band_id, depth_here
         owner[index] = best
 
@@ -502,8 +511,8 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--use-tree",
         action="store_true",
-        help="Usa la segmentazione GERARCHICA e assegna ogni primitiva alla banda ESTERNA "
-        "che la contiene, invece delle bande a fasce y.",
+        help="Usa la segmentazione GERARCHICA e assegna ogni primitiva alla banda piu' "
+        "PROFONDA che la contiene, invece delle bande a fasce y.",
     )
     parser.add_argument(
         "--widen-bands",
