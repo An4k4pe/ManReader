@@ -16,10 +16,23 @@ Text ordering is NOT a contract. ``page_analysis_model.py`` explicitly denies
 reading order for candidates and relations (lines 189-190, 192-193, 195-196):
 "The order of ... is only representation order. It is not reading order,
 geometric order, structural order, or any other structural constraint."
-The paragraph order used below (``y0`` ascending, then ``x0`` ascending, with
-a paragraph break whenever the next TextPrimitive's ``y0`` does not overlap
-the previous one's ``y1``) is a diagnostic display choice for this prototype,
-not a claim about reading order, and carries no weight beyond this script.
+The order used below (``y0`` ascending, then ``x0`` ascending, unless one of
+the ``--emit-order-variants`` branches is asked for) is a diagnostic display
+choice for this prototype, not a claim about reading order, and carries no
+weight beyond this script.
+
+Paragraph segmentation is NOT a display choice and is not derived from
+geometry: it comes from ``block_index`` in ``source_observation_id``
+(``text:b{block}:l{line}:s{span}``), because PyMuPDF's block IS the paragraph
+-- verified on DB p.53, where ``b3`` is one three-line prose paragraph and
+``b4``-``b7`` are four list items, one block each. The previous rule broke a
+paragraph wherever two consecutive primitives' ``y`` ranges failed to overlap,
+and failed in a way no patch fixes: on DB p.53 each list item ends with an
+EMPTY span whose bbox is taller than the line, which overlapped the next item
+and bridged it, emitting three items on one line. Geometry stays legitimate
+for positioning and for checking, never for rebuilding the structure of the
+text. Same rule in all three emitters here and in
+``compare_reading_order_with_column_bands.py``, kept identical on purpose.
 
 Vector primitives are excluded from asset extraction by explicit choice
 (proposal §9.2), not by omission: only ``ImageOccurrencePrimitive`` (raster)

@@ -53,6 +53,16 @@ Nei due criteri precedenti P0 era «`page.md` resta identico byte per byte».
 difettosa, e lasciarcela vorrebbe dire tenere per buono un artefatto di
 Milestone 36 che sappiamo sbagliato.
 
+**Postilla dopo l'implementazione, rilievo dell'utente**: quel P0 era comunque
+troppo stretto. `page.md` non è un producer né un artefatto definitivo — lo
+dicono sia la docstring dello script («diagnostic prototype, not production
+code»; la regola di paragrafo è «a diagnostic display choice for this
+prototype … carries no weight beyond this script») sia `State.md` su
+Milestone 36 («l'emettitore diagnostico **non è** il punto di partenza del
+renderer IR-first»). Non c'era nulla da preservare byte per byte. Come guardia
+contro un cambio **silenzioso** introdotto da un flag restava utile, ed è per
+quello che era nato; l'invariante che porta davvero il peso è I2.
+
 P0 diventa quindi: **`page.md` può cambiare solo nelle interruzioni di
 paragrafo**, e la prova è I2 applicata a lui. Un cambio dichiarato e verificato
 non è un cambio silenzioso, che è ciò contro cui P0 esisteva.
