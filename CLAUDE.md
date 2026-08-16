@@ -1,5 +1,13 @@
 # ManReader
 
+**Obiettivo, da rileggere e non da ricordare** (`AGENTS.MD` §Obiettivo per
+intero): PDF TTRPG → Markdown ed EPUB **semantici**, contenuto preservato;
+immagini, sfondi ed elementi ripetuti **sostituiti da note brevi che dicono cosa
+sostituiscono**, con gli asset in una cartella referenziata. Ogni scelta si
+giudica contro questo, non contro la coerenza interna del meccanismo su cui si
+sta lavorando: e' la domanda che ferma un giro di rifinitura che non avvicina un
+EPUB.
+
 Leggi `AGENTS.MD` (invarianti e vincoli) e `ManReader_TwoChat_Agent_Workflow.md`
 (ruoli e formati) prima di proporre qualunque cosa. Per lo stato corrente, la
 sezione pertinente di `State.md`, non il file intero.

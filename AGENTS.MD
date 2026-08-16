@@ -21,6 +21,18 @@ Convertire manuali PDF TTRPG in Markdown ed EPUB semantici, preservando il conte
 - AI locale opzionale;
 - una IR comune ai renderer.
 
+E, sullo stesso piano e non come dettaglio di resa: **sostituire immagini,
+sfondi ed elementi ripetuti con note brevi e riassuntive di cio' che hanno
+sostituito**, tenendo tutti gli asset in una cartella referenziata. Lo scopo e'
+la consultazione comoda: chi legge deve sapere cosa c'era senza doverselo
+caricare addosso.
+
+Questa voce mancava fino al 16 agosto 2026 benche' la pipeline la praticasse
+gia' (Milestone 36 estrae gli asset su disco e lascia note che li referenziano).
+Un obiettivo che si puo' leggere per intero e perderne meta' non e' un
+obiettivo: registrata su rilievo dell'utente, dopo una sessione intera passata a
+rifinire un meccanismo interno senza rileggerlo.
+
 ## Vincoli permanenti
 
 - elaborazione locale;
