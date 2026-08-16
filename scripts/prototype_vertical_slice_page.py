@@ -1017,7 +1017,15 @@ def parse_args() -> argparse.Namespace:
             "invariato: e' la precondizione P0 del criterio."
         ),
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    # Senza --emit-order-variants il blocco dell'interruzione non viene mai
+    # eseguito, e il flag veniva accettato in silenzio. Su un progetto che ha
+    # gia' registrato quattro errori di misura consecutivi, uno strumento che
+    # tace quando non ha fatto la cosa richiesta e' un rischio sproporzionato al
+    # costo di questa riga. Rilievo della revisione indipendente.
+    if args.interrupt_corridor and not args.emit_order_variants:
+        parser.error("--interrupt-corridor richiede --emit-order-variants")
+    return args
 
 
 def main() -> None:

@@ -108,6 +108,13 @@ def check_conservation(
     questa soglia non c'e' nulla da guardare", mai a dichiarare una violazione.
     """
 
+    # ATTENZIONE: anche questa direzione poggia sulla chiave stringa.
+    # `_segment_tree` assegna `tree_status` confrontando f"{x0:.1f}-{x1:.1f}"
+    # con l'insieme delle chiavi emesse, quindi un gutter MAI emesso la cui
+    # chiave coincide con quella di un altro emesso viene marcato `band`.
+    # Misurato dalla revisione indipendente: 21 pagine su 794 hanno due gutter
+    # accettati che condividono la chiave; mascheramenti effettivi 0. La guardia
+    # ha quindi margine zero per costruzione, non per fortuna.
     missing = sum(1 for g in accepted if g.get("tree_status") not in ("band", "edge_strip"))
     labelled = sum(1 for g in accepted if g.get("tree_status") == "edge_strip")
 
@@ -178,10 +185,13 @@ def self_test() -> int:
     ]
     _, collisions, _ = check_conservation(sane_accepted, two_parents)
     report("stessa x sotto due genitori: la collisione viene contata", collisions == 1)
-    report(
-        "...ma NON e' una duplicazione dimostrata: due gutter distinti alla "
-        "stessa x la producono identica (Dag p.127)",
-        True,
+    # Nota, NON un controllo: una frase in prosa passata a `report` come se
+    # fosse un asserto stampava OK senza verificare nulla, dentro l'auto-test
+    # che esiste perche' "una guardia mai vista fallire non si distingue
+    # dall'assenza di guardia". Rilievo della revisione indipendente.
+    print(
+        "  NOTA      la collisione sopra NON dimostra una duplicazione: due "
+        "gutter distinti alla stessa x la producono identica (Dag p.127)"
     )
 
     missing, _, labelled = check_conservation(
