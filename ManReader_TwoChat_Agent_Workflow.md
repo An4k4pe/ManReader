@@ -1,5 +1,27 @@
 # ManReader — Workflow Chat A, Chat B e Zed agent
 
+## A cosa serve ManReader (leggere prima di giudicare qualunque proposta)
+
+Convertire **manuali PDF TTRPG in Markdown ed EPUB semantici**, preservando il
+contenuto, con revisione visuale, profili riutilizzabili, decisioni tracciabili,
+job riprendibili, AI locale opzionale e una IR comune ai renderer — **e**
+sostituire immagini, sfondi ed elementi ripetuti con **note brevi e riassuntive
+di cio' che hanno sostituito**, tenendo gli asset in una cartella referenziata,
+perche' la consultazione resti comoda. Versione integrale in `AGENTS.MD`
+§Obiettivo.
+
+Sta qui, e non solo in `AGENTS.MD`, per una ragione misurata il 16 agosto 2026:
+il giro metodologico di Chat B legge **soltanto questo file** piu' la proposta, e
+fino ad allora ha revisionato senza sapere a cosa servisse il prodotto. Un
+revisore che non conosce lo scopo puo' giudicare solo la coerenza interna di cio'
+che gli viene messo davanti -- ed e' esattamente il modo in cui questo progetto
+si e' avvitato tre volte.
+
+**La domanda che entrambe le chat devono potersi fare su qualunque proposta:
+questo avvicina un EPUB leggibile, o solo la coerenza interna del meccanismo su
+cui stiamo lavorando?**
+
+
 ## Versione: 2.0
 
 Documento comune per progettazione, diagnostica, implementazione e revisione del progetto ManReader.
