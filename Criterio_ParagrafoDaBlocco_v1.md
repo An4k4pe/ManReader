@@ -1,5 +1,14 @@
 # Criterio di accettazione — il paragrafo viene dal blocco
 
+**AVVISO — questo file è stato modificato DOPO l'implementazione.** Il §3
+contiene una postilla aggiunta a implementazione avvenuta, che **rilassa** P0.
+Rilievo della revisione indipendente: l'intestazione dice «scritto prima» e il
+file in HEAD non è quello pre-registrato, quindi per questo criterio la
+precedenza va stabilita per diff (`git diff 177f52c..HEAD -- Criterio_ParagrafoDaBlocco_v1.md`),
+non letta qui. Il rilassamento di un criterio di accettazione dopo aver visto il
+risultato è il caso in cui la distinzione conta di più, e va segnalato in testa,
+non solo etichettato dove sta.
+
 Scritto **prima** dell'implementazione, come i due criteri precedenti di questa
 sessione. La decisione non è in discussione — è una posizione permanente
 dell'utente, ribadita qui per la terza volta: *la ricostruzione geometrica del

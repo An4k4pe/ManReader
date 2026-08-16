@@ -1,5 +1,10 @@
 # Criterio di accettazione — giunzione `column_band` ↔ fetta verticale
 
+> **SUPERATO IN PARTE da `Criterio_ParagrafoDaBlocco_v1.md`.** Il §2 qui sotto
+> dichiara invariata «la regola di paragrafo»: quel criterio la cambia. Chi cita
+> questo documento come garanzia che la segmentazione in paragrafi non è stata
+> toccata cita un documento falso. Rilievo della revisione indipendente.
+
 Scritto **prima** di costruire la giunzione e **prima** di guardare qualunque
 output, come prescritto da `CLAUDE.md`. Il commit che introduce questo file non
 contiene **nulla della giunzione**: è la prova della precedenza, ed è l'unica

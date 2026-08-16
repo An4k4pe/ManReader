@@ -1,5 +1,10 @@
 # Criterio di accettazione — interruzione del corridoio, nel consumer
 
+> **SUPERATO IN PARTE da `Criterio_SubordinazioneProbatoria_v1.md`.** Il §1 qui
+> sotto dichiara «`column_band` non si tocca»: quel criterio lo tocca. Chi cita
+> questo documento come garanzia che il producer è rimasto intatto cita un
+> documento falso. Rilievo della revisione indipendente.
+
 Scritto **prima** di implementare e **prima** di guardare gli output, come
 `Criterio_GiunzioneFettaVerticale_v1.md` e per la stessa ragione. Il commit che
 introduce questo file non contiene implementazione.
