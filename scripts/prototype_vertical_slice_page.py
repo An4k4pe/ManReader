@@ -78,6 +78,9 @@ from prototype_derived_column_bands import (  # noqa: E402
 
 from page_analysis_co_reference import build_co_referenced_page_analyses  # noqa: E402
 from page_analysis_co_reference_binding import bind_co_referenced_page_analyses  # noqa: E402
+from page_analysis_drawing_cluster_diagnostics import (  # noqa: E402
+    dump_drawing_cluster_diagnostics,
+)
 from page_analysis_embedded_visual import build_embedded_visual_page_analysis  # noqa: E402
 from page_analysis_interior_visual_frame import (  # noqa: E402
     build_interior_visual_frame_page_analysis,
@@ -345,11 +348,27 @@ def _corridor_blockers(
     ]
     if text_heights:
         shortest_line = min(text_heights)
-        blockers.extend(
-            primitive.bbox
-            for primitive in primitive_page.drawing_primitives
-            if primitive.bbox[3] - primitive.bbox[1] < shortest_line
+        # Si LEGGE la classificazione di Milestone 26 invece di ridedurla dalle
+        # primitive grezze. `page_analysis_drawing_cluster_diagnostics` gia'
+        # raggruppa i disegni e segnala quelli senza area; da quando registra
+        # anche `degenerate_bbox`, un filetto orizzontale conserva la propria
+        # posizione invece di ridursi alla sola etichetta `tiny`. Il costo e'
+        # andare a leggere che in quel punto un altro modulo ha segnalato
+        # qualcosa -- che e' esattamente cio' che `AGENTS.MD` §Layout e
+        # candidati chiede a un consumer, invece di ricavarlo dai pixel.
+        clusters = cast(
+            list[dict[str, object]],
+            dump_drawing_cluster_diagnostics(
+                primitive_page, generation_id="corridor-blockers"
+            )["clusters"],
         )
+        for cluster in clusters:
+            box = cluster["bbox"] or cluster["degenerate_bbox"]
+            if box is None:
+                continue
+            bbox = cast(list[float], box)
+            if bbox[3] - bbox[1] < shortest_line:
+                blockers.append((bbox[0], bbox[1], bbox[2], bbox[3]))
 
     return blockers
 
