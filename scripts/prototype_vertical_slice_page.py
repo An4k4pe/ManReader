@@ -552,7 +552,17 @@ def _ordered_markdown_body(
             text = (primitive.text or "").strip()
             if text:
                 words.append(text)
-            previous = primitive
+            # Una primitiva SENZA testo non diventa il termine di paragone per
+            # l'interruzione di paragrafo. Su DB p.53 ogni voce dell'elenco
+            # finisce con uno span vuoto di bbox piu' alto della riga
+            # (y 630,5-644,0 contro 631,3-642,9 del testo), che si sovrappone
+            # alla riga successiva e fa da PONTE: la regola vedeva continuita'
+            # e "Esausto - FOR / Malaticcio - COS / Disorientato - AGI" usciva
+            # su una riga sola. Non e' un caso limite del raggruppamento di
+            # riga: e' che un elemento che non porta contenuto non deve poter
+            # decidere dove va a capo il contenuto.
+            if text:
+                previous = primitive
             previous_group = group
         else:
             flush()

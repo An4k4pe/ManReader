@@ -520,7 +520,13 @@ def _render(ordered: list[tuple[TextPrimitive, int]]) -> str:
             words = []
         if text:
             words.append(text)
-        previous = primitive
+        # Stessa regola di `_ordered_markdown_body` nella fetta verticale, e
+        # tenuta identica di proposito: una primitiva senza testo non fa da
+        # termine di paragone per l'interruzione di paragrafo. Su DB p.53 gli
+        # span vuoti di fine voce hanno bbox piu' alto della riga e facevano da
+        # ponte fra una voce e la successiva.
+        if text:
+            previous = primitive
         previous_group = group
     if words:
         paragraphs.append(" ".join(words))

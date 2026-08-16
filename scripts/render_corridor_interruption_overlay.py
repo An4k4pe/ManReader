@@ -7,7 +7,7 @@ serve; l'overlay si'.
 
 Cosa disegna:
 
-  verde        i gutter accettati, dentro l'estensione y della loro banda
+  verde        i gutter accettati, ciascuno sulla PROPRIA fascia probatoria
   blu          bande PRIMA (`prototype_derived_column_bands`), tratto spesso
   arancione    bande DOPO l'interruzione, tratto sottile e rientrato di 2pt
                cosi' resta visibile anche dove coincide con quella blu
@@ -95,7 +95,7 @@ def main(argv: list[str] | None = None) -> int:
         if not 0 <= page_index < document.page_count:
             print(f"pagina fuori range: {args.page}", file=sys.stderr)
             return 1
-        _gutters, _bands, tree = _process_page(
+        gutters, _bands, tree = _process_page(
             document,
             page_index,
             manual=pdf_path.name,
@@ -105,6 +105,7 @@ def main(argv: list[str] | None = None) -> int:
             min_flanking_chars=_DEFAULT_MIN_FLANKING_CHARS,
             min_gutter_lines=3.0,
         )
+        accepted_gutters = [g for g in gutters if not g.get("reject_reason")]
         page = document.load_page(page_index)
         capture = capture_pymupdf_page(
             page,
@@ -139,22 +140,28 @@ def main(argv: list[str] | None = None) -> int:
             rect = fitz.Rect(bbox[0], bbox[1] - 0.6, bbox[2], bbox[3] + 0.6)
             page.draw_rect(rect, color=colour, fill=colour, fill_opacity=0.55, width=0.3)
 
-        # I gutter, in verde. Mancavano, e la loro assenza ha fatto concludere a
-        # ragione veduta che il meccanismo non li trovasse dove invece li trova:
-        # su DB p.53 i tre gutter reali ci sono tutti, ma questo overlay
-        # disegnava solo bande e blocker. Contorno oltre al riempimento, perche'
-        # su un riquadro verde il solo riempimento e' invisibile -- e' l'altro
-        # motivo per cui erano sembrati assenti.
-        for row in tree:
-            by0, by1 = float(cast(float, row["y0"])), float(cast(float, row["y1"]))
-            for gx0, gx1 in _gutters_of(row):
-                page.draw_rect(
-                    fitz.Rect(gx0, by0, gx1, by1),
-                    color=_GREEN,
-                    fill=_GREEN,
-                    fill_opacity=0.30,
-                    width=1.2,
-                )
+        # I gutter accettati, ciascuno sulla PROPRIA fascia y e non su quella
+        # della banda. Due versioni precedenti di questo overlay hanno sviato la
+        # lettura: la prima non li disegnava affatto, la seconda li tirava per
+        # tutta l'altezza della banda, facendo sembrare che il meccanismo
+        # vedesse un corridoio dove non lo vede.
+        #
+        # Verde pieno: la fascia PROBATORIA (`y0`/`y1`), dove entrambi i lati
+        # sono attivi e il gutter e' dimostrato.
+        # Verde a contorno: lo SPAN, cioe' fin dove l'estensione lo porta. La
+        # distinzione e' quella che decide la nidificazione, quindi va vista.
+        for gutter in accepted_gutters:
+            gx0 = float(cast(float, gutter["x0"]))
+            gx1 = float(cast(float, gutter["x1"]))
+            gy0 = float(cast(float, gutter["y0"]))
+            gy1 = float(cast(float, gutter["y1"]))
+            page.draw_rect(
+                fitz.Rect(gx0, gy0, gx1, gy1),
+                color=_GREEN,
+                fill=_GREEN,
+                fill_opacity=0.45,
+                width=1.2,
+            )
 
         for row in tree:
             rect = fitz.Rect(
