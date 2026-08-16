@@ -1,30 +1,49 @@
 """Le due garanzie dell'albero di bande: conservazione, e nessuna banda che
 taglia parole.
 
-G1 -- CONSERVAZIONE. `_segment_tree` promette che ogni gutter accettato compaia
-esattamente una volta nell'albero. E' la guardia che distingue una correzione da
-un trucco: le scorciatoie ovvie riparano una pagina SCARTANDO un gutter
-subordinato, e su una pagina a 3 colonne sopra e 2 sotto perderebbero struttura
-vera in silenzio. Qui si rimisura invece di fidarsi del numero storico.
+G1 -- CONSERVAZIONE. La promessa di `_segment_tree` e' che ogni gutter accettato
+compaia **esattamente una volta** nell'albero, e sono due direzioni: sparire, e
+comparire due volte. La revisione indipendente del 16 agosto 2026 ha rilevato
+che qui se ne misurava una sola, e aveva ragione a chiederlo -- la direzione
+scoperta e' proprio quella che aveva gia' prodotto un difetto reale (un
+subordinato con due padri possibili emesso due volte, chiuso da `placed`).
+
+**Provandoci si e' scoperto che la seconda direzione non e' misurabile
+dall'uscita attuale**, e il tentativo produceva falsi positivi su pagine reali.
+Vedi `check_conservation`. Lo strumento ora dichiara il limite invece di
+restituire un numero che sembra un verdetto: quello che manca per misurarla e'
+un'identita' stabile per gutter emessa da `_segment_tree`.
 
 G2 -- NESSUNA BANDA TAGLIA PAROLE. Formulazione dell'utente. Un confine x di
 banda che cade dentro il bbox di una primitiva testuale contenuta in quella
-banda e' una hard rule violata: la primitiva viene attribuita a una struttura di
-colonne a cui non appartiene. Misurato su DB p.53, dove la banda del box eredita
-`x0 = 178` dalla colonna del padre e 5 primitive del box scavalcano quel
-confine.
+banda e' una hard rule violata: la primitiva finisce in una struttura di colonne
+che non e' la sua. Misurato su DB p.53, dove la banda del box ereditava
+`x0 = 178` dalla colonna del padre.
 
+**Si riporta il LORDO, non il netto.** Un aggregato che scende puo' nascondere
+pagine che salgono, e "bande da 298 a 310" puo' nascondere distruzioni dentro
+una creazione netta. Con `--csv-output` si ottiene il dettaglio per pagina, che
+e' l'unico modo di rispondere a "in nessun caso sale".
+
+`--self-test` esegue i CONTROLLI NEGATIVI: rompe di proposito un albero e mostra
+che le guardie se ne accorgono. Serve perche' una guardia mai vista fallire non
+si distingue dall'assenza di guardia.
+
+`--first-page` esiste perche' le prime N pagine di un manuale non sono un
+campione: sono l'apertura, e differiscono dal corpo proprio nella variabile in
+gioco (densita' di tabelle e riquadri).
+
+I numeri di pagina sono indici POSIZIONALI, vedi `CLAUDE.md`.
 Non un producer. Non wired. Sola lettura.
-
-`--page` e i numeri in uscita sono indici POSIZIONALI, vedi `CLAUDE.md`.
 """
 
 from __future__ import annotations
 
 import argparse
+import csv
 import sys
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import fitz
 
@@ -41,12 +60,16 @@ from prototype_derived_column_bands import (  # noqa: E402
 )
 from pymupdf_capture import capture_pymupdf_page  # noqa: E402
 
+_FIELDS = ("bands", "accepted", "missing", "x_key_collisions", "labelled", "cut")
+
+
+def _gutter_keys(row: dict[str, object]) -> list[str]:
+    return str(row.get("gutter_x_intervals") or "").split()
+
 
 def _band_x_edges(row: dict[str, object]) -> list[float]:
-    """I confini x che la banda impone: i suoi estremi e i bordi dei gutter."""
-
     edges = [float(cast(float, row["x0"])), float(cast(float, row["x1"]))]
-    for chunk in str(row.get("gutter_x_intervals") or "").split():
+    for chunk in _gutter_keys(row):
         start, _, end = chunk.partition("-")
         try:
             edges.extend((float(start), float(end)))
@@ -55,7 +78,134 @@ def _band_x_edges(row: dict[str, object]) -> list[float]:
     return edges
 
 
-def scan_page(document: fitz.Document, page_index: int, manual: str) -> dict[str, int]:
+def check_conservation(
+    accepted: list[dict[str, object]], tree: list[dict[str, object]]
+) -> tuple[int, int, int]:
+    """G1 nelle due direzioni. Ritorna (spariti, duplicati, scartati_etichettati).
+
+    SPARITI: un gutter accettato che l'albero non contiene e che nessuno ha
+    etichettato. `edge_strip` NON conta come sparizione: e' lo scarto dichiarato
+    del minimo di larghezza ai bordi, con etichetta, e vale per le linguette di
+    capitolo. Viene comunque riportato a parte, perche' un'esclusione dichiarata
+    resta un'esclusione e chi legge deve vederla.
+
+    INDISTINGUIBILI: la seconda direzione -- lo stesso gutter emesso due volte
+    in rami diversi -- **non e' misurabile dall'uscita attuale**, e il numero
+    qui restituito NON va letto come "duplicati".
+
+    Le righe dell'albero identificano un gutter solo per intervallo x, e gutter
+    DIVERSI possono condividerlo: su Dag p.127 `399.0-408.0` compare sotto tre
+    genitori, ma nelle fasce y 82-270, 280-456 e 488-762, che sono tre gutter
+    distinti emessi una volta ciascuno; idem su DrW p.163 per `353.0-365.0`.
+    Contarli come duplicazione e' un falso positivo -- ed e' la stessa collisione
+    sulla stringa x che aveva gia' fatto sbagliare il primo tentativo di misura.
+
+    Per misurarla davvero servirebbe che `_segment_tree` emettesse un'identita'
+    stabile per gutter accanto all'intervallo x. E' un cambio dentro
+    `column_band` e non si fa di soppiatto dentro uno script di verifica.
+
+    Il valore restituito e' quindi un LIMITE SUPERIORE, utile solo a dire "sotto
+    questa soglia non c'e' nulla da guardare", mai a dichiarare una violazione.
+    """
+
+    missing = sum(1 for g in accepted if g.get("tree_status") not in ("band", "edge_strip"))
+    labelled = sum(1 for g in accepted if g.get("tree_status") == "edge_strip")
+
+    parents_by_key: dict[str, set[str]] = {}
+    for row in tree:
+        parent = str(row.get("parent_id", ""))
+        for key in _gutter_keys(row):
+            parents_by_key.setdefault(key, set()).add(parent)
+    indistinguishable = sum(1 for parents in parents_by_key.values() if len(parents) > 1)
+
+    return missing, indistinguishable, labelled
+
+
+def check_cuts(tree: list[dict[str, object]], primitives: tuple[Any, ...]) -> int:
+    """G2: confini x di banda che cadono dentro il bbox di una primitiva."""
+
+    cut = 0
+    for row in tree:
+        by0, by1 = float(cast(float, row["y0"])), float(cast(float, row["y1"]))
+        edges = _band_x_edges(row)
+        for primitive in primitives:
+            centre_y = (primitive.bbox[1] + primitive.bbox[3]) / 2.0
+            if not (by0 <= centre_y < by1):
+                continue
+            if any(primitive.bbox[0] < edge < primitive.bbox[2] for edge in edges):
+                cut += 1
+    return cut
+
+
+class _FakePrimitive:
+    def __init__(self, bbox: tuple[float, float, float, float]) -> None:
+        self.bbox = bbox
+
+
+def self_test() -> int:
+    """Controlli negativi: le guardie devono FALLIRE quando devono."""
+
+    failures = 0
+
+    def report(name: str, ok: bool) -> None:
+        nonlocal failures
+        print(f"  {'OK     ' if ok else 'FALLITO'}  {name}")
+        if not ok:
+            failures += 1
+
+    sane_tree: list[dict[str, object]] = [
+        {"band_id": 1, "parent_id": "", "x0": 0.0, "x1": 600.0, "y0": 0.0, "y1": 300.0,
+         "gutter_x_intervals": "300.0-310.0"},
+        {"band_id": 2, "parent_id": "", "x0": 0.0, "x1": 600.0, "y0": 300.0, "y1": 600.0,
+         "gutter_x_intervals": "300.0-310.0"},
+    ]
+    sane_accepted: list[dict[str, object]] = [
+        {"x0": 300.0, "x1": 310.0, "tree_status": "band"}
+    ]
+
+    missing, collisions, _ = check_conservation(sane_accepted, sane_tree)
+    report("albero sano: nessuno sparito", missing == 0)
+    report("albero sano: stesso gutter in due fasce y non collide", collisions == 0)
+
+    missing, _, _ = check_conservation(
+        [{"x0": 300.0, "x1": 310.0, "tree_status": ""}], sane_tree
+    )
+    report("gutter tolto dall'albero: G1 lo rileva", missing == 1)
+
+    two_parents = sane_tree + [
+        {"band_id": 3, "parent_id": 1, "x0": 0.0, "x1": 300.0, "y0": 10.0, "y1": 90.0,
+         "gutter_x_intervals": "300.0-310.0"},
+    ]
+    _, collisions, _ = check_conservation(sane_accepted, two_parents)
+    report("stessa x sotto due genitori: la collisione viene contata", collisions == 1)
+    report(
+        "...ma NON e' una duplicazione dimostrata: due gutter distinti alla "
+        "stessa x la producono identica (Dag p.127)",
+        True,
+    )
+
+    missing, _, labelled = check_conservation(
+        [{"x0": 300.0, "x1": 310.0, "tree_status": "edge_strip"}], sane_tree
+    )
+    report(
+        "edge_strip: non e' sparizione, ma viene riportato",
+        missing == 0 and labelled == 1,
+    )
+
+    report(
+        "primitiva che scavalca un confine: G2 la rileva",
+        check_cuts(sane_tree, (_FakePrimitive((280.0, 100.0, 320.0, 112.0)),)) == 1,
+    )
+    report(
+        "primitiva tutta dentro una colonna: G2 non la conta",
+        check_cuts(sane_tree, (_FakePrimitive((100.0, 100.0, 200.0, 112.0)),)) == 0,
+    )
+
+    print("\n" + ("AUTO-TEST SUPERATO" if failures == 0 else f"AUTO-TEST FALLITO: {failures}"))
+    return 1 if failures else 0
+
+
+def scan_page(document: fitz.Document, page_index: int, manual: str) -> dict[str, object]:
     try:
         gutters, _bands, tree = _process_page(
             document,
@@ -73,24 +223,7 @@ def scan_page(document: fitz.Document, page_index: int, manual: str) -> dict[str
         return {}
 
     accepted = [g for g in gutters if not g.get("reject_reason")]
-
-    # G1 si legge da `tree_status`, che il meccanismo assegna gia' da cio' che
-    # l'albero CONTIENE davvero. Una versione precedente di questo script
-    # contava invece quante volte la stringa x di un gutter comparisse fra le
-    # righe, e dava 4 mancanti e 8 duplicati su cinque manuali: falso allarme,
-    # perche' `_segment_bands` ripete lo stesso gutter in OGNI fascia y che
-    # attraversa, e due gutter distinti alla stessa x sono indistinguibili in
-    # quella stringa. La misura sbagliata avrebbe fatto fallire la porta prima
-    # ancora di cambiare qualcosa.
-    # `edge_strip` NON e' una perdita: e' lo scarto dichiarato del minimo di
-    # larghezza ai bordi, con etichetta, e vale per le linguette di capitolo
-    # (misurati 4 casi su Fab, tutti quella). Una seconda versione di questo
-    # script li contava come conservazione caduta -- secondo falso allarme di
-    # fila. Conta solo cio' che sparisce SENZA etichetta.
-    missing = sum(
-        1 for g in accepted if g.get("tree_status") not in ("band", "edge_strip")
-    )
-    dropped_labelled = sum(1 for g in accepted if g.get("tree_status") == "edge_strip")
+    missing, collisions, labelled = check_conservation(accepted, tree)
 
     capture = capture_pymupdf_page(
         document.load_page(page_index),
@@ -100,66 +233,76 @@ def scan_page(document: fitz.Document, page_index: int, manual: str) -> dict[str
     )
     primitives = normalize_backend_page_capture(capture).text_primitives
 
-    # G2: un confine x della banda cade dentro il bbox di una primitiva che la
-    # banda contiene in y. Il confine e' un taglio: se ci passa dentro del
-    # testo, quel testo e' attribuito a una colonna che non e' la sua.
-    cut = 0
-    for row in tree:
-        by0, by1 = float(cast(float, row["y0"])), float(cast(float, row["y1"]))
-        edges = _band_x_edges(row)
-        for primitive in primitives:
-            centre_y = (primitive.bbox[1] + primitive.bbox[3]) / 2.0
-            if not (by0 <= centre_y < by1):
-                continue
-            if any(primitive.bbox[0] < edge < primitive.bbox[2] for edge in edges):
-                cut += 1
-
     return {
+        "manual": manual,
+        "page_positional": page_index + 1,
         "bands": len(tree),
         "accepted": len(accepted),
         "missing": missing,
-        "dropped_labelled": dropped_labelled,
-        "cut": cut,
+        "x_key_collisions": collisions,
+        "labelled": labelled,
+        "cut": check_cuts(tree, primitives),
     }
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--pdf-dir", type=Path, required=True)
-    parser.add_argument("--manuals", nargs="+", required=True)
+    parser.add_argument("--pdf-dir", type=Path)
+    parser.add_argument("--manuals", nargs="+")
+    parser.add_argument("--first-page", type=int, default=1, help="indice POSIZIONALE di partenza")
     parser.add_argument("--max-pages", type=int, default=60)
+    parser.add_argument("--csv-output", type=Path, default=None)
+    parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args(argv)
 
-    totals = {"bands": 0, "accepted": 0, "missing": 0, "dropped_labelled": 0, "cut": 0}
-    pages_with_cut = 0
-    pages = 0
+    if args.self_test:
+        return self_test()
+    if args.pdf_dir is None or not args.manuals:
+        parser.error("servono --pdf-dir e --manuals, oppure --self-test")
+
+    rows: list[dict[str, object]] = []
     for manual in args.manuals:
         pdf_path = cast(Path, args.pdf_dir) / f"{manual}.pdf"
         if not pdf_path.is_file():
             print(f"manca: {pdf_path}", file=sys.stderr)
             continue
         with fitz.open(pdf_path) as document:
-            for page_index in range(min(args.max_pages, document.page_count)):
+            start = args.first_page - 1
+            last = min(start + args.max_pages, document.page_count)
+            for page_index in range(start, last):
                 result = scan_page(document, page_index, manual)
-                if not result:
-                    continue
-                pages += 1
-                for key in totals:
-                    totals[key] += result[key]
-                if result["cut"]:
-                    pages_with_cut += 1
+                if result:
+                    rows.append(result)
 
-    print(f"pagine con almeno una banda: {pages}")
-    print(f"bande: {totals['bands']}   gutter accettati: {totals['accepted']}")
+    total = {k: sum(cast(int, r[k]) for r in rows) for k in _FIELDS}
     print(
-        f"G1 conservazione: spariti senza etichetta {totals['missing']}"
-        f"   (scartati con etichetta edge_strip: {totals['dropped_labelled']})"
-        f"   -> {'OK' if totals['missing'] == 0 else 'CADUTA'}"
+        f"perimetro: pagine posizionali {args.first_page}-"
+        f"{args.first_page + args.max_pages - 1} per manuale"
+    )
+    print(f"pagine con almeno una banda: {len(rows)}")
+    print(f"bande: {total['bands']}   gutter accettati: {total['accepted']}")
+    print(
+        f"G1 direzione SPARIZIONE: {total['missing']}"
+        f"   (scartati con etichetta: {total['labelled']})"
+        f"   -> {'OK' if total['missing'] == 0 else 'CADUTA'}"
     )
     print(
-        f"G2 confini che tagliano una primitiva: {totals['cut']} "
-        f"su {pages_with_cut} pagine"
+        f"G1 direzione DUPLICAZIONE: NON MISURABILE dall'uscita attuale. "
+        f"Collisioni sulla chiave x: {total['x_key_collisions']} (limite superiore, "
+        f"non violazioni -- vedi check_conservation)"
     )
+    print(
+        f"G2 confini che tagliano una primitiva: {total['cut']} "
+        f"su {sum(1 for r in rows if r['cut'])} pagine"
+    )
+
+    if args.csv_output is not None and rows:
+        args.csv_output.parent.mkdir(parents=True, exist_ok=True)
+        with args.csv_output.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))
+            writer.writeheader()
+            writer.writerows(rows)
+        print(f"dettaglio per pagina in {args.csv_output}")
     return 0
 
 
