@@ -782,7 +782,21 @@ def _is_subordinate(inner: _GapRect, outer: _GapRect) -> bool:
         return False
     if (outer.y1 - outer.y0) <= (inner.y1 - inner.y0):
         return False
-    return inner.span_y0 < outer.span_y1 and outer.span_y0 < inner.span_y1
+    # Sovrapposizione sui PROBATORI, non sullo span. `span_y0`/`span_y1` dicono
+    # fin dove si PRESUME che la separazione continui; `y0`/`y1` dove e'
+    # DIMOSTRATA, cioe' dove entrambi i lati sono attivi. "Questa struttura sta
+    # dentro quella" e' una claim strutturale e deve poggiare sulla
+    # dimostrazione -- ed e' la stessa separazione che la condizione qui sopra
+    # gia' rispetta, per cui prima questa funzione misurava la stessa cosa in
+    # due modi diversi al proprio interno.
+    #
+    # Misurato su DB p.53: il box LESIONI GRAVI (probatorio 60-120, span 46-176)
+    # diventava figlio della tabella (probatorio 160-504, span 120-582) perche'
+    # le estensioni colmano i quaranta punti di vuoto che separano le due
+    # strutture. Da figlio ereditava come estensione x la colonna del padre,
+    # cioe' un confine a 178 che nel box non esiste: cinque primitive lo
+    # scavalcavano e quattro su diciassette finivano nella banda della tabella.
+    return inner.y0 < outer.y1 and outer.y0 < inner.y1
 
 
 def _segment_tree(
