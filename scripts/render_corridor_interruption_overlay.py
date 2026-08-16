@@ -7,6 +7,7 @@ serve; l'overlay si'.
 
 Cosa disegna:
 
+  verde        i gutter accettati, dentro l'estensione y della loro banda
   blu          bande PRIMA (`prototype_derived_column_bands`), tratto spesso
   arancione    bande DOPO l'interruzione, tratto sottile e rientrato di 2pt
                cosi' resta visibile anche dove coincide con quella blu
@@ -59,6 +60,7 @@ _BLUE = (0.10, 0.35, 0.85)
 _ORANGE = (0.95, 0.45, 0.05)
 _RED = (0.85, 0.10, 0.10)
 _GREY = (0.65, 0.65, 0.65)
+_GREEN = (0.05, 0.60, 0.20)
 
 
 def _gutters_of(row: dict[str, object]) -> list[tuple[float, float]]:
@@ -136,6 +138,23 @@ def main(argv: list[str] | None = None) -> int:
             colour = _RED if bbox in crossing else _GREY
             rect = fitz.Rect(bbox[0], bbox[1] - 0.6, bbox[2], bbox[3] + 0.6)
             page.draw_rect(rect, color=colour, fill=colour, fill_opacity=0.55, width=0.3)
+
+        # I gutter, in verde. Mancavano, e la loro assenza ha fatto concludere a
+        # ragione veduta che il meccanismo non li trovasse dove invece li trova:
+        # su DB p.53 i tre gutter reali ci sono tutti, ma questo overlay
+        # disegnava solo bande e blocker. Contorno oltre al riempimento, perche'
+        # su un riquadro verde il solo riempimento e' invisibile -- e' l'altro
+        # motivo per cui erano sembrati assenti.
+        for row in tree:
+            by0, by1 = float(cast(float, row["y0"])), float(cast(float, row["y1"]))
+            for gx0, gx1 in _gutters_of(row):
+                page.draw_rect(
+                    fitz.Rect(gx0, by0, gx1, by1),
+                    color=_GREEN,
+                    fill=_GREEN,
+                    fill_opacity=0.30,
+                    width=1.2,
+                )
 
         for row in tree:
             rect = fitz.Rect(
