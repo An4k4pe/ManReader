@@ -74,6 +74,13 @@ from pymupdf_capture import capture_pymupdf_page  # noqa: E402
 _OBSERVATION_ID = re.compile(r"^text:b(\d+):l(\d+):s(\d+)$")
 
 
+def _source_block(primitive: TextPrimitive) -> int | None:
+    """Il paragrafo secondo la sorgente: `block_index` dall'id di osservazione."""
+
+    key = _source_line_key(primitive)
+    return key[0] if key is not None else None
+
+
 def _source_line_key(primitive: TextPrimitive) -> tuple[int, int, int] | None:
     """`(block_index, line_index, span_index)` letti dall'id di osservazione."""
 
@@ -506,28 +513,28 @@ def _render(ordered: list[tuple[TextPrimitive, int]]) -> str:
 
     paragraphs: list[str] = []
     words: list[str] = []
-    previous: TextPrimitive | None = None
+    previous_block: int | None = None
     previous_group: int | None = None
+    seen_text = False
 
     for primitive, group in ordered:
         text = (primitive.text or "").strip()
-        starts_new = previous is None or previous_group != group
-        if previous is not None and not starts_new:
-            overlaps = primitive.bbox[1] < previous.bbox[3] and previous.bbox[1] < primitive.bbox[3]
-            starts_new = not overlaps
+        block = _source_block(primitive)
+        # Paragrafo dal BLOCCO della sorgente; il cambio di colonna resta
+        # l'unico adattamento dichiarato. Tenuta identica a
+        # `_ordered_markdown_body` nella fetta verticale di proposito: due
+        # definizioni della stessa cosa su questo progetto sono gia' divergute.
+        starts_new = seen_text and (
+            previous_group != group or block is None or block != previous_block
+        )
         if starts_new and words:
             paragraphs.append(" ".join(words))
             words = []
         if text:
             words.append(text)
-        # Stessa regola di `_ordered_markdown_body` nella fetta verticale, e
-        # tenuta identica di proposito: una primitiva senza testo non fa da
-        # termine di paragone per l'interruzione di paragrafo. Su DB p.53 gli
-        # span vuoti di fine voce hanno bbox piu' alto della riga e facevano da
-        # ponte fra una voce e la successiva.
-        if text:
-            previous = primitive
+        previous_block = block
         previous_group = group
+        seen_text = True
     if words:
         paragraphs.append(" ".join(words))
     return "\n\n".join(paragraphs) + "\n"

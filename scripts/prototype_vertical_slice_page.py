@@ -105,6 +105,7 @@ _ASSET_MARKER_PREFIX = "%%VSLICE-ASSET%%"
 _ASSET_MARKER_LINE_PATTERN = re.compile(rf"^{re.escape(_ASSET_MARKER_PREFIX)}.*$", re.MULTILINE)
 _ASSET_FILE_FIELD_PATTERN = re.compile(r"asset_file=(\S+)")
 _IMAGE_OBSERVATION_INDEX_PATTERN = re.compile(r"^image:i(\d+)$")
+_TEXT_BLOCK_PATTERN = re.compile(r"^text:b(\d+):l\d+:s\d+$")
 _UNSAFE_FILENAME_CHARACTERS = re.compile(r"[^A-Za-z0-9_-]")
 
 
@@ -267,7 +268,8 @@ def _build_markdown_body(
 
     lines: list[str] = []
     paragraph_words: list[str] = []
-    previous_text_y1: float | None = None
+    previous_block: int | None = None
+    seen_text = False
 
     def flush_paragraph() -> None:
         if paragraph_words:
@@ -277,12 +279,14 @@ def _build_markdown_body(
     for _, _, kind, payload in items:
         if kind == "text":
             primitive = cast(TextPrimitive, payload)
-            if previous_text_y1 is not None and primitive.bbox[1] < previous_text_y1:
-                pass  # still the same paragraph: vertical overlap with previous line
-            elif previous_text_y1 is not None:
+            block = _source_block(primitive)
+            # Id non interpretabile: paragrafo a se'. Non si indovina
+            # l'appartenenza, perche' sbagliarla fonde paragrafi distinti.
+            if seen_text and (block is None or block != previous_block):
                 flush_paragraph()
             paragraph_words.append(primitive.text)
-            previous_text_y1 = primitive.bbox[3]
+            previous_block = block
+            seen_text = True
         else:
             flush_paragraph()
             entry = cast(dict[str, object], payload)
@@ -291,7 +295,8 @@ def _build_markdown_body(
                 f"digest={entry['digest']} candidate_id={entry['candidate_id']} "
                 f"asset_file={entry['asset_file']}"
             )
-            previous_text_y1 = None
+            previous_block = None
+            seen_text = False
 
     flush_paragraph()
     return "\n\n".join(lines) + "\n"
@@ -485,6 +490,27 @@ def _split_bands_at_crossings(
     return out
 
 
+def _source_block(primitive: TextPrimitive) -> int | None:
+    """Il paragrafo secondo la sorgente: `block_index` dall'id di osservazione.
+
+    Il paragrafo NON si deduce dalla geometria. `pymupdf_capture.py:123-125`
+    scrive gia' blocco, riga e span nell'id (`text:b{block}:l{line}:s{span}`), e
+    il blocco e' il paragrafo -- verificato su DB p.53, dove `b3` e' un
+    paragrafo di prosa su tre righe e `b4`-`b7` sono quattro voci di elenco, una
+    per blocco.
+
+    La regola precedente confrontava le `y` di due primitive consecutive e
+    andava a capo dove non si sovrapponevano. Falliva in modo non riparabile:
+    su DB p.53 ogni voce dell'elenco finisce con uno span SENZA testo di bbox
+    piu' alto della riga, che si sovrapponeva alla voce successiva e faceva da
+    ponte, emettendo tre voci su una riga sola. La geometria resta legittima per
+    posizionare e per verificare, mai per ricostruire la struttura del testo.
+    """
+
+    match = _TEXT_BLOCK_PATTERN.match(primitive.source_observation_id or "")
+    return int(match.group(1)) if match else None
+
+
 def _asset_marker_line(entry: dict[str, object]) -> str:
     return (
         f"{_ASSET_MARKER_PREFIX} primitive_id={entry['primitive_id']} "
@@ -529,8 +555,9 @@ def _ordered_markdown_body(
 
     paragraphs: list[str] = []
     words: list[str] = []
-    previous: TextPrimitive | None = None
+    previous_block: int | None = None
     previous_group: int | None = None
+    seen_text = False
 
     def flush() -> None:
         if words:
@@ -540,35 +567,29 @@ def _ordered_markdown_body(
     for _rank, _kind_order, kind, payload in items:
         if kind == "text":
             primitive, group = cast("tuple[TextPrimitive, int]", payload)
-            starts_new = previous is None or previous_group != group
-            if previous is not None and not starts_new:
-                overlaps = (
-                    primitive.bbox[1] < previous.bbox[3]
-                    and previous.bbox[1] < primitive.bbox[3]
-                )
-                starts_new = not overlaps
-            if starts_new:
+            block = _source_block(primitive)
+            # Paragrafo dal BLOCCO della sorgente, piu' il solo adattamento gia'
+            # dichiarato: il cambio di colonna forza comunque un paragrafo,
+            # altrimenti l'ultima riga di una colonna si fonde con la prima
+            # della successiva. Il resto e' letto, non dedotto: la regola
+            # geometrica precedente e' caduta su DB p.53, dove uno span vuoto
+            # faceva da ponte fra tre voci d'elenco che sono tre blocchi.
+            if seen_text and (
+                previous_group != group or block is None or block != previous_block
+            ):
                 flush()
             text = (primitive.text or "").strip()
             if text:
                 words.append(text)
-            # Una primitiva SENZA testo non diventa il termine di paragone per
-            # l'interruzione di paragrafo. Su DB p.53 ogni voce dell'elenco
-            # finisce con uno span vuoto di bbox piu' alto della riga
-            # (y 630,5-644,0 contro 631,3-642,9 del testo), che si sovrappone
-            # alla riga successiva e fa da PONTE: la regola vedeva continuita'
-            # e "Esausto - FOR / Malaticcio - COS / Disorientato - AGI" usciva
-            # su una riga sola. Non e' un caso limite del raggruppamento di
-            # riga: e' che un elemento che non porta contenuto non deve poter
-            # decidere dove va a capo il contenuto.
-            if text:
-                previous = primitive
+            previous_block = block
             previous_group = group
+            seen_text = True
         else:
             flush()
             paragraphs.append(_asset_marker_line(cast(dict, payload)))
-            previous = None
+            previous_block = None
             previous_group = None
+            seen_text = False
 
     flush()
     return "\n\n".join(paragraphs) + "\n"
