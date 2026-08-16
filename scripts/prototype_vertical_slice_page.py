@@ -447,24 +447,40 @@ def _split_bands_at_crossings(
             out.append(piece)
         renamed[band_id] = produced
 
-    # Un figlio si riaggancia al pezzo di padre che lo contiene: la
-    # subordinazione vale dove il padre esiste ancora, che e' la stessa regola
-    # con cui _segment_tree ritratta gli orfani.
+    # Un figlio si riaggancia al pezzo di padre che lo copre di piu' in y.
+    #
+    # DUE COSE CHE QUESTA FUNZIONE NON DEVE FARE, entrambe scoperte perche' su
+    # Dag p.24 l'uscita cambiava con ZERO blocker attraversanti:
+    #
+    # 1. non toccare la genealogia quando il padre non e' stato spezzato. Un
+    #    padre intero ha un pezzo solo e conserva il proprio band_id, quindi non
+    #    c'e' niente da riagganciare;
+    # 2. non orfanare mai. Una versione precedente cercava il pezzo che
+    #    contenesse il PUNTO MEDIO del figlio e, non trovandolo, azzerava
+    #    parent_id e depth. La premessa era falsa: la subordinazione e' una
+    #    disgiunzione x piu' un confronto di estensione (`_segment_tree`), non un
+    #    contenimento in y, quindi una figlia puo' estendersi oltre il padre.
+    #    Su Dag p.24 appiattiva tre bande annidate e con esse la regola "vince la
+    #    banda piu' profonda", senza che nessuna interruzione fosse avvenuta.
     for row in out:
         parent = row.get("parent_id")
         if parent in ("", None):
             continue
-        candidates = renamed.get(int(cast(int, parent)), [])
-        if not candidates:
+        pieces_of_parent = renamed.get(int(cast(int, parent)), [])
+        if len(pieces_of_parent) <= 1:
             continue
-        midpoint = (float(cast(float, row["y0"])) + float(cast(float, row["y1"]))) / 2.0
-        for piece in candidates:
-            if float(cast(float, piece["y0"])) <= midpoint < float(cast(float, piece["y1"])):
-                row["parent_id"] = piece["band_id"]
-                break
-        else:
-            row["parent_id"] = ""
-            row["depth"] = 0
+
+        row_y0 = float(cast(float, row["y0"]))
+        row_y1 = float(cast(float, row["y1"]))
+
+        def overlap(piece: dict[str, object]) -> float:
+            return max(
+                0.0,
+                min(row_y1, float(cast(float, piece["y1"])))
+                - max(row_y0, float(cast(float, piece["y0"]))),
+            )
+
+        row["parent_id"] = max(pieces_of_parent, key=overlap)["band_id"]
 
     return out
 
