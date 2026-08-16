@@ -20,6 +20,17 @@ cluster altrimenti distanti. Non e' un'esclusione silenziosa: ogni primitivo esc
 compare comunque in output come cluster di un solo membro con excluded_reason
 valorizzato.
 
+L'etichetta pero' non bastava: un cluster senza area perde anche la posizione,
+perche' `_visible_bbox` rifiuta `y0 >= y1` e un filetto orizzontale ha altezza
+0,00. Restava `excluded_reason="tiny"` e nient'altro, e a valle nessuno poteva
+sapere DOVE fosse. `degenerate_bbox` (piu' `degenerate_width`/`degenerate_height`)
+la registra: costa poco, e un cluster molto piu' largo che alto e' un separatore
+-- dove attraversa un corridoio di colonna lo interrompe, misurato su Dag p.164.
+Chiave separata e non `bbox` riempito, di proposito: `bbox` continua a significare
+"unione visibile con area positiva", quindi nessun consumatore esistente cambia
+comportamento. I due producer che leggono questa diagnostica scartano le voci con
+`excluded_reason` non nullo prima ancora di guardare `bbox`.
+
 Soglie di page_covering_visual/page_edge_visual duplicate localmente (stessa scelta
 di page_analysis_interior_visual_diagnostics.py, Milestone 25) applicate al bbox
 unito del cluster. dispersion_ratio (somma aree membri / area unione) rende visibile
@@ -223,6 +234,9 @@ def _cluster_diagnostics(
     ]
 
     if not visible_member_bboxes:
+        degenerate = _degenerate_bbox(
+            members, page_width=page_width, page_height=page_height
+        )
         return {
             "drawing_primitive_ids": drawing_primitive_ids,
             "primitive_count": len(members),
@@ -236,6 +250,9 @@ def _cluster_diagnostics(
             "is_residual_interior_visual": False,
             "member_area_sum": None,
             "dispersion_ratio": None,
+            "degenerate_bbox": list(degenerate) if degenerate is not None else None,
+            "degenerate_width": (degenerate[2] - degenerate[0]) if degenerate else None,
+            "degenerate_height": (degenerate[3] - degenerate[1]) if degenerate else None,
         }
 
     union_bbox = _union_bbox(visible_member_bboxes)
@@ -265,6 +282,11 @@ def _cluster_diagnostics(
         "is_residual_interior_visual": not is_covering and not is_edge,
         "member_area_sum": member_area_sum,
         "dispersion_ratio": (member_area_sum / union_area) if union_area > 0 else None,
+        # Sempre None qui: c'e' gia' un `bbox` vero. La chiave resta per dare a
+        # ogni cluster la stessa forma di dizionario.
+        "degenerate_bbox": None,
+        "degenerate_width": None,
+        "degenerate_height": None,
     }
 
 
@@ -275,6 +297,40 @@ def _union_bbox(bboxes: list[BBox]) -> BBox:
         max(bbox[2] for bbox in bboxes),
         max(bbox[3] for bbox in bboxes),
     )
+
+
+def _degenerate_bbox(
+    members: list[DrawingPrimitive],
+    *,
+    page_width: float,
+    page_height: float,
+) -> BBox | None:
+    """Dove sta un cluster che `_visible_bbox` scarta perche' senza area.
+
+    `_visible_bbox` rifiuta `x0 >= x1` o `y0 >= y1`, quindi un filetto orizzontale
+    (altezza 0,00) perde ogni geometria e resta solo l'etichetta `tiny`. Registrarla
+    costa poco e serve: un cluster molto piu' largo che alto e' un separatore, e
+    dove attraversa un corridoio di colonna lo interrompe -- misurato su Dag p.164,
+    dove i puntini fra le due zone sono due primitive di 480x0pt.
+
+    Qui la clip alla pagina ammette estensione nulla (`>` invece di `>=`); resta
+    `None` solo per cio' che sta interamente fuori pagina. Non e' un
+    `bbox`: quello continua a significare "unione visibile con area positiva", e
+    nessun consumatore esistente cambia comportamento.
+    """
+
+    clipped: list[BBox] = []
+    for member in members:
+        x0 = max(0.0, member.bbox[0])
+        y0 = max(0.0, member.bbox[1])
+        x1 = min(page_width, member.bbox[2])
+        y1 = min(page_height, member.bbox[3])
+        if x0 > x1 or y0 > y1:
+            continue
+        clipped.append((x0, y0, x1, y1))
+    if not clipped:
+        return None
+    return _union_bbox(clipped)
 
 
 def _visible_bbox(

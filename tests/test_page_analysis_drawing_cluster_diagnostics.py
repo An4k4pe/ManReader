@@ -115,6 +115,37 @@ class DumpDrawingClusterDiagnosticsTest(unittest.TestCase):
         self.assertIsNone(cluster["bbox"])
         self.assertIsNone(cluster["dispersion_ratio"])
         self.assertFalse(cluster["is_residual_interior_visual"])
+        # Fuori pagina resta senza posizione: non c'e' niente da registrare.
+        self.assertIsNone(cluster["degenerate_bbox"])
+
+    def test_zero_height_rule_keeps_its_position(self) -> None:
+        """Un filetto orizzontale e' scartato come `tiny` ma non perde il dove.
+
+        `_visible_bbox` rifiuta `y0 >= y1`, quindi prima di `degenerate_bbox` di
+        questo cluster restava solo l'etichetta. La posizione serve perche' un
+        separatore molto piu' largo che alto, dove attraversa un corridoio di
+        colonna, lo interrompe (Dag p.164).
+        """
+
+        page = _page(drawings=(_drawing("rule", (10.0, 40.0, 90.0, 40.0)),))
+
+        result = dump_drawing_cluster_diagnostics(page, generation_id="gen-1")
+
+        cluster = _cluster_with(result, "rule")
+        self.assertEqual(cluster["excluded_reason"], "tiny")
+        self.assertIsNone(cluster["bbox"])
+        self.assertEqual(cluster["degenerate_bbox"], [10.0, 40.0, 90.0, 40.0])
+        self.assertEqual(cluster["degenerate_width"], 80.0)
+        self.assertEqual(cluster["degenerate_height"], 0.0)
+
+    def test_cluster_with_area_reports_no_degenerate_geometry(self) -> None:
+        page = _page(drawings=(_drawing("box", (10.0, 10.0, 30.0, 30.0)),))
+
+        result = dump_drawing_cluster_diagnostics(page, generation_id="gen-1")
+
+        cluster = _cluster_with(result, "box")
+        self.assertIsNotNone(cluster["bbox"])
+        self.assertIsNone(cluster["degenerate_bbox"])
 
     def test_is_deterministic(self) -> None:
         page = _page(
