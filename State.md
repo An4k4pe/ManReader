@@ -159,10 +159,15 @@ Esito dei due giri, giudicato a vista dall'utente. **`page_bands.md` funziona**,
 | --- | --- | --- |
 | 1, giunzione | A1 falso negativo / A2 regressione | **A1 tenuta** su DrW p.97 e Dag p.164, giudicate a vista dall'utente: nessuna interlacciatura riga per riga. **A2 non applicabile**: `page_lines.md` non era corretto su nessuna delle due, quindi non c'era nulla da cui regredire. |
 | 2, interruzione | A1 / A2 | **Non adottata.** L'esito è la decisione di non accendere il flag, presa dall'utente sui numeri e sui `page.md`: la metà `embedded_visual` annienta (DB p.50 da 83 primitive in banda a 0), la metà filetti non ha mostrato danno sul campione. |
-| 3, paragrafo | «nessuna pagina in cui la segmentazione peggiora» | **Verdetto NON dato a vista.** Regge su I2, che è meccanico e più forte, e su DB p.53 dove il difetto delle tre voci d'elenco sparisce; ma il giudizio a vista che il criterio chiede non è stato eseguito. |
-| 4, subordinazione | G1 / G2 / G3 a vista | **G1 tenuta** nella sola direzione misurabile (v. sotto), **G2 tenuta** e migliorata (178→109 sull'apertura, 47→25 sul corpo), **G3 non data a vista** oltre a DB p.53. |
+| 3, paragrafo | «nessuna pagina in cui la segmentazione peggiora» | **TENUTA.** Verdetto dato a vista dall'utente il 16 agosto 2026 sul set di verifica: la segmentazione non peggiora su nessuna delle pagine guardate. |
+| 4, subordinazione | G1 / G2 / G3 a vista | **G1 tenuta** nella sola direzione misurabile (v. sotto), **G2 tenuta** e migliorata (178→109 sull'apertura, 47→25 sul corpo), **G3 TENUTA**: verdetto dato a vista dall'utente il 16 agosto 2026. |
 
-**Due verdetti su quattro non sono stati dati a vista**, ed è il motivo per cui questi commit non si chiudono come «superati» ma come «un fatto, non una decisione».
+**Tutti e quattro i verdetti sono ora dati.** Giudizio dell'utente sul set di verifica a vista del 16 agosto 2026, nella sua formulazione: *«il testo è corretto come incolonnamento»*. Restano due difetti, entrambi **deferiti fuori da `column_band` perché non sono suoi**:
+
+- **resa delle parole** (sillabazione, spaziature): appartiene al vero producer di markdown, che non esiste — l'emettitore della fetta verticale è diagnostico e la sua docstring lo dichiara;
+- **tabelle**: vanno lette dal producer di tabelle, aiutato da questi gutter. È la stessa assegnazione già decisa alla riga 106, ed è la ragione per cui `column_band` non deve provare a leggerle.
+
+**Limite dell'artefatto, e va scritto perché il verdetto non venga citato più forte di com'è stato ottenuto**: dei 15 render prodotti dal set ne sono stati consegnati **3**; gli altri 12 sono stati controllati dall'utente **direttamente sul PDF**. Il giudizio vale — è stato dato guardando le pagine — ma non è stato dato con lo strumento che era stato costruito per darlo, e chi rifarà la verifica non trovi scritto il contrario.
 
 **Riconciliazione delle cifre sul raggio d'azione**, che comparivano a due sezioni di distanza senza raccordo e con due universi diversi. Sono **quattro misure distinte, non una ripetuta**: 47/277 (17,0%) sono le bande toccate dai soli filetti **prima** del passaggio ai cluster; 42/277 (15,2%) le stesse **dopo**; 207/277 (74,7%) l'unione filetti + `embedded_visual`; 204/277 (73,6%) i soli `embedded_visual`. Le 277 bande sono quattro manuali per 60 pagine; le 298 e 310 bande citate per G1/G2 sono **cinque** manuali per 60 pagine, universo diverso e da non confrontare con le prime.
 
