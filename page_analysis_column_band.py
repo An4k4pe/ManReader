@@ -112,9 +112,22 @@ def _group_by_pymupdf_line(
     page_width: float,
     page_height: float,
 ) -> tuple[list[_Group], int]:
-    """v10 Sec.4.1. Returns (groups, unparsed_count). Visible-clipped bboxes
-    only (same ``_visible_bbox`` gate as Milestone 32); primitives outside the
-    page frame are dropped, not counted as unparsed."""
+    """Le righe della sorgente: un gruppo per `(block_index, line_index)`.
+
+    La riga tipografica **non si ricostruisce geometricamente**: sta gia'
+    nell'id di osservazione che `pymupdf_capture` scrive per ogni span
+    (`text:b{block}:l{line}:s{span}`). Qui si legge, e basta.
+
+    Questa funzione arriva dal prototipo della Fase 1/2, il cui meccanismo di
+    banding e' stato scartato -- ma questo strato non ne faceva parte: gia'
+    allora leggeva la riga dall'id, che e' l'assunto su cui il rework si e' poi
+    assestato. E' l'unica parte di quel prototipo sopravvissuta, e sopravvive
+    perche' era gia' giusta.
+
+    Le bbox sono ritagliate alla pagina; una primitiva interamente fuori dal
+    foglio viene scartata e non contata fra le non interpretabili, che sono
+    un'altra cosa (id in un formato che non riconosciamo).
+    """
 
     groups: dict[tuple[int, int], _Group] = {}
     unparsed = 0
@@ -144,59 +157,6 @@ _AVERAGE_CHAR_WIDTH_RATIO = 0.5
 _COVERED = 0
 _GAP = 1
 _NO_TEXT = 2
-
-_GUTTER_FIELDNAMES = (
-    "manual",
-    "page",
-    "gutter_index",
-    "x0",
-    "x1",
-    "width",
-    "y0",
-    "y1",
-    "y_extent",
-    "left_groups",
-    "right_groups",
-    "flanking_min",
-    "left_rotated",
-    "right_rotated",
-    "left_width_median",
-    "right_width_median",
-    "shared_blocks",
-    "page_line_height",
-    "left_chars_median",
-    "right_chars_median",
-    "left_wordy",
-    "right_wordy",
-    "page_font_size",
-    "reject_reason",
-    "tree_status",
-)
-
-_TREE_FIELDNAMES = (
-    "manual",
-    "page",
-    "band_id",
-    "parent_id",
-    "depth",
-    "x0",
-    "x1",
-    "y0",
-    "y1",
-    "column_count",
-    "gutter_x_intervals",
-)
-
-_BAND_FIELDNAMES = (
-    "manual",
-    "page",
-    "band_index",
-    "y0",
-    "y1",
-    "y_extent",
-    "column_count",
-    "gutter_x_intervals",
-)
 
 
 class _GapRect:
