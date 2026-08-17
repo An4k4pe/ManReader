@@ -89,7 +89,9 @@ from compare_reading_order_with_column_bands import (  # noqa: E402
 # quindi il markdown che si giudicava a vista NON era prodotto dal percorso che
 # il job monta: due rami che non si toccavano, divergenti su 9 pagine su 20.
 # Rilievo della revisione architetturale.
-from page_analysis_column_band import column_band_tree  # noqa: E402
+from page_analysis_column_band import (  # noqa: E402
+    build_column_band_page_analysis_with_measurements,
+)
 
 from page_analysis_co_reference import build_co_referenced_page_analyses  # noqa: E402
 from page_analysis_co_reference_binding import bind_co_referenced_page_analyses  # noqa: E402
@@ -526,6 +528,52 @@ def _source_block(primitive: TextPrimitive) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def _tree_rows_from_contract(
+    candidates: tuple[RegionCandidate, ...],
+    measurements: tuple[Any, ...],
+) -> list[dict[str, object]]:
+    """Le righe che l'ordinatore vuole, ricostruite da candidati e misure.
+
+    Serve a dimostrare una cosa e a dimostrarla ogni volta che gira: il
+    contratto di Milestone 33 -- candidato minimale piu' misura satellite --
+    **basta** a un consumer che debba ordinare per colonne. Dal candidato
+    vengono bbox e primitive, dalla misura i gutter, il livello e il padre.
+    Nessuna struttura interna del producer attraversa questo confine.
+
+    Se un giorno questa funzione avesse bisogno di qualcosa che ne' il candidato
+    ne' la misura portano, quella sarebbe la prova che il contratto non basta --
+    ed e' esattamente la domanda che Milestone 33 aveva lasciato aperta.
+    """
+
+    band_id_by_candidate = {c.candidate_id: index + 1 for index, c in enumerate(candidates)}
+    measure_by_candidate = {m.candidate_id: m for m in measurements}
+
+    rows: list[dict[str, object]] = []
+    for candidate in candidates:
+        measure = measure_by_candidate.get(candidate.candidate_id)
+        if measure is None:
+            continue
+        parent = ""
+        if measure.parent_candidate_id is not None:
+            parent = band_id_by_candidate.get(measure.parent_candidate_id, "")
+        rows.append(
+            {
+                "band_id": band_id_by_candidate[candidate.candidate_id],
+                "parent_id": parent,
+                "depth": measure.depth,
+                "x0": candidate.bbox[0],
+                "y0": candidate.bbox[1],
+                "x1": candidate.bbox[2],
+                "y1": candidate.bbox[3],
+                "column_count": measure.column_count,
+                "gutter_x_intervals": " ".join(
+                    f"{a:.1f}-{b:.1f}" for a, b in measure.gutter_x_intervals
+                ),
+            }
+        )
+    return rows
+
+
 def _asset_marker_line(entry: dict[str, object]) -> str:
     return (
         f"{_ASSET_MARKER_PREFIX} primitive_id={entry['primitive_id']} "
@@ -848,7 +896,20 @@ def run(
             variant_paths.append(lines_path)
             _verify_content_conservation(primitive_page.text_primitives, lines_body)
 
-            tree = column_band_tree(primitive_page)
+            # Il consumer legge **candidati e misure satellite**, non le
+            # strutture interne del producer. Prima chiamava `column_band_tree`,
+            # cioe' l'albero: era il ponte provvisorio finche' la misura
+            # satellite prevista da Milestone 33 non esisteva. Ora esiste, e
+            # questo passaggio e' la prova che il contratto basta a consumare --
+            # dal candidato bbox e primitive, dalla misura i gutter e il livello.
+            column_band_analysis, column_band_measures = (
+                build_column_band_page_analysis_with_measurements(
+                    primitive_page, generation_id=generation_id
+                )
+            )
+            tree = _tree_rows_from_contract(
+                column_band_analysis.candidates, column_band_measures
+            )
             bands_ordered, inside = _tree_aware_order(
                 list(primitive_page.text_primitives), tree
             )

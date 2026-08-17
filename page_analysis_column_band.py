@@ -941,6 +941,20 @@ def build_column_band_page_analysis(
         min_gutter_lines=min_gutter_lines,
         min_column_chars=min_column_chars,
     )
+    return _analysis_from_tree(
+        primitive_page, tree, generation_id=generation_id, first_level_only=first_level_only
+    )
+
+
+def _analysis_from_tree(
+    primitive_page: NormalizedPrimitivePage,
+    tree: list[dict[str, object]],
+    *,
+    generation_id: str,
+    first_level_only: bool = False,
+) -> PageAnalysis:
+    """I candidati a partire dall'albero, senza ricalcolarlo."""
+
 
     page_width = primitive_page.page_geometry.width
     page_height = primitive_page.page_geometry.height
@@ -1099,3 +1113,26 @@ def column_band_tree(
         font_size=_median_font_size(list(primitive_page.text_primitives)),
         min_column_chars=min_column_chars,
     )
+
+
+def build_column_band_page_analysis_with_measurements(
+    primitive_page: NormalizedPrimitivePage,
+    *,
+    generation_id: str,
+) -> tuple[PageAnalysis, tuple[object, ...]]:
+    """L'analisi e le sue misure satellite, che e' cio' che serve a un consumer.
+
+    Il contratto di Milestone 33 e' «candidato minimale **piu'** misura
+    satellite», e un consumer che ordini per colonne ha bisogno di entrambi: dal
+    candidato prende bbox e primitive, dalla misura prende **dove passano i
+    gutter**, che il candidato per contratto non porta.
+
+    Esiste perche' `column_band_tree` non venga piu' chiamata da fuori: esporre
+    l'albero interno era il ponte provvisorio finche' la misura non c'era.
+    """
+
+    from page_analysis_column_band_measurements import measure_column_bands
+
+    tree = column_band_tree(primitive_page)
+    analysis = _analysis_from_tree(primitive_page, tree, generation_id=generation_id)
+    return analysis, measure_column_bands(analysis.candidates, tree)
