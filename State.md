@@ -187,6 +187,41 @@ Ne segue che **B4 è una incoerenza strutturale reale con severità pratica quas
 
 **Non corretto di proposito.** Sarebbe il quinto cambio dentro `column_band` in una sessione senza milestone aperta, ed è esattamente ciò che la revisione critica: due criteri su quattro certificano già in testa il proprio perimetro rotto. Va aperto con criterio pre-registrato, o meglio dentro una milestone vera.
 
+**`column_band` è wired, e il criterio del wiring regge.** Producer
+`page_analysis_column_band.py` (`d50c007`), montato nel job a **primo livello
+soltanto** (`2f415b1`); il job passa da cinque producer a sei. Criterio
+pre-registrato in `Criterio_WiringColumnBand_v1.md` (`692b19e`), scope ridotto
+su indicazione della revisione indipendente, che aveva detto di non procedere
+nello scope pieno.
+
+**Verdetto dell'utente sul campione cieco**, 10 pagine uniformi da un pool di
+3.342, seed 20260817, escluse per costruzione le sedici già usate come ancore:
+
+- **Wil p.316** — «il bands riflette molto bene l'ordinamento del manuale, in cui
+  le colonne iniziano dopo la metà pagina per i credits; lines fa un mischione».
+  Le 43 primitive su 101 dentro la banda, che sembravano la firma di un falso
+  negativo, sono l'esito **corretto**: la metà alta è prosa a colonna unica, la
+  bassa sono i credits a due colonne.
+- **Dag p.197** — bands fa un buon lavoro, lines no.
+- **DIE p.248** — «temevo sarebbe stato un lavoro pessimo, bands lo ha risolto
+  discretamente, tranne la tabella, ma non è compito di questo wired farla».
+
+**W1 tiene** (nessun falso negativo su regione multicolonna), **W2 tiene** (nessuna
+regressione contro `page_lines.md`: bands è migliore ovunque), **W3** si applica
+come previsto — la tabella su DIE p.248 va al producer di tabelle, aiutato da
+questi gutter, che è l'assegnazione già decisa alla riga 106.
+
+Sei pagine su dieci non producono bande: per pagine a colonna singola è l'esito
+corretto, non un fallimento.
+
+**Cosa resta fuori e dichiarato**: nessuna regola di Resolution, quindi nulla
+può rifiutare un candidato sbagliato; nessuna misura satellite
+`ColumnBandMeasurements`; le bande annidate non vengono emesse dal wiring finché
+Resolution non saprà dell'annidamento; piè di pagina e numeri di pagina finiscono
+ancora dentro le bande e vanno tolti dalla **deduplicazione**, che `AGENTS.MD`
+§Obiettivo prevede per gli elementi ripetuti — decisione dell'utente, lavoro
+dovuto e non limite accettato.
+
 Diagnostica non wired, nessuna modifica a producer, contratti o wiring in nessuna delle quattro fasi — stesso standard delle altre milestone esplorative. Tutti gli script delle quattro fasi — Fase 1 e Fase 2 in 786b547 (dieci script; nessuno per Fase 3, che non ne ha prodotti), Fase 4 e gli script di confronto e di misura nei commit successivi — stanno sullo stesso branch di lavoro e arrivano su main insieme a questa sezione. **Correzione**: una versione precedente di questa frase citava 786b547 come se fosse già su main e distingueva da esso gli script "non ancora su main"; la distinzione non esisteva, 786b547 è il primo commit del branch. Rilievo di Chat B, verificato.
 
 **Decisione aperta e bloccante, mai messa per iscritto prima d'ora.** `AGENTS.MD` §Migrazione e
