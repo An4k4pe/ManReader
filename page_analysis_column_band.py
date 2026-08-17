@@ -41,6 +41,7 @@ intervallo x, che gutter distinti possono condividere.
 
 from __future__ import annotations
 
+from math import ceil
 from typing import cast
 
 from geometry_model import BBox
@@ -202,7 +203,18 @@ def _build_gap_grid(
     (un'illustrazione a piena larghezza) non lo allunga artificialmente."""
 
     n_x_bins = max(1, int(page_width / bin_width_x) + 1)
-    n_y_bins = max(1, int(page_height / bin_height_y) + 1)
+    # `ceil`, non `int(...)+1`. Il secondo aggiungeva una fetta anche quando
+    # l'altezza era gia' un multiplo esatto del passo, e l'ultima finiva 2pt
+    # sopra il bordo: misurato, pagina alta 794,00 sforava di 2,00 con `int+1` e
+    # di 0,00 con `ceil`; idem 792,00.
+    #
+    # NON elimina il ritaglio dei candidati, e una versione precedente di questo
+    # commento diceva il contrario. Dove l'altezza NON e' multipla del passo il
+    # residuo resta identico con le due formule -- 790,87 sfora di 1,13 in
+    # entrambi i casi, 595,28 di 0,72 -- perche' e' la quantizzazione della
+    # griglia, non un off-by-one. Il ritaglio continua quindi a scattare in casi
+    # legittimi e non e' un rilevatore di cattura rotta.
+    n_y_bins = max(1, ceil(page_height / bin_height_y))
     grid: list[bytearray] = []
 
     for y_bin_index in range(n_y_bins):
@@ -477,7 +489,7 @@ def _median_font_size(text_primitives: list[TextPrimitive]) -> float:
 
 def _median_line_height(groups: list[_Group]) -> float:
     """Altezza di riga mediana della pagina, dai gruppi stessi. Serve solo come
-    unita' di lettura nell'output -- non e' usata come soglia da nessuna parte."""
+    unita' di lettura nell'output -- e' l'UNITA' di `too_short`, che confronta l'altezza del gutter con un numero di righe di pagina -- una versione precedente di questa nota diceva che non era usata come soglia da nessuna parte, ed era falso."""
 
     heights = sorted(g.y1 - g.y0 for g in groups if g.y1 > g.y0)
     if not heights:
@@ -962,6 +974,14 @@ def build_column_band_page_analysis(
             and bbox[1] <= (primitive.bbox[1] + primitive.bbox[3]) / 2.0 < bbox[3]
         )
         if not primitive_ids:
+            # Scarto DICHIARATO, non silenzioso (`AGENTS.MD` §Coverage: nessuna
+            # esclusione puo' essere silenziosa). Una banda puo' intersecare
+            # primitive senza contenerne il CENTRO -- e' la regola di
+            # appartenenza usata qui e in tutta la diagnostica. Misurato: scatta
+            # una volta sul campione piu' le ancore, su DB p.53, banda alta
+            # 4,0pt cioe' 0,35 righe di pagina, che ne interseca due. Un
+            # candidato senza primitive non e' rappresentabile come proposta
+            # strutturale: non c'e' nulla che proporrebbe.
             continue
         candidates.append(
             RegionCandidate(
