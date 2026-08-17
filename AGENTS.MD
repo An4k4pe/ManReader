@@ -635,6 +635,53 @@ una soluzione, e rimuoverli distruggerebbe la riproducibilita' che la regola cer
 L'eccezione vale per gli script diagnostici committati in sanatoria, non per il codice
 di produzione, dove il divieto di §Regole operative punto 7 resta pieno.
 
+## Milestone 37 - producer `layout.column_band`, misura satellite e wiring — completata
+
+Costruisce il producer che Milestone 33 aveva contrattualizzato e mai scritto, e
+lo monta: il job passa da cinque a **sei** producer.
+
+`page_analysis_column_band.py` emette un `RegionCandidate` minimale per banda
+(`proposed_structural_kind="layout.column_band"`), `producer_version="0.1"`,
+`configuration_id="column_band:derived_gutters:v1"`, `requires_pdfplumber=False`.
+Nessuna modifica a `RegionCandidate`/`PageAnalysis`: la cardinalita' multipla era
+gia' ammessa.
+
+Il meccanismo e' quello della Fase 4 della diagnostica pre-milestone: **confini
+ricavati dal documento**, non soglie in punti. Cadono support ratio e soglia di
+larghezza (spazio fra parole e gutter si distinguono per persistenza verticale,
+non per larghezza), e i criteri di ammissione sono tipografici -- righe distinte
+per lato, righe che portino abbastanza caratteri, altezza in righe **della
+pagina**. Segmentazione gerarchica con estensione x esplicita.
+
+`page_analysis_column_band_measurements.py` implementa la **misura satellite**
+`ColumnBandMeasurements` che il contratto prevedeva: `gutter_x_intervals`,
+`column_count`, `depth`, `parent_candidate_id`. Stesso pattern di Milestone 7 --
+osserva, non classifica, non decide; la gerarchia e' un fatto riportato, non
+un'istruzione. Serve perche' un candidato minimale non puo' portare i gutter, ed
+e' la ragione per cui Milestone 33 aveva **scartato** l'opzione senza satellite.
+
+Verifica: porting dalla diagnostica identico campo per campo su 20 pagine su 20;
+il consumer della fetta verticale ricostruisce cio' che gli serve da **candidati
+e misure**, non da strutture interne, e quella ricostruzione e' la prova
+rieseguita a ogni run che il contratto basta a consumare. Giudizio a vista
+dell'utente su un campione **cieco** di 10 pagine (seed 20260817, escluse per
+costruzione le sedici gia' usate come ancore): l'ordine di lettura e' corretto
+come incolonnamento, e sei pagine su dieci non producono bande, che per pagine a
+colonna singola e' l'esito giusto. Due giri di revisione indipendente, i cui
+rilievi hanno prodotto correzioni tracciate.
+
+Restano fuori scope, dichiarati e non risolti: nessuna regola di Resolution per
+`column_band` -- condizione condivisa con `table_candidate`, `page_covering_visual`
+e `page_edge_visual` da Milestone 21/23/24, quindi non un'eccezione introdotta
+qui; overlap banda/`table_candidate`; la collocazione del subordinato dentro una
+colonna del padre decide ancora sullo `span` e non sugli estremi probatori;
+l'identita' di un gutter nell'uscita e' il suo intervallo x, quindi una direzione
+dell'invariante di conservazione non e' misurabile dall'esterno; piede di pagina
+e numeri di pagina finiscono nelle bande e vanno tolti dalla **deduplicazione**;
+`_visible_bbox` e' alla sedicesima copia in produzione e va estratta. Il campione
+cieco non e' stato ripetuto dopo i cambi, e il criterio di uscita continua a
+mancare del terzo invariante sull'ordine.
+
 ## Milestone 30 - producer per riquadri di testo (layout.interior_visual_frame, no wiring) — completata
 
 Nuovo modulo `page_analysis_interior_visual_frame.py`, sottoinsieme più specifico di

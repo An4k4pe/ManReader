@@ -25,6 +25,8 @@ per un secondo artifact, un consumer document-level di ricorrenza per `content_d
 in Milestone 33, mai costruito, quattro punti bloccanti aperti) non è più un rinvio laterale
 ma la precondizione del primo output leggibile della pipeline nuova. Vedi Milestone 36.
 
+**CHIUSA il 16 agosto 2026, e confluita in Milestone 37**, che ha costruito il producer, la misura satellite e il wiring. Questa sezione resta come verbale di come ci si e' arrivati; per lo stato corrente del meccanismo si legge la milestone.
+
 **CHIUSA il 16 agosto 2026.** Quattro fasi diagnostiche più una sessione di consolidamento con quattro criteri pre-registrati e due giri di revisione indipendente. **Cosa consegna**: un reading order che l'utente giudica corretto come incolonnamento su DrW p.97, Dag p.164, DB p.50 e DB p.53; riga e paragrafo presi dalla sorgente invece che ricostruiti; la subordinazione decisa sugli estremi probatori; e un apparato di misura che per la prima volta ha controlli negativi e test. **Cosa NON consegna, e non va citato al contrario**: nessun producer wired, nessun contratto, nessuna regola di Resolution, nessun campione cieco ripetuto dopo i cambi, e il terzo invariante sull'ordine che manca ancora al criterio di uscita. I difetti noti restano scritti qui sotto come difetti, non come dettagli: `_segment_tree:918-919` decide ancora sullo span, A1 è **caduta** per la metà `embedded_visual` dell'interruzione, e la direzione «duplicazione» di G1 non è misurabile senza un'identità stabile per gutter.
 
 Il seguito **non** è un quinto giro dentro questa diagnostica: è una milestone nuova, aperta con il processo a due chat, con l'obiettivo di `AGENTS.MD` §Obiettivo davanti per intero — incluso ciò che vi mancava fino a oggi, la sostituzione di immagini, sfondi ed elementi ripetuti con note brevi che dicono cosa hanno sostituito. Decisione dell'utente, e la ragione è quella che questa sezione documenta cinque volte: rifinire il meccanismo dall'interno non avvicina un EPUB.
@@ -899,5 +901,57 @@ punto di partenza del renderer IR-first: una sua eventuale promozione è una dec
 prendere esplicitamente, e nulla in questa milestone la costituisce.
 
 Appunto per una futura passata di raffinamento (non aperta, non numerata): le schede statistiche mostro nel bestiario (es. DB.pdf, GUERRIERO/ARCIERE/CAMPIONE, riquadro a colonne non allineate) non sono table_candidate (nessuna griglia regolare, verificato per ispezione visiva) né riconducibili a un riquadro puramente visivo (embedded_visual/interior_visual_frame): contengono testo strutturato a campi etichetta:valore da preservare, reso oggi con sfondo decorativo che andrebbe rimosso in resa, mantenendo la struttura leggibile. Nessuna decisione presa: possibile candidato per un futuro structural_kind dedicato o per un trattamento di rendering separato dalla classificazione geometrica. Tocca il quarto punto bloccante di Milestone 33 (structural_kind unico vs. distinzione corpo/struttura interna).
+
+## Milestone 37 — producer `layout.column_band`, misura satellite e wiring — completata
+
+Costruisce ciò che Milestone 33 aveva contrattualizzato nel 2026 e mai scritto, e
+chiude la diagnostica pre-milestone che lo precedeva. **Il job passa da cinque a
+sei producer.**
+
+Tre artefatti nuovi: `page_analysis_column_band.py` (un `RegionCandidate`
+minimale per banda), `page_analysis_column_band_measurements.py` (la misura
+satellite `ColumnBandMeasurements` con gutter, `column_count`, livello e padre),
+e la voce `column_band` in `_PRODUCER_SPECS`. Nessuna modifica a
+`RegionCandidate`/`PageAnalysis`.
+
+**Il risultato che conta per l'obiettivo**: la pipeline nuova ordina il testo per
+colonne, e su un campione **cieco** di 10 pagine — seed 20260817, escluse per
+costruzione le sedici già usate come ancore — il giudizio dell'utente è che
+l'incolonnamento è corretto. Sei pagine su dieci non producono bande, che per
+pagine a colonna singola è l'esito giusto. È la prima volta che la pipeline nuova
+produce un ordine di lettura che una persona riconosce su pagine mai viste prima.
+
+**La prova che il contratto basta.** Il consumer della fetta verticale ricostruisce
+ciò che gli serve per ordinare da **candidati e misure**, non da strutture interne
+del producer (`_tree_rows_from_contract`). Quella ricostruzione è un test
+rieseguito a ogni run: se un giorno le servisse qualcosa che né il candidato né la
+misura portano, sarebbe la dimostrazione che il contratto di Milestone 33 non
+basta — la domanda che quella milestone aveva lasciato aperta e che nessuno aveva
+mai messo alla prova.
+
+**Provenienza del meccanismo, e cosa è stato scartato.** Esistevano due prototipi
+su lati opposti: uno emetteva veri `RegionCandidate` ma implementava il meccanismo
+di Fase 1/2, misurato come fallito; l'altro implementava la Fase 4 che funziona ma
+ritornava dizionari. Il producer unisce forma del primo e meccanismo del secondo.
+Porting verificato **campo per campo su 20 pagine su 20**, non per conteggi.
+
+**Due giri di revisione indipendente**, i cui rilievi hanno prodotto correzioni
+tracciate — fra cui il ritiro di una restrizione al primo livello che avevo
+adottato contro un rischio misurato inesistente, e la scoperta che per alcune ore
+il verdetto era stato scritto su un artefatto che il wiring non produceva.
+
+**Fuori scope, dichiarato e non risolto**: nessuna regola di Resolution per
+`column_band` — condizione condivisa con tre producer più anziani da
+Milestone 21/23/24, quindi non un'eccezione introdotta qui; overlap
+banda/`table_candidate`; la collocazione del subordinato decide ancora sullo
+`span`; l'identità di un gutter nell'uscita è il suo intervallo x, quindi una
+direzione dell'invariante di conservazione non è misurabile dall'esterno; piede di
+pagina e numeri di pagina finiscono nelle bande e vanno tolti dalla
+**deduplicazione**; `_visible_bbox` è alla sedicesima copia in produzione. Il
+campione cieco non è stato ripetuto dopo i cambi, e il criterio di uscita continua
+a mancare del terzo invariante sull'ordine.
+
+Suite: 1263 test verdi. Quattro criteri di accettazione pre-registrati e
+committati prima dell'implementazione, più quello del wiring.
 
 <!-- FINE DI State.md — se non leggi questa riga, la tua copia è troncata: fermati e dillo -->
