@@ -187,7 +187,9 @@ Ne segue che **B4 è una incoerenza strutturale reale con severità pratica quas
 
 **Non corretto di proposito.** Sarebbe il quinto cambio dentro `column_band` in una sessione senza milestone aperta, ed è esattamente ciò che la revisione critica: due criteri su quattro certificano già in testa il proprio perimetro rotto. Va aperto con criterio pre-registrato, o meglio dentro una milestone vera.
 
-**`column_band` è wired, e il criterio del wiring regge.** Producer
+**`column_band` è wired; il criterio regge per il MECCANISMO, non per il wiring.** Correzione immediata di una affermazione più forte del modo in cui è stata ottenuta, su rilievo della revisione architetturale: il `page_bands.md` che l'utente ha giudicato **non è prodotto dal percorso wired**. `scripts/prototype_vertical_slice_page.py:849` chiama `_process_page` **dello script** e ordina sull'**albero pieno**; `build_column_band_page_analysis` ha tre chiamanti — il runner del job, se stesso, i propri test — e nessuno di essi produce markdown. Il wiring emette invece il solo primo livello. Divergenza misurata: **9 pagine su 20**, il 23,7% delle primitive in banda, e **una delle tre pagine del campione cieco** (DIE p.248, da 4 candidati a 3). W1/W2/W3 restano quindi **non applicati al wiring**: o si aggancia il consumer al producer e si rigiudica, o questa riga resta come sta.
+
+**`column_band` è wired.** Producer
 `page_analysis_column_band.py` (`d50c007`), montato nel job a **primo livello
 soltanto** (`2f415b1`); il job passa da cinque producer a sei. Criterio
 pre-registrato in `Criterio_WiringColumnBand_v1.md` (`692b19e`), scope ridotto
