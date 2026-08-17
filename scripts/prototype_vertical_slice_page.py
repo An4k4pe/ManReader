@@ -84,10 +84,12 @@ from compare_reading_order_with_column_bands import (  # noqa: E402
     _by_source_line,
     _tree_aware_order,
 )
-from prototype_derived_column_bands import (  # noqa: E402
-    _DEFAULT_MIN_FLANKING_CHARS,
-    _process_page,
-)
+# Le bande vengono dal MODULO DI PRODUZIONE, non piu' dallo script diagnostico.
+# Prima questa fetta chiamava `prototype_derived_column_bands._process_page`,
+# quindi il markdown che si giudicava a vista NON era prodotto dal percorso che
+# il job monta: due rami che non si toccavano, divergenti su 9 pagine su 20.
+# Rilievo della revisione architetturale.
+from page_analysis_column_band import column_band_tree  # noqa: E402
 
 from page_analysis_co_reference import build_co_referenced_page_analyses  # noqa: E402
 from page_analysis_co_reference_binding import bind_co_referenced_page_analyses  # noqa: E402
@@ -846,16 +848,7 @@ def run(
             variant_paths.append(lines_path)
             _verify_content_conservation(primitive_page.text_primitives, lines_body)
 
-            _gutters, _bands, tree = _process_page(
-                fitz_document,
-                page_index,
-                manual=pdf_path.name,
-                bin_width_x=1.0,
-                bin_height_y=2.0,
-                min_flanking_groups=2,
-                min_flanking_chars=_DEFAULT_MIN_FLANKING_CHARS,
-                min_gutter_lines=3.0,
-            )
+            tree = column_band_tree(primitive_page)
             bands_ordered, inside = _tree_aware_order(
                 list(primitive_page.text_primitives), tree
             )

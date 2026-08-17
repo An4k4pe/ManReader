@@ -192,15 +192,18 @@ def run_job_page_analysis(
                 generation_id=generation_id,
             )
         elif producer_name == "column_band":
-            # SOLO PRIMO LIVELLO. Le bande annidate sono vere, ma emetterle alla
-            # pari dei genitori le presenta come alternative a un consumatore che
-            # non sa che sono annidate -- e non c'e' ancora una regola di
-            # Resolution che glielo dica. Limitazione di scope dichiarata in
-            # `Criterio_WiringColumnBand_v1.md`, reversibile.
+            # TUTTE le bande, annidate comprese. La restrizione al primo livello
+            # era stata adottata contro il rischio che un consumatore ignaro
+            # dell'annidamento duplicasse contenuto o ne perdesse un livello:
+            # misurato, quel rischio non esiste nel consumatore che c'e' --
+            # l'assegnazione va alla banda PIU' PROFONDA, e su DB p.76, DB p.83,
+            # DB p.18 e DIE p.248 le primitive emesse due volte sono ZERO.
+            # Toglierla restituisce i gutter annidati, che State.md assegna al
+            # consumer di tabelle ("la descrizione corretta di una tabella a
+            # nove colonne", DB p.76: 7 gutter, non 1).
             analysis = build_column_band_page_analysis(
                 primitive_page,
                 generation_id=generation_id,
-                first_level_only=True,
             )
         elif producer_name == "interior_visual_frame":
             analysis = build_interior_visual_frame_page_analysis(

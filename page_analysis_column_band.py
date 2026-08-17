@@ -920,7 +920,7 @@ def build_column_band_page_analysis(
     if not generation_id:
         raise ValueError("generation_id must not be empty")
 
-    tree = _column_band_tree(
+    tree = column_band_tree(
         primitive_page,
         bin_width_x=bin_width_x,
         bin_height_y=bin_height_y,
@@ -992,17 +992,35 @@ def build_column_band_page_analysis(
     )
 
 
-def _column_band_tree(
+def column_band_tree(
     primitive_page: NormalizedPrimitivePage,
     *,
-    bin_width_x: float,
-    bin_height_y: float,
-    min_flanking_groups: int,
-    min_flanking_chars: float,
-    min_gutter_lines: float,
-    min_column_chars: float,
+    bin_width_x: float = _DEFAULT_BIN_WIDTH_X,
+    bin_height_y: float = _DEFAULT_BIN_HEIGHT_Y,
+    min_flanking_groups: int = _DEFAULT_MIN_FLANKING_GROUPS,
+    min_flanking_chars: float = _DEFAULT_MIN_FLANKING_CHARS,
+    min_gutter_lines: float = _DEFAULT_MIN_GUTTER_LINES,
+    min_column_chars: float = _DEFAULT_MIN_COLUMN_CHARS,
 ) -> list[dict[str, object]]:
-    """L'albero di bande, senza le etichette diagnostiche di manuale e pagina.
+    """L'albero di bande: struttura, gutter e gerarchia.
+
+    **Pubblica di proposito, e non e' un'estensione del contratto.** Un
+    `RegionCandidate` minimale porta bbox e primitive, non i gutter ne' il
+    livello: e' il contratto di Milestone 33, che quelle grandezze le assegnava
+    a una **misura satellite** (`ColumnBandMeasurements`) che non esiste ancora.
+    Finche' non esiste, un consumer che voglia ordinare per colonne non ha da
+    dove prendere i gutter, e l'unica alternativa e' che si ricostruisca il
+    meccanismo per conto proprio -- cioe' due implementazioni della stessa cosa,
+    che su questo progetto sono gia' divergute una volta.
+
+    Esporre l'albero e' quindi il ponte minimo, ed e' dichiarato come tale:
+    quando la misura satellite esistera', questa funzione dovra' sparire dai
+    consumatori a favore di quella.
+
+    E' il corpo di `_process_page` della diagnostica **al netto della cattura**:
+    quella prendeva un `fitz.Document` solo per chiamare `capture_pymupdf_page`,
+    e da li' in poi lavorava gia' su `NormalizedPrimitivePage`. Un producer la
+    riceve, quindi il passo cade.
 
     E' il corpo di `_process_page` della diagnostica **al netto della cattura**:
     quella prendeva un `fitz.Document` solo per chiamare `capture_pymupdf_page`,
