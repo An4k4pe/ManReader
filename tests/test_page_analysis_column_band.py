@@ -11,6 +11,7 @@ diagnostica pre-milestone.
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 
 from geometry_model import PageGeometry
 from page_analysis_column_band import build_column_band_page_analysis
@@ -111,12 +112,86 @@ class BuildColumnBandPageAnalysisTest(unittest.TestCase):
 
         self.assertEqual(analysis.candidates, ())
 
+    def test_a_persistent_channel_that_is_not_a_gutter_produces_no_band(self) -> None:
+        """Controllo negativo che PUO' fallire, a differenza degli altri due.
+
+        Pagina vuota e colonna singola non possono produrre bande: sono controlli
+        di sanita'. Questo discende invece dalla tesi del meccanismo -- separa la
+        persistenza verticale, non la larghezza -- e mette alla prova proprio
+        quella: una colonna di numeri di tabella accanto a della prosa produce un
+        canale bianco verticale **persistente e fiancheggiato da entrambi i
+        lati**, che non e' un gutter di colonna.
+
+        Il criterio che deve reggerlo e' `too_few_wordy_lines`: il lato dei
+        numeri non porta righe con abbastanza caratteri. E' un test che fallisce
+        davvero se qualcuno abbassa `min_flanking_chars` -- misurato sul progetto:
+        a 2 questa classe di pagina viene accettata come banda (Lan p.84, tabella
+        di dadi).
+        """
+
+        primitives: list[TextPrimitive] = []
+        for index in range(14):
+            y = 100.0 + index * 14.0
+            primitives.append(_span(index, 0, 0, str(index + 1), (60.0, y, 74.0, y + 11.0)))
+            primitives.append(
+                _span(index + 100, 0, 0, "prosa continua e sufficientemente lunga",
+                      (120.0, y, 540.0, y + 11.0))
+            )
+
+        analysis = build_column_band_page_analysis(_page(tuple(primitives)), generation_id="gen:1")
+
+        self.assertEqual(analysis.candidates, ())
+
     def test_provenance_names_the_producer(self) -> None:
         analysis = build_column_band_page_analysis(_two_columns(), generation_id="gen:1")
 
         self.assertEqual(analysis.provenance.producer_name, "page_analysis.column_band")
         self.assertEqual(analysis.provenance.source_page_id, "page:0001")
         self.assertEqual(analysis.generation_id, "gen:1")
+
+
+_CORPUS = Path(__file__).resolve().parents[1] / "Dag.pdf"
+
+
+@unittest.skipUnless(_CORPUS.is_file(), "serve Dag.pdf accanto alla radice del repo")
+class DagPage84RegressionTest(unittest.TestCase):
+    """L'unica regressione documentata che il progetto possiede.
+
+    Dag p.84 POSIZIONALE (stampata 82) e' l'unica pagina con **entrambe** le
+    cose: un'aspettativa verificata a render -- prosa giustificata a due colonne
+    nella meta' alta, gutter reale largo circa 8pt -- e una risposta precedente
+    nota e SBAGLIATA, `column_count=1`, prodotta dal meccanismo di Fase 1/2 a
+    ogni combinazione di parametri.
+
+    Era rimasta fuori dalla verifica del producer: rilievo della revisione
+    indipendente, ed era il caso di regressione piu' economico esistente.
+
+    Il test asserisce il minimo che quella storia impone -- che le due colonne
+    vengano trovate -- e non l'estensione della banda, che dipende dalla regola
+    di estensione ed e' un'altra questione (il piede di pagina che ne finisce
+    dentro e' assegnato alla deduplicazione).
+    """
+
+    def test_finds_the_two_columns_the_old_mechanism_missed(self) -> None:
+        import fitz
+
+        from primitive_normalizer import normalize_backend_page_capture
+        from pymupdf_capture import capture_pymupdf_page
+
+        with fitz.open(_CORPUS) as document:
+            page = document.load_page(83)
+            capture = capture_pymupdf_page(
+                page, source_id="test", page_id="page:0084", capture_id="test:dag84"
+            )
+        primitive_page = normalize_backend_page_capture(capture)
+
+        analysis = build_column_band_page_analysis(primitive_page, generation_id="gen:1")
+
+        self.assertTrue(
+            analysis.candidates,
+            "Dag p.84 ha due colonne verificate a render: nessun candidato significa "
+            "la stessa risposta sbagliata del meccanismo di Fase 1/2",
+        )
 
 
 if __name__ == "__main__":

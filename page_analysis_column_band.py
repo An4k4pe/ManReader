@@ -892,6 +892,7 @@ def build_column_band_page_analysis(
     min_flanking_chars: float = _DEFAULT_MIN_FLANKING_CHARS,
     min_gutter_lines: float = _DEFAULT_MIN_GUTTER_LINES,
     min_column_chars: float = _DEFAULT_MIN_COLUMN_CHARS,
+    first_level_only: bool = False,
 ) -> PageAnalysis:
     """Un `RegionCandidate` per banda di colonne, contratto di Milestone 33.
 
@@ -904,6 +905,16 @@ def build_column_band_page_analysis(
     Nessuna decisione: le bande annidate sono emesse come candidati alla pari,
     perche' un `RegionCandidate` e' una proposta non approvata e la relazione fra
     candidati si decide in Resolution o nel consumer, mai qui.
+
+    `first_level_only` esiste per il WIRING, non per il meccanismo. Emettere le
+    annidate alla pari dei genitori le presenta come **alternative**, mentre sono
+    vere a due livelli insieme: il figlio sta DENTRO il padre, non al posto suo.
+    Finche' non esiste una regola di Resolution che sappia dell'annidamento, un
+    consumatore ha due sole letture coerenti e sono entrambe sbagliate --
+    duplicare il contenuto o perderne un livello. Il flag e' quindi una
+    limitazione dello scope di consumo, reversibile quando Resolution esistera',
+    e non un giudizio sul fatto che le bande annidate siano vere: lo sono.
+    Rilievo della revisione indipendente del 17 agosto 2026.
     """
 
     if not generation_id:
@@ -924,6 +935,8 @@ def build_column_band_page_analysis(
 
     candidates: list[RegionCandidate] = []
     for row in tree:
+        if first_level_only and int(cast(int, row["depth"])) != 0:
+            continue
         # Ritagliato alla pagina: l'estensione dei gutter puo' portare una banda
         # oltre il bordo (DrW p.97 arriva a y 784, Dag p.164 a 794) e un
         # candidato fuori pagina non passa `validate_page_analysis_against_primitive_page`.
