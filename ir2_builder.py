@@ -178,16 +178,36 @@ def build_page_ir2(
     if pending_primitives:
         paragraphs.append((pending_text.strip(), tuple(pending_primitives)))
 
-    items: list[tuple[tuple[float, float], str, object]] = []
-    for text, primitives in paragraphs:
-        anchor = primitives[0]
-        items.append(((anchor.bbox[1], anchor.bbox[0]), "text", (text, primitives)))
+    # I paragrafi NON si riordinano: l'ordine ricevuto e' l'ordine di lettura, e
+    # riordinarli per geometria lo scavalcherebbe. Le note si inseriscono
+    # DAVANTI al primo paragrafo che sta sotto di loro, senza spostare il testo
+    # -- stesso schema del consumer che ha prodotto la base.
+    #
+    # Una versione precedente ordinava tutto per (y0, x0). Passava sulle pagine a
+    # colonna singola, dove geometria e lettura coincidono, e falliva su 4 pagine
+    # su 10 del campione. Trovato da E-B alla prima esecuzione.
+    notes_by_rank: dict[int, list[AssetNoteInput]] = {}
     for note in asset_notes:
-        items.append((note.sort_key, "asset", note))
-    items.sort(key=lambda item: item[0])
+        rank = next(
+            (
+                index
+                for index, (_text, primitives) in enumerate(paragraphs)
+                if primitives[0].bbox[1] > note.sort_key[0]
+            ),
+            len(paragraphs),
+        )
+        notes_by_rank.setdefault(rank, []).append(note)
+
+    items: list[tuple[str, object]] = []
+    for index, paragraph in enumerate(paragraphs):
+        for note in sorted(notes_by_rank.get(index, ()), key=lambda item: item.sort_key):
+            items.append(("asset", note))
+        items.append(("text", paragraph))
+    for note in sorted(notes_by_rank.get(len(paragraphs), ()), key=lambda item: item.sort_key):
+        items.append(("asset", note))
 
     nodes: list[NodeIR2] = []
-    for order, (_key, kind, payload) in enumerate(items):
+    for order, (kind, payload) in enumerate(items):
         if kind == "text":
             text, primitives = payload  # type: ignore[misc]
             first = primitives[0]

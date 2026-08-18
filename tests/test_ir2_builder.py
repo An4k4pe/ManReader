@@ -144,6 +144,49 @@ class BuildPageIR2Test(unittest.TestCase):
             "text.paragraph", "asset.note", "text.paragraph",
         ])
 
+    def test_keeps_the_received_order_when_it_contradicts_geometry(self) -> None:
+        # Il caso a due colonne: la colonna sinistra si legge prima anche se la
+        # destra sta piu' in alto. Una versione precedente riordinava per (y0,x0)
+        # e falliva su 4 pagine su 10 del campione cieco.
+        left = _span(1, 0, 0, "Sinistra.", y=100)
+        right = _span(2, 0, 0, "Destra.", y=10)
+        page = build_page_ir2(page_id=PAGE, ordered_text_primitives=[left, right])
+        self.assertEqual([node.text for node in page.nodes], ["Sinistra.", "Destra."])
+
+    def test_places_a_note_before_the_first_paragraph_below_it(self) -> None:
+        first = _span(1, 0, 0, "Prima.", y=0)
+        second = _span(2, 0, 0, "Dopo.", y=100)
+        note = AssetNoteInput(
+            primitive_id="primitive:image:image:i0001",
+            digest="md5:abc",
+            file_name="md5_abc.png",
+            bbox=(0.0, 50.0, 10.0, 60.0),
+            occurrence_count=1,
+            sort_key=(50.0, 0.0),
+        )
+        page = build_page_ir2(
+            page_id=PAGE, ordered_text_primitives=[first, second], asset_notes=[note]
+        )
+        self.assertEqual(
+            [node.kind for node in page.nodes],
+            ["text.paragraph", "asset.note", "text.paragraph"],
+        )
+
+    def test_a_note_below_every_paragraph_goes_last(self) -> None:
+        span = _span(1, 0, 0, "Testo.", y=0)
+        note = AssetNoteInput(
+            primitive_id="primitive:image:image:i0001",
+            digest="md5:abc",
+            file_name="md5_abc.png",
+            bbox=(0.0, 900.0, 10.0, 910.0),
+            occurrence_count=1,
+            sort_key=(900.0, 0.0),
+        )
+        page = build_page_ir2(
+            page_id=PAGE, ordered_text_primitives=[span], asset_notes=[note]
+        )
+        self.assertEqual([node.kind for node in page.nodes], ["text.paragraph", "asset.note"])
+
     def test_an_empty_page_builds(self) -> None:
         self.assertEqual(build_page_ir2(page_id=PAGE, ordered_text_primitives=[]).nodes, ())
 
