@@ -1,0 +1,105 @@
+"""Render Markdown from DocumentIR 2. IR2-first, legacy renderers untouched.
+
+Third of the four modules of ``Proposta_IR2Minima_v3.md`` §7.
+
+**Why a new emitter instead of an adapter down to IR 1.** ``markdown_builder``
+re-derives from geometry the structure IR 2 already carries decided from the
+source, and two of its three conditions cannot be driven by any adapter:
+``_should_start_new_paragraph`` joins a paragraph whose predecessor does not end
+with strong punctuation whatever the geometry says, and ``_is_heading_text``
+promotes any short uppercase text to a heading before it even looks at the style.
+``BlockIR`` has no channel to declare a kind, so getting the intended output would
+mean fabricating fake geometry and style -- making the adapter lie about the PDF.
+Measured, not predicted: the legacy Markdown of DB p.99 shows three identical stat
+blocks rendered three different ways and a running header promoted to a heading.
+
+This module renders **only what v0 emits**: paragraphs and asset notes. Headings,
+callouts and tables are in the vocabulary and not in emission, each for a reason
+recorded in the proposal.
+
+The asset note says **what was replaced**, which is half of ``AGENTS.MD``
+§Obiettivo and had never had a milestone: «sostituire immagini, sfondi ed elementi
+ripetuti con note brevi e riassuntive di cio' che hanno sostituito». It reports the
+governing candidate's ``proposed_structural_kind``, which is a proposal and not a
+decision -- so the note describes what was there structurally and how big it was,
+never what it depicts. Describing the content would need the optional local AI and
+would risk inventing it.
+"""
+
+from __future__ import annotations
+
+from ir2_model import (
+    KIND_ASSET_NOTE,
+    KIND_TEXT_PARAGRAPH,
+    AssetRefIR2,
+    DocumentIR2,
+    NodeIR2,
+    PageIR2,
+)
+
+# Dal kind strutturale proposto alla frase che il lettore vede. Non e' una
+# classificazione nuova: e' la traduzione di cio' che il candidato gia' dichiara.
+_KIND_PHRASES = {
+    "layout.page_covering_visual": "sfondo di pagina",
+    "layout.page_edge_visual": "elemento di bordo",
+    "layout.embedded_visual": "immagine inserita",
+    "layout.interior_visual_frame": "riquadro",
+}
+_UNCLASSIFIED_PHRASE = "immagine non classificata"
+
+
+def render_asset_note(asset: AssetRefIR2) -> str:
+    """One short line saying what was removed, how big it was, and where it is."""
+
+    phrase = (
+        _UNCLASSIFIED_PHRASE
+        if asset.proposed_structural_kind is None
+        else _KIND_PHRASES.get(asset.proposed_structural_kind, _UNCLASSIFIED_PHRASE)
+    )
+    width = asset.bbox[2] - asset.bbox[0]
+    height = asset.bbox[3] - asset.bbox[1]
+    repeated = (
+        f", {asset.occurrence_count} occorrenze in pagina" if asset.occurrence_count > 1 else ""
+    )
+    return f"> **[{phrase}]** {width:.0f}×{height:.0f} pt{repeated} — `{asset.file_name}`"
+
+
+def render_node(node: NodeIR2) -> str:
+    """Render one node. Unknown kinds are not guessed at."""
+
+    if node.kind == KIND_TEXT_PARAGRAPH:
+        return node.text or ""
+    if node.kind == KIND_ASSET_NOTE:
+        if node.asset is None:
+            raise ValueError("an asset.note node must carry an asset")
+        return render_asset_note(node.asset)
+    raise ValueError(f"no renderer for kind {node.kind!r}")
+
+
+def render_page_markdown(page: PageIR2) -> str:
+    """Render one page. Nodes are emitted in ``order``, which is reading order."""
+
+    if not isinstance(page, PageIR2):
+        raise ValueError("page must be a PageIR2")
+
+    blocks = [
+        rendered
+        for rendered in (render_node(node) for node in sorted(page.nodes, key=lambda n: n.order))
+        if rendered
+    ]
+    return "\n\n".join(blocks) + "\n" if blocks else ""
+
+
+def render_document_markdown(document: DocumentIR2) -> str:
+    """Render a whole document, one page after another."""
+
+    if not isinstance(document, DocumentIR2):
+        raise ValueError("document must be a DocumentIR2")
+
+    parts: list[str] = []
+    for page in document.pages:
+        parts.append(f"<!-- page: {page.page_id} -->")
+        rendered = render_page_markdown(page)
+        if rendered:
+            parts.append(rendered.rstrip("\n"))
+    return "\n\n".join(parts) + "\n" if parts else ""
