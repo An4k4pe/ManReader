@@ -55,9 +55,19 @@ Nessuno di questi 8 manuali è fra quelli su cui il meccanismo è stato costruit
 per la parte di testo — DB, Dag, DrW — salvo **Dag**, che compare una volta con
 una pagina (idx 199) non fra le sette escluse.
 
-## Cosa manca prima di eseguire
+## Stato del campione
 
-Punto 3 dell'ordine vincolante del criterio: **le pagine di riferimento vanno
-trascritte a mano dall'utente** e messe a verbale **prima** che lo stadio venga
-eseguito su di esse. Finché non è fatto, E-B non è misurabile e l'esecuzione
-produrrebbe solo una lettura post-hoc.
+**Dieci pagine su dieci utilizzabili.** `Wil` idx 71 faceva crashare la fetta al
+primo giro; il difetto è stato chiuso in `2d6052b` e la pagina è rientrata.
+
+L'ordine di lettura di tutte e dieci è stato **giudicato corretto dall'utente**
+prima che IR 2 esistesse — nove pagine più `Wil` idx 71 dopo la correzione. Le
+tabelle restano escluse dal giudizio perché il producer di tabelle non esiste.
+
+Questo giudizio è la base di E-B in `Criterio_UscitaIR2Minima_v2.md`, e vale
+perché è stato dato da una persona su pagine mai viste: non va rigenerato senza
+essere rigiudicato. Dettagli in `Esito_PrecondizioniIR2_v1.md`.
+
+*La versione precedente di questa sezione prescriveva una trascrizione a mano
+delle pagine di riferimento. È caduta con la v1 del criterio: la referenza umana
+era già stata prodotta dal campione stesso.*

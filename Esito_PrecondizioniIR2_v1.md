@@ -1,6 +1,8 @@
 # Esiti delle precondizioni — IR 2 minima
 
-Verbale di tre esiti, tutti ottenuti **prima** di qualunque implementazione.
+Verbale di quattro esiti, tutti ottenuti **prima** di qualunque implementazione
+di IR 2. Il terzo ha richiesto una correzione al consumer, che è comunque
+precedente allo stadio nuovo.
 
 ---
 
@@ -90,5 +92,39 @@ tale.
    debordanti. È il numero che vieta la correzione ingenua «scarta ciò che esce
    dalla pagina», che distruggerebbe metà degli asset del manuale.
 
-**Fuori dal perimetro di IR 2 minima.** Va chiuso prima che il campione sia
-eseguito per intero, o `Wil` idx 71 resta escluso e il campione è di nove pagine.
+### Stato: **CHIUSO** nel commit `2d6052b`
+
+Il ritaglio interseca ora il rettangolo della pagina. Le parzialmente fuori
+vengono ritagliate, l'interamente fuori non produce raster e viene registrata con
+`extraction_method = offpage_no_raster` più una riga esplicita in `review.md`.
+
+Criteri dichiarati prima della correzione e tutti verificati: le nove pagine della
+base restano **byte-identiche** (9 su 9), `Wil` idx 71 gira con conservazione
+1553=1553 e integrità dei riferimenti verde, l'occorrenza è registrata, nessun
+asset perso (4 su 4).
+
+Le parti 2 e 3 restano fatti misurati e validi per chiunque tocchi l'estrazione
+asset in futuro: interamente fuori non è contenuto, parzialmente fuori è il vivo
+e va ritagliato.
+
+## 4. Giudizio sulla decima pagina — il campione torna a **dieci**
+
+`Wil` idx 71 (apertura di capitolo *IL BANCHETTO*: illustrazione, prosa, tre
+riquadri). Giudizio dell'utente sull'uscita prodotta dopo la correzione:
+**l'ordine è corretto**, con la precisazione che *restano delle rifiniture da
+fare*.
+
+**La distinzione va tenuta, ed è ciò che rende la base utilizzabile.** Il giudizio
+è sull'**ordine di lettura**, che è quanto E-B misura. Le rifiniture riguardano la
+**resa delle parole** — spazi fra span, sillabazione, segmentazione in paragrafi —
+che sono esattamente ciò che le regole di
+`Criterio_ParagrafoDaRiga_v1.md` cambiano e che **non sono ancora implementate**.
+Non sono difetti d'ordine e non concorrono a E-B.
+
+**Conseguenza**, per il §3 di `Criterio_UscitaIR2Minima_v2.md`, che prevedeva
+questo caso: la condizione «il crash è chiuso» è soddisfatta, l'esclusione decade,
+e **la base di E-B è di dieci pagine**, tutte giudicate a vista dall'utente prima
+che IR 2 esista.
+
+Bilancio del campione cieco: **ordine corretto 10 su 10**, tabelle escluse per
+assenza del producer, e un difetto vero trovato e chiuso.
