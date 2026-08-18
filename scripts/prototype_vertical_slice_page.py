@@ -178,12 +178,15 @@ def _extract_image_bytes(
     page: fitz.Page,
     primitive: ImageOccurrencePrimitive,
     raw_image_info: list[dict[str, Any]],
-) -> tuple[bytes, str, str]:
+) -> tuple[bytes, str, str] | None:
     """Extract the raster bytes for one occurrence; return (bytes, ext, method).
 
     ``method`` is ``"xref"`` when the embedded resource itself was extracted,
     or ``"rasterized_clip"`` when the fallback below was used -- callers must
     not treat the two as interchangeable (see module docstring).
+
+    Returns ``None`` when the occurrence lies wholly outside the page and has
+    no embedded resource to extract: there is no raster to write.
     """
 
     image_index = _image_index_from_observation_id(primitive.source_observation_id)
@@ -195,7 +198,20 @@ def _extract_image_bytes(
     # Defensive fallback for occurrences with no resolvable xref (e.g. inline
     # images): rasterize the placed occurrence directly from the page. This
     # is a substitution, not the embedded asset -- see module docstring.
-    clip = fitz.Rect(*primitive.bbox)
+    # The clip is intersected with the page rect, because an occurrence can be
+    # placed partly or wholly outside it. The two cases are NOT the same:
+    #
+    #   partly outside  -> bleed, ordinary print layout (44.6% of occurrences
+    #                      on Wil.pdf). Must be CLIPPED, never dropped.
+    #   wholly outside  -> contributes no pixel to the rendered page, so there
+    #                      is nothing to rasterize. Returns None; the caller
+    #                      records it instead of writing an empty file.
+    #
+    # Without the guard MuPDF raises on the empty pixmap. Measured on Wil.pdf
+    # page index 71: occurrence at x 699-1284 of a page 581 wide, xref 0.
+    clip = fitz.Rect(*primitive.bbox) & page.rect
+    if clip.is_empty:
+        return None
     pixmap = page.get_pixmap(clip=clip)
     return pixmap.tobytes("png"), "png", "rasterized_clip"
 
@@ -732,25 +748,39 @@ def run(
         ):
             identity, digest_missing = _asset_identity(primitive)
             if identity not in assets:
-                image_bytes, extension, extraction_method = _extract_image_bytes(
+                extracted = _extract_image_bytes(
                     fitz_document=fitz_document,
                     page=page,
                     primitive=primitive,
                     raw_image_info=raw_image_info,
                 )
-                file_name = f"{_safe_filename_stem(identity)}.{extension}"
-                file_path = output_dir / file_name
-                file_path.write_bytes(image_bytes)
-                written_asset_paths.add(file_path)
-                assets[identity] = {
+                common = {
                     "digest": identity,
-                    "file_path": file_name,
                     "intrinsic_width": primitive.intrinsic_width,
                     "intrinsic_height": primitive.intrinsic_height,
                     "occurrence_count": 0,
                     "digest_missing": digest_missing,
-                    "extraction_method": extraction_method,
                 }
+                if extracted is None:
+                    # Nessun raster: l'occorrenza sta interamente fuori pagina.
+                    # Registrata con file_path vuoto e metodo esplicito, mai
+                    # silenziosa (AGENTS.MD, Coverage e ownership).
+                    assets[identity] = {
+                        **common,
+                        "file_path": "",
+                        "extraction_method": "offpage_no_raster",
+                    }
+                else:
+                    image_bytes, extension, extraction_method = extracted
+                    file_name = f"{_safe_filename_stem(identity)}.{extension}"
+                    file_path = output_dir / file_name
+                    file_path.write_bytes(image_bytes)
+                    written_asset_paths.add(file_path)
+                    assets[identity] = {
+                        **common,
+                        "file_path": file_name,
+                        "extraction_method": extraction_method,
+                    }
             asset = assets[identity]
             asset["occurrence_count"] = cast(int, asset["occurrence_count"]) + 1
 
@@ -759,7 +789,10 @@ def run(
                 analyses=analyses,
                 outcome_by_candidate=outcome_by_candidate,
             )
-            destination = "body" if outcome == "accepted" else "review"
+            # Senza un file su disco la nota non avrebbe cosa referenziare:
+            # l'occorrenza va in review, dove viene registrata comunque.
+            has_asset_file = bool(assets[identity]["file_path"])
+            destination = "body" if outcome == "accepted" and has_asset_file else "review"
             occurrence_rows.append(
                 {
                     "digest": identity,
@@ -770,7 +803,7 @@ def run(
                     "outcome": outcome,
                 }
             )
-            if outcome == "accepted":
+            if destination == "body":
                 note_entries.append(
                     {
                         "y0": primitive.bbox[1],
@@ -796,7 +829,11 @@ def run(
             review_lines.append(f"- bbox: {row['bbox']}")
             review_lines.append(f"- outcome: {row['outcome']}")
             review_lines.append(f"- candidate_id: {row['candidate_id'] or '(none)'}")
-            review_lines.append(f"- asset_file={assets[cast(str, row['digest'])]['file_path']}")
+            asset_file = cast(str, assets[cast(str, row["digest"])]["file_path"])
+            if asset_file:
+                review_lines.append(f"- asset_file={asset_file}")
+            else:
+                review_lines.append("- nessun raster: occorrenza interamente fuori pagina")
             review_lines.append("")
         review_md_path = output_dir / "review.md"
         review_md_path.write_text("\n".join(review_lines) + "\n", encoding="utf-8")
@@ -872,7 +909,7 @@ def run(
             review_md_text="\n".join(review_lines) + "\n",
             occurrence_row_count=len(occurrence_rows),
             image_primitive_count=len(primitive_page.image_primitives),
-            asset_count=len(assets),
+            asset_count=sum(1 for asset in assets.values() if asset["file_path"]),
         )
 
         # === Varianti d'ordine (Criterio_GiunzioneFettaVerticale_v1.md §5) ===
