@@ -8,6 +8,16 @@ La progettazione globale è conclusa. La direzione architetturale A-0.2 e il pia
 
 ## Stato operativo
 
+**Aggiornato al 18 agosto 2026 (Milestone 38).** La pipeline nuova ha ora un
+lato contenuto: `DocumentIR 2` esiste come contratto, serializzazione validante,
+costruttore, validatore ed emettitore Markdown IR2-first, e produce Markdown su
+pagina reale con l'ordine verificato contro un campione cieco giudicato da una
+persona. Resta in shadow mode: il Markdown nuovo si scrive accanto al legacy, mai
+al posto suo, e l'uscita dallo shadow mode e' dichiarata impossibile a v0 perche'
+callout e tabelle non sono preservabili. La precondizione del primo `page.md`
+consultabile e' la **rimozione dell'arredo ricorrente**, document-level e non
+iniziata.
+
 Le Milestone 1–35 sono completate. Cinque producer Milestone 13+ sono wired nel job:
 `table_candidate` (Milestone 21, commit `93ee631`), `page_covering_visual`
 (Milestone 23, commit `3bda611`), `page_edge_visual` (Milestone 24),
@@ -953,5 +963,95 @@ a mancare del terzo invariante sull'ordine.
 
 Suite: 1263 test verdi. Quattro criteri di accettazione pre-registrati e
 committati prima dell'implementazione, più quello del wiring.
+
+## Milestone 38 — IR 2 minima a uno stadio, bersaglio Markdown — completata
+
+Apre lo stadio `DocumentIR 2`, che `AGENTS.MD` elenca fra le attività non
+autorizzate **senza decisione architetturale dedicata**. La decisione è stata
+presa in Modalità P (`Proposta_IR2Minima_v1..v3.md`, fuori dal repo) con **due
+giri di revisione indipendente**, metodologico e architetturale in conversazioni
+disgiunte — lo stesso modo con cui Milestone 34 aprì `resolution` e Milestone 26
+`clustering`.
+
+**Il difetto che la motiva, e non è su una pagina.** Sei producer wired e nessun
+percorso che producesse una riga di Markdown. `PageAnalysis` ha un round-trip
+completo; `BackendPageCapture` e `NormalizedPrimitivePage` hanno un
+serializzatore diagnostico e **nessun deserializzatore**; un `RegionCandidate`
+porta bbox, kind e `primitive_ids` opachi, mentre il testo vive in
+`TextPrimitive.text`. Cioè: **la pipeline nuova aveva il lato struttura e non il
+lato contenuto**. `ResolvedSemanticDocument` non esiste in nessun file di codice.
+
+**Quattro moduli**, nessun producer toccato, nessuna regola di Resolution
+aggiunta, renderer legacy intoccati: `ir2_model.py` più `ir2_serialization.py`
+(validante come `page_analysis_serialization`, non permissiva come `ir_store`),
+`ir2_builder.py`, `ir2_markdown.py`, `ir2_validate.py`. Cablati in
+`scripts/prototype_ir2_page.py`.
+
+**Due cose nuove per il progetto, dichiarate.** L'ordine dei nodi **è** ordine di
+lettura, con `order` esplicito sul precedente `BlockIR.order`;
+`page_analysis_model` lo nega ai candidati di proposito, qui diventa contratto. E
+assegnare una primitiva a un nodo **è ownership**, voce della stessa lista gated:
+qui è ownership **di stadio e rigenerabile**, scritto nel modulo.
+
+**Il paragrafo viene dalla riga, non dal blocco**
+(`Criterio_ParagrafoDaRiga_v1.md`, pre-registrato). Supera
+`Criterio_ParagrafoDaBlocco_v1.md`: su DB p.99 il box a rientro sospeso ha i
+blocchi che tagliano le voci di traverso — `b0003` contiene la fine della prima e
+l'inizio della seconda, e il confine cade anche dentro la parola `dimez-`/`zati`.
+Le regole a righe le ricompongono nelle tre voci corrette. Precondizione
+verificata su DB p.53, la pagina su cui il criterio precedente era stato
+costruito: **regge**, il blocco non serve nemmeno lì.
+
+**Il criterio di uscita ha trovato un difetto alla prima esecuzione**, ed è il
+risultato metodologico della milestone. E-B ha dato 4 pagine su 10 divergenti con
+la stessa lunghezza da entrambi i lati, cioè un riordino: il costruttore ordinava
+i paragrafi per `(y0, x0)` scavalcando l'ordine ricevuto. Sulle pagine a colonna
+singola geometria e lettura coincidono, ed è per quello che sei passavano. **I 21
+test passavano anche col bug**, perché scritti con input già in ordine
+geometrico. Corretto, con tre test sul caso a due colonne verificati
+reintroducendo il difetto. Dopo la correzione: **E-B 10 su 10**.
+
+**Il campione cieco** (`Campione_UscitaIR2Minima_v1.md`, seed `20260818`
+pre-registrato, 10 pagine da 8 manuali, 7 pagine di sviluppo escluse per
+costruzione) ha prodotto tre cose: l'ordine giudicato corretto **10 su 10**
+dall'utente prima che IR 2 esistesse — che è la referenza umana di E-B e il terzo
+invariante che al progetto mancava —, un crash reale su `Wil` idx 71, e la
+riscrittura del criterio stesso. La v1 del criterio chiedeva una trascrizione a
+mano; è caduta perché la referenza l'aveva già prodotta il campione.
+
+**Il crash `Wil`**: un'occorrenza senza xref a `x 699-1284` su una pagina larga
+`581` mandava `rasterized_clip` a rasterizzare un clip vuoto. Corretto
+intersecando col rettangolo della pagina. Due casi che **non** sono lo stesso e
+che il verbale tiene separati: interamente fuori pagina non contribuisce un pixel
+e non produce asset né nota; **parzialmente fuori è il vivo di stampa — 44,6%
+delle occorrenze su Wil — e va ritagliato, mai scartato**. Quel numero esiste per
+vietare la correzione ingenua.
+
+**La metà dell'obiettivo che non aveva mai avuto una milestone** si vede
+nell'uscita: le note dicono `[sfondo di pagina] 622×808 pt`, `[elemento di
+bordo]`, `[immagine inserita]`, invece di un digest e un nome file. Riportano il
+kind **proposto** dal candidato, quindi dicono cosa c'era strutturalmente e
+quanto era grande, mai cosa raffigura.
+
+**Fuori scope, dichiarato e non risolto.** La rimozione dell'arredo ricorrente,
+che è document-level e resta la precondizione di un `page.md` consultabile: su DB
+p.99 escono **30 note, quasi tutte arredo**. `text.heading` in emissione — il
+criterio non esiste, e su DB p.99 il solo corpo di pagina ne prenderebbe uno su
+quattro (`SCHELETRO` a 34pt contro una moda di 9, ma i tre titoli di pannello a
+10). `text.callout` in emissione — `interior_visual_frame` li trova già, ma
+scegliere fra candidati annidati è una decisione di Resolution che non esiste;
+`column_band` dimezza il rumore (5 candidati su 10 eliminati, fra cui tutti e tre
+quelli sul fregio). Tabelle. EPUB, e `epub_builder.py` non è nemmeno IR-first.
+La separazione in due stadi. La persistenza di `NormalizedPrimitivePage`.
+
+**Non è uscita dallo shadow mode**, e il criterio lo dichiara: quella richiede
+«callout e tabelle DB preservati», qui non preservabili. Il Markdown nuovo si
+scrive accanto, mai al posto del legacy.
+
+Suite: 1337 test, uno fallimento pre-esistente e ambientale (cerca `Dag.pdf`
+nella root, assente nel worktree). Tre criteri pre-registrati e committati prima
+dell'implementazione; due verbali di esito.
+
+**Milestone chiusa nei commit `502944a`..`844c8f1`.**
 
 <!-- FINE DI State.md — se non leggi questa riga, la tua copia è troncata: fermati e dillo -->
