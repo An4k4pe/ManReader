@@ -1,6 +1,7 @@
 import unittest
 
 from ir2_markdown import (
+    is_rendered_in_body,
     render_asset_note,
     render_document_markdown,
     render_node,
@@ -22,7 +23,9 @@ def _paragraph(order: int, text: str, node_id: str | None = None) -> NodeIR2:
     )
 
 
-def _asset_node(order: int, kind: str | None, count: int = 1) -> NodeIR2:
+def _asset_node(
+    order: int, kind: str | None, count: int = 1, resolution: str = "unresolved"
+) -> NodeIR2:
     return NodeIR2(
         node_id=f"{PAGE}:i{order:04d}",
         order=order,
@@ -36,7 +39,7 @@ def _asset_node(order: int, kind: str | None, count: int = 1) -> NodeIR2:
             occurrence_count=count,
             proposed_structural_kind=kind,
         ),
-        resolution="unresolved",
+        resolution=resolution,
     )
 
 
@@ -108,13 +111,64 @@ class RenderPageTest(unittest.TestCase):
             page_id=PAGE,
             nodes=(
                 _paragraph(0, "prima"),
-                _asset_node(1, "layout.embedded_visual"),
+                _asset_node(1, "layout.embedded_visual", resolution="accepted"),
                 _paragraph(2, "dopo"),
             ),
         )
         rendered = render_page_markdown(page)
         self.assertLess(rendered.index("prima"), rendered.index("immagine inserita"))
         self.assertLess(rendered.index("immagine inserita"), rendered.index("dopo"))
+
+
+class EmissionGateTest(unittest.TestCase):
+    """La porta di resa: nel corpo solo cio' che Resolution ha accettato."""
+
+    def _node(self, order: int, resolution: str | None) -> NodeIR2:
+        node = _asset_node(order, "layout.embedded_visual")
+        return NodeIR2(
+            node_id=node.node_id,
+            order=node.order,
+            kind=node.kind,
+            primitive_ids=node.primitive_ids,
+            page_ids=node.page_ids,
+            asset=node.asset,
+            resolution=resolution,
+        )
+
+    def test_an_accepted_note_is_rendered(self) -> None:
+        self.assertTrue(is_rendered_in_body(self._node(0, "accepted"), render_unresolved=False))
+
+    def test_an_unresolved_note_is_not_rendered(self) -> None:
+        self.assertFalse(is_rendered_in_body(self._node(0, "unresolved"), render_unresolved=False))
+
+    def test_a_rejected_note_is_not_rendered(self) -> None:
+        self.assertFalse(is_rendered_in_body(self._node(0, "rejected"), render_unresolved=False))
+
+    def test_a_note_without_a_candidate_is_not_rendered(self) -> None:
+        self.assertFalse(is_rendered_in_body(self._node(0, None), render_unresolved=False))
+
+    def test_a_paragraph_is_always_rendered(self) -> None:
+        self.assertTrue(is_rendered_in_body(_paragraph(0, "testo"), render_unresolved=False))
+
+    def test_the_page_drops_the_unresolved_note_but_keeps_the_text(self) -> None:
+        page = PageIR2(
+            page_id=PAGE,
+            nodes=(_paragraph(0, "prima"), self._node(1, "unresolved"), _paragraph(2, "dopo")),
+        )
+        rendered = render_page_markdown(page)
+        self.assertEqual(rendered, "prima\n\ndopo\n")
+
+    def test_the_flag_puts_them_back(self) -> None:
+        page = PageIR2(page_id=PAGE, nodes=(self._node(0, "unresolved"),))
+        self.assertEqual(render_page_markdown(page), "")
+        self.assertIn(
+            "immagine inserita", render_page_markdown(page, render_unresolved_assets=True)
+        )
+
+    def test_the_node_survives_even_when_not_rendered(self) -> None:
+        # La copertura resta per costruzione: il nodo c'e', non viene reso.
+        page = PageIR2(page_id=PAGE, nodes=(self._node(0, "unresolved"),))
+        self.assertEqual(len(page.nodes), 1)
 
 
 class RenderDocumentTest(unittest.TestCase):

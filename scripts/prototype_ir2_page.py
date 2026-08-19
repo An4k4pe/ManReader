@@ -52,7 +52,7 @@ from prototype_vertical_slice_page import (  # noqa: E402
 )
 
 from ir2_builder import AssetNoteInput, build_page_ir2  # noqa: E402
-from ir2_markdown import render_page_markdown  # noqa: E402
+from ir2_markdown import is_rendered_in_body, render_page_markdown  # noqa: E402
 from ir2_model import DocumentIR2, IR2Provenance  # noqa: E402
 from ir2_serialization import document_ir2_from_dict, document_ir2_to_dict  # noqa: E402
 from ir2_validate import validate_page_ir2_against_primitive_page  # noqa: E402
@@ -235,7 +235,49 @@ def run(pdf_path: Path, page_number: int, output_dir: Path, base_path: Path | No
         markdown = render_page_markdown(ir2_page)
         (output_dir / "page_ir2.md").write_text(markdown, encoding="utf-8")
 
+        # --- Canale review: cio' che NON entra nel corpo, e perche' ---
+        #
+        # E' il controllo che l'utente ha chiesto di tenere: l'arredo andra'
+        # affrontato, oppure andra' verificato che altri producer lo risolvano
+        # gia'. Questo file e' l'elenco da cui si guardera', raggruppato per
+        # genere strutturale proposto, perche' quella domanda sia misurabile
+        # invece che ricordata.
+        not_rendered = [
+            node
+            for node in ir2_page.nodes
+            if not is_rendered_in_body(node, render_unresolved=False)
+        ]
+        by_kind: Counter[str] = Counter(
+            (node.asset.proposed_structural_kind or "(nessun candidato)")
+            for node in not_rendered
+            if node.asset is not None
+        )
+
         review_lines = [f"# Review IR 2 — {page_id}", ""]
+        review_lines.append(
+            f"Nodi non resi nel corpo: **{len(not_rendered)}**. "
+            f"Occorrenze senza raster: **{len(review_rows)}**."
+        )
+        review_lines.append("")
+        if by_kind:
+            review_lines.append("## Per genere strutturale proposto")
+            review_lines.append("")
+            for kind, count in sorted(by_kind.items(), key=lambda item: (-item[1], item[0])):
+                review_lines.append(f"- {kind}: {count}")
+            review_lines.append("")
+        if not_rendered:
+            review_lines.append("## Nodi non resi")
+            review_lines.append("")
+            for node in not_rendered:
+                asset = node.asset
+                size = "" if asset is None else (
+                    f" {asset.bbox[2] - asset.bbox[0]:.0f}×{asset.bbox[3] - asset.bbox[1]:.0f} pt"
+                )
+                review_lines.append(
+                    f"- `{node.node_id}` resolution={node.resolution}"
+                    f" kind={asset.proposed_structural_kind if asset else None}{size}"
+                )
+            review_lines.append("")
         for primitive_id, reason in review_rows:
             review_lines.append(f"## occurrence {primitive_id}")
             review_lines.append(f"- {reason}")
@@ -260,6 +302,7 @@ def run(pdf_path: Path, page_number: int, output_dir: Path, base_path: Path | No
             f"ir2: nodes={len(ir2_page.nodes)} "
             f"paragraphs={sum(1 for n in ir2_page.nodes if n.kind == 'text.paragraph')} "
             f"asset_notes={sum(1 for n in ir2_page.nodes if n.kind == 'asset.note')} "
+            f"note_in_body={sum(1 for n in ir2_page.nodes if n.kind == 'asset.note' and n.resolution == 'accepted')} "
             f"text_primitives={len(primitive_page.text_primitives)}",
             file=sys.stderr,
         )

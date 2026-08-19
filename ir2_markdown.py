@@ -37,6 +37,23 @@ from ir2_model import (
     PageIR2,
 )
 
+# Politica di resa delle note d'asset, decisione dell'utente del 19 agosto 2026.
+#
+# Il NODO esiste per ogni occorrenza -- e' la copertura per costruzione, e
+# `resolution` ne riporta l'esito. Cio' che si decide qui e' la RESA: nel corpo
+# del Markdown vanno solo le note il cui candidato Resolution ha ACCETTATO.
+#
+# Perche': senza questa porta ogni occorrenza con un file su disco diventava una
+# nota nel corpo. Misurato sul campione cieco: 75 note contro le 10 della base,
+# 65 delle quali con resolution "unresolved" -- l'87% del rumore veniva da qui e
+# non dall'arredo. Le altre non spariscono: vanno nel canale review, che e' il
+# posto da cui si guardera' quando l'arredo verra' affrontato, o quando si
+# verifichera' se altri producer lo risolvono gia'.
+#
+# E' una politica, quindi e' un parametro con un default dichiarato, non una
+# costante nascosta in un ramo.
+RENDER_UNRESOLVED_ASSET_NOTES = False
+
 # Dal kind strutturale proposto alla frase che il lettore vede. Non e' una
 # classificazione nuova: e' la traduzione di cio' che il candidato gia' dichiara.
 _KIND_PHRASES = {
@@ -76,21 +93,48 @@ def render_node(node: NodeIR2) -> str:
     raise ValueError(f"no renderer for kind {node.kind!r}")
 
 
-def render_page_markdown(page: PageIR2) -> str:
-    """Render one page. Nodes are emitted in ``order``, which is reading order."""
+def is_rendered_in_body(node: NodeIR2, *, render_unresolved: bool) -> bool:
+    """Whether a node belongs in the body, or in the review channel instead."""
+
+    if node.kind != KIND_ASSET_NOTE:
+        return True
+    if render_unresolved:
+        return True
+    return node.resolution == "accepted"
+
+
+def render_page_markdown(
+    page: PageIR2,
+    *,
+    render_unresolved_assets: bool = RENDER_UNRESOLVED_ASSET_NOTES,
+) -> str:
+    """Render one page. Nodes are emitted in ``order``, which is reading order.
+
+    Asset notes whose candidate Resolution did not accept are **not** rendered by
+    default; they stay in IR 2 as nodes and belong to the review channel. See
+    ``RENDER_UNRESOLVED_ASSET_NOTES``.
+    """
 
     if not isinstance(page, PageIR2):
         raise ValueError("page must be a PageIR2")
 
     blocks = [
         rendered
-        for rendered in (render_node(node) for node in sorted(page.nodes, key=lambda n: n.order))
+        for rendered in (
+            render_node(node)
+            for node in sorted(page.nodes, key=lambda n: n.order)
+            if is_rendered_in_body(node, render_unresolved=render_unresolved_assets)
+        )
         if rendered
     ]
     return "\n\n".join(blocks) + "\n" if blocks else ""
 
 
-def render_document_markdown(document: DocumentIR2) -> str:
+def render_document_markdown(
+    document: DocumentIR2,
+    *,
+    render_unresolved_assets: bool = RENDER_UNRESOLVED_ASSET_NOTES,
+) -> str:
     """Render a whole document, one page after another."""
 
     if not isinstance(document, DocumentIR2):
@@ -99,7 +143,9 @@ def render_document_markdown(document: DocumentIR2) -> str:
     parts: list[str] = []
     for page in document.pages:
         parts.append(f"<!-- page: {page.page_id} -->")
-        rendered = render_page_markdown(page)
+        rendered = render_page_markdown(
+            page, render_unresolved_assets=render_unresolved_assets
+        )
         if rendered:
             parts.append(rendered.rstrip("\n"))
     return "\n\n".join(parts) + "\n" if parts else ""
