@@ -1052,6 +1052,62 @@ Suite: 1337 test, uno fallimento pre-esistente e ambientale (cerca `Dag.pdf`
 nella root, assente nel worktree). Tre criteri pre-registrati e committati prima
 dell'implementazione; due verbali di esito.
 
-**Milestone chiusa nei commit `502944a`..`844c8f1`.**
+### Rettifiche alla chiusura, dopo la revisione indipendente
+
+Il giro di revisione sulla chiusura ha trovato tre difetti di codice, chiusi in
+`5710d87`, e **quattro affermazioni dichiarate più forte di come erano state
+ottenute**. Stanno qui perché la milestone non venga citata più forte di com'è.
+
+**Un invariante era violato.** L'occorrenza immagine interamente fuori pagina
+spariva da IR 2 senza essere registrata da nessuna parte, contro `AGENTS.MD`
+§Coverage e ownership — sulla pagina stessa a cui questa milestone aveva dedicato
+un verbale. Chiuso: IR 2 ha ora un canale review e una guardia che fa fallire
+l'esecuzione su un'occorrenza né coperta né registrata.
+
+**«L'ordine di lettura è ricevuto, mai ricalcolato» valeva per i paragrafi, non
+per tutto.** Gli span dentro la riga sono riordinati per `span_index` (dichiarato,
+e voluto). Le note d'asset erano collocate per sola `y`, cioè la stessa classe di
+difetto corretta per i paragrafi, sopravvissuta dove E-B non guarda. Il
+costruttore non fa più geometria; **il difetto è spostato nel chiamante e
+dichiarato, non eliminato**: su due colonne l'ancora di una nota può ancora
+sbagliare colonna, e correggerlo richiede combinare `column_band` con i producer
+visuali.
+
+**La porta di emissione delle note non era stata decisa.** Che il nodo esista
+anche per i candidati non accettati è la decisione approvata; che ogni nodo
+`asset.note` venga **reso nel corpo** non è mai stato deciso in nessun documento.
+Conseguenza misurata sul campione cieco: **base 10 note, IR 2 75**, di cui 65 con
+`resolution = "unresolved"`. Su `Fab 127` da 3 a 46. È una decisione aperta e
+bloccante, ed è la ragione per cui il numero «30 note su DB p.99, quasi tutte
+arredo» **non regge come diagnosi**: quella è una pagina di sviluppo, e la causa
+prossima del rumore è la porta, non l'arredo.
+
+**«E-B 10 su 10» è più debole di come suona.** Il primo giro era su pagine mai
+viste; il secondo è sulle **stesse pagine con cui la correzione del bug è stata
+sviluppata**, e Milestone 37 aveva avuto il coraggio di scrivere su di sé la frase
+equivalente. Inoltre **6 pagine su 10 non producono bande**, quindi su quelle
+l'ordine di lettura coincide con quello geometrico e non possono distinguere
+«ordine ricevuto» da «ordine ricalcolato»: sono le stesse sei che passavano anche
+col bug. Il potere discriminante di E-B sta su **4 pagine, da 3 manuali**.
+
+**Una clausola pre-registrata non è stata scaricata.**
+`Criterio_ParagrafoDaRiga_v1.md` §5 chiedeva il giudizio a vista su DrW p.97,
+Dag p.164, DB p.50, DB p.53, DB p.99 («regge se non compare nessuna pagina in cui
+la segmentazione peggiora»): non è stato dato. E due riserve dello stesso criterio
+non erano nel fuori scope: la **guardia elenchi** sui due punti resta non
+esercitata, e nel percorso IR 2 **non esiste alcun invariante di conservazione dei
+caratteri** — il validatore garantisce la copertura per **id di primitiva**, non
+che i caratteri ci siano, mentre la fetta esegue `_verify_content_conservation` a
+ogni giro. Su questo lo stadio nuovo è **più debole del vecchio**.
+
+**Conseguenza sulla direzione**: la rimozione dell'arredo **non** è il prossimo
+passo. `State.md` ha già misurato che su Fab i filetti danno 21 digest su 27
+occorrenze, quindi il consumer document-level per `content_digest` non toccherebbe
+la pagina peggiore del campione. Prima vanno chiuse la porta di emissione e la
+conservazione dei caratteri; l'arredo, quando si aprirà, va affrontato
+**page-local**, che è l'unico criterio sopravvissuto alle otto falsificazioni
+dopo Milestone 35.
+
+**Milestone chiusa nei commit `502944a`..`5710d87`.**
 
 <!-- FINE DI State.md — se non leggi questa riga, la tua copia è troncata: fermati e dillo -->
