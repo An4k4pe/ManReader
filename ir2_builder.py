@@ -59,7 +59,12 @@ class AssetNoteInput:
 
     The caller owns asset extraction and Resolution lookup; this module only
     turns the result into nodes. ``sort_key`` is where the note belongs in the
-    reading order, expressed the same way the caller ordered the text.
+    reading order, and it is an **index into the ordered text primitives the
+    caller passed**, not a coordinate: the note goes before the paragraph that
+    contains that primitive. Deciding it belongs to whoever owns the ordering,
+    which is not this module -- a previous version compared ``y`` here, which is
+    geometry overriding reading order and lands a right-column note inside the
+    left column on a two-column page.
     """
 
     primitive_id: str
@@ -67,7 +72,7 @@ class AssetNoteInput:
     file_name: str
     bbox: BBox
     occurrence_count: int
-    sort_key: tuple[float, float]
+    anchor_index: int
     proposed_structural_kind: str | None = None
     candidate_ids: tuple[str, ...] = ()
     resolution: str | None = None
@@ -143,12 +148,31 @@ def breaks_paragraph(previous_text: str, next_text: str) -> bool:
 
 
 def join_lines(previous_text: str, next_text: str) -> str:
-    """Join two source lines that belong to the same paragraph."""
+    """Join two source lines that belong to the same paragraph.
 
-    joined = f"{previous_text.rstrip()} {next_text.lstrip()}"
-    if _HYPHEN_AT_END.search(previous_text.rstrip()):
-        return _HYPHENATED_WORD_RE.sub("", joined)
-    return joined
+    The dehyphenation is applied **only at the junction**, never to the
+    accumulated paragraph. ``previous_text`` is everything gathered so far, and
+    running the regex over all of it made a hyphen a hundred characters back
+    disappear because the *current* junction happened to have one -- the same
+    text came out two different ways depending on whether a later line ended in
+    a hyphen. E-B is blind to it by construction, since it applies the same
+    regex to both sides of the comparison.
+
+    The character classes stay ``ir_builder``'s: the regex decides whether this
+    junction is a hyphenation, and it is applied to a two-character window so
+    that there is still only one definition of what a hyphenation is.
+    """
+
+    left = previous_text.rstrip()
+    right = next_text.lstrip()
+    joined = f"{left} {right}"
+    if not _HYPHEN_AT_END.search(left):
+        return joined
+
+    window = f"{left[-2:]} {right[:1]}"
+    if _HYPHENATED_WORD_RE.sub("", window) == window:
+        return joined
+    return f"{left[:-1]}{right}"
 
 
 def build_page_ir2(
@@ -186,24 +210,26 @@ def build_page_ir2(
     # Una versione precedente ordinava tutto per (y0, x0). Passava sulle pagine a
     # colonna singola, dove geometria e lettura coincidono, e falliva su 4 pagine
     # su 10 del campione. Trovato da E-B alla prima esecuzione.
+    paragraph_of_primitive: dict[int, int] = {}
+    consumed = 0
+    for paragraph_index, (_text, primitives) in enumerate(paragraphs):
+        for _primitive in primitives:
+            paragraph_of_primitive[consumed] = paragraph_index
+            consumed += 1
+
     notes_by_rank: dict[int, list[AssetNoteInput]] = {}
     for note in asset_notes:
-        rank = next(
-            (
-                index
-                for index, (_text, primitives) in enumerate(paragraphs)
-                if primitives[0].bbox[1] > note.sort_key[0]
-            ),
-            len(paragraphs),
-        )
+        rank = paragraph_of_primitive.get(note.anchor_index, len(paragraphs))
         notes_by_rank.setdefault(rank, []).append(note)
 
     items: list[tuple[str, object]] = []
     for index, paragraph in enumerate(paragraphs):
-        for note in sorted(notes_by_rank.get(index, ()), key=lambda item: item.sort_key):
+        for note in sorted(notes_by_rank.get(index, ()), key=lambda item: item.anchor_index):
             items.append(("asset", note))
         items.append(("text", paragraph))
-    for note in sorted(notes_by_rank.get(len(paragraphs), ()), key=lambda item: item.sort_key):
+    for note in sorted(
+        notes_by_rank.get(len(paragraphs), ()), key=lambda item: item.anchor_index
+    ):
         items.append(("asset", note))
 
     nodes: list[NodeIR2] = []

@@ -135,7 +135,7 @@ class BuildPageIR2Test(unittest.TestCase):
             file_name="md5_abc.png",
             bbox=(0.0, 50.0, 10.0, 60.0),
             occurrence_count=1,
-            sort_key=(50.0, 0.0),
+            anchor_index=1,
             proposed_structural_kind="layout.embedded_visual",
             resolution="unresolved",
         )
@@ -162,7 +162,7 @@ class BuildPageIR2Test(unittest.TestCase):
             file_name="md5_abc.png",
             bbox=(0.0, 50.0, 10.0, 60.0),
             occurrence_count=1,
-            sort_key=(50.0, 0.0),
+            anchor_index=1,
         )
         page = build_page_ir2(
             page_id=PAGE, ordered_text_primitives=[first, second], asset_notes=[note]
@@ -180,12 +180,46 @@ class BuildPageIR2Test(unittest.TestCase):
             file_name="md5_abc.png",
             bbox=(0.0, 900.0, 10.0, 910.0),
             occurrence_count=1,
-            sort_key=(900.0, 0.0),
+            anchor_index=99,
         )
         page = build_page_ir2(
             page_id=PAGE, ordered_text_primitives=[span], asset_notes=[note]
         )
         self.assertEqual([node.kind for node in page.nodes], ["text.paragraph", "asset.note"])
+
+    def test_the_note_anchor_is_an_index_not_a_coordinate(self) -> None:
+        # Su due colonne la y non dice l'ordine di lettura: la nota di
+        # un'immagine della colonna destra deve poter stare fra il testo di
+        # destra anche se la sinistra continua piu' in basso.
+        left_top = _span(1, 0, 0, "Sinistra alto.", y=100)
+        left_bottom = _span(2, 0, 0, "Sinistra basso.", y=400)
+        right_top = _span(3, 0, 0, "Destra alto.", y=100)
+        right_bottom = _span(4, 0, 0, "Destra basso.", y=400)
+        note = AssetNoteInput(
+            primitive_id="primitive:image:image:i0",
+            digest="d",
+            file_name="f.png",
+            bbox=(300.0, 350.0, 400.0, 360.0),
+            occurrence_count=1,
+            anchor_index=3,  # davanti a "Destra basso."
+        )
+        page = build_page_ir2(
+            page_id=PAGE,
+            ordered_text_primitives=[left_top, left_bottom, right_top, right_bottom],
+            asset_notes=[note],
+        )
+        self.assertEqual(
+            [node.text or "<NOTA>" for node in page.nodes],
+            ["Sinistra alto.", "Sinistra basso.", "Destra alto.", "<NOTA>", "Destra basso."],
+        )
+
+    def test_dehyphenation_touches_only_the_junction(self) -> None:
+        # Un trattino lontano non deve sparire perche' la giunzione corrente
+        # ne ha uno.
+        self.assertEqual(
+            join_lines("un tiro- variabile e i danni sono dimez-", "zati"),
+            "un tiro- variabile e i danni sono dimezzati",
+        )
 
     def test_an_empty_page_builds(self) -> None:
         self.assertEqual(build_page_ir2(page_id=PAGE, ordered_text_primitives=[]).nodes, ())

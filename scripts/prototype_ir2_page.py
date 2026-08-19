@@ -80,6 +80,26 @@ def _normalised_sequence(text: str) -> str:
     return "".join(_HYPHENATED_WORD_RE.sub("", text).split())
 
 
+def _anchor_index(primitive: object, ordered: list) -> int:
+    """Posizione nell'ordine di lettura davanti a cui va la nota.
+
+    Regola ereditata dal consumer che ha prodotto la base: la prima primitiva
+    testuale che sta piu' in basso dell'occorrenza. **Limite dichiarato**: e'
+    un confronto su y, quindi su una pagina a due colonne una nota della colonna
+    destra puo' ancorarsi a testo della sinistra. Il difetto sta qui, nel
+    chiamante che possiede l'ordinamento, e non piu' nel costruttore, che ora
+    riceve un indice e non fa geometria. Correggerlo richiede sapere in quale
+    colonna cade l'immagine, cioe' combinare `column_band` con i producer
+    visuali: e' lavoro di ordinamento, non di IR 2, e non e' in questo perimetro.
+    """
+
+    y0 = primitive.bbox[1]  # type: ignore[attr-defined]
+    for index, candidate in enumerate(ordered):
+        if candidate.bbox[1] > y0:
+            return index
+    return len(ordered)
+
+
 def _strip_ir2_notes(markdown: str) -> str:
     return "\n".join(
         line for line in markdown.splitlines() if not line.startswith(_ASSET_NOTE_LINE_PREFIX)
@@ -135,6 +155,7 @@ def run(pdf_path: Path, page_number: int, output_dir: Path, base_path: Path | No
             _asset_identity(primitive)[0] for primitive in primitive_page.image_primitives
         )
         notes: list[AssetNoteInput] = []
+        review_rows: list[tuple[str, str]] = []
         for primitive in sorted(primitive_page.image_primitives, key=lambda p: p.primitive_id):
             identity, _missing = _asset_identity(primitive)
             if identity not in assets:
@@ -154,6 +175,14 @@ def run(pdf_path: Path, page_number: int, output_dir: Path, base_path: Path | No
 
             file_name = str(assets[identity]["file_name"])
             if not file_name:
+                # Nessun raster: l'occorrenza sta interamente fuori pagina. Non
+                # puo' diventare un nodo -- AssetRefIR2 esige un file_name non
+                # vuoto -- ma non puo' nemmeno sparire: AGENTS.MD, Coverage e
+                # ownership, «Nessuna esclusione puo' essere silenziosa». Va nel
+                # canale review, come fa gia' la fetta verticale.
+                review_rows.append(
+                    (primitive.primitive_id, "nessun raster: occorrenza interamente fuori pagina")
+                )
                 continue
 
             candidate, outcome, _producer = _governing_outcome(
@@ -168,7 +197,7 @@ def run(pdf_path: Path, page_number: int, output_dir: Path, base_path: Path | No
                     file_name=file_name,
                     bbox=primitive.bbox,
                     occurrence_count=counts[identity],
-                    sort_key=(primitive.bbox[1], primitive.bbox[0]),
+                    anchor_index=_anchor_index(primitive, ordered_primitives),
                     proposed_structural_kind=(
                         None if candidate is None else candidate.proposed_structural_kind
                     ),
@@ -205,6 +234,27 @@ def run(pdf_path: Path, page_number: int, output_dir: Path, base_path: Path | No
 
         markdown = render_page_markdown(ir2_page)
         (output_dir / "page_ir2.md").write_text(markdown, encoding="utf-8")
+
+        review_lines = [f"# Review IR 2 — {page_id}", ""]
+        for primitive_id, reason in review_rows:
+            review_lines.append(f"## occurrence {primitive_id}")
+            review_lines.append(f"- {reason}")
+            review_lines.append("")
+        (output_dir / "review_ir2.md").write_text(
+            "\n".join(review_lines) + "\n", encoding="utf-8"
+        )
+
+        covered = {
+            primitive_id for node in ir2_page.nodes for primitive_id in node.primitive_ids
+        }
+        recorded = covered | {primitive_id for primitive_id, _reason in review_rows}
+        missing = [
+            primitive.primitive_id
+            for primitive in primitive_page.image_primitives
+            if primitive.primitive_id not in recorded
+        ]
+        if missing:
+            _fail(f"esclusione silenziosa: {len(missing)} occorrenze immagine non registrate", 6)
 
         print(
             f"ir2: nodes={len(ir2_page.nodes)} "
