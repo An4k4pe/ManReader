@@ -1002,4 +1002,53 @@ conservazione dei caratteri; l'arredo, quando si aprirà, va affrontato
 **page-local**, che è l'unico criterio sopravvissuto alle otto falsificazioni
 dopo Milestone 35.
 
-**Milestone chiusa nei commit `502944a`..`5710d87`.**
+### Chiusura definitiva, dopo lo scarico del §5
+
+**`Criterio_ParagrafoDaRiga_v1.md` §5 è CADUTO** (`Esito_ParagrafoDaRiga_Par5_v1.md`,
+commit `3e1a2f0`). È il primo criterio pre-registrato di questa sessione che
+fallisce, ed è caduto facendo il suo mestiere: la clausola era rimasta non
+scaricata alla chiusura, e scaricarla ha prodotto un verdetto negativo più un
+difetto di contratto.
+
+**Il verdetto**: su DB p.99 le righe degli stat block si spezzano **per campo** —
+`Movimento: 8  Danno Bonus: —  PF: 8` è una riga sola sulla pagina e diventa tre
+paragrafi. Giudizio dell'utente: più complesso da leggere. La segmentazione
+peggiora, quindi il criterio non regge. **Sulla prosa invece migliora**, e il
+verdetto non lo cancella: il box a rientro sospeso passa da quattro frammenti con
+le frasi tagliate a tre voci corrette, e le parole spezzate si ricompongono.
+
+**La regola non è sbagliata: è sbagliata dove il contenuto non è prosa.**
+
+**Due difetti su DrW p.97 hanno una causa sola**, e nessuna era ovvia: i glifi dei
+badge sono caratteri **minuscoli per la codifica** — `á` è U+00E1, il simbolo del
+bersaglio è la lettera `o` — quindi la regola «si va a capo se la successiva non
+comincia in minuscola» li legge come prosa che continua. La guardia elenchi copre
+trattino e cifra, non i glifi di un font simbolico. La riserva del §6 del criterio
+era ben posta: esercitata, non copre il caso reale.
+
+**Difetto di contratto chiuso** (`f1878cc`): su DB p.53 l'ordinamento a bande
+separa il glifo di elenco dal suo testo, quindi una riga di sorgente compare due
+volte nell'ordine di lettura e due nodi collidevano sul `node_id`. Ora l'identità
+viene dal primo primitivo. La base fa lo stesso split: il contratto l'ha soltanto
+reso visibile invece di emettere una pagina malformata.
+
+**Decisione presa** (`5bbb5f5`): gli asset il cui candidato Resolution non ha
+accettato **non entrano nel corpo**. Il nodo continua a esistere — copertura per
+costruzione — e a filtrare è la resa. Misurato: le note nel corpo passano da 75 a
+10 sul campione cieco, cioè esattamente il conteggio della base. `review_ir2.md`
+elenca ciò che resta fuori, raggruppato per genere: 55 `embedded_visual`, 6
+`page_covering_visual`, 4 `page_edge_visual`. È il controllo da cui si guarderà
+quando l'arredo verrà affrontato, o quando si verificherà se altri producer lo
+risolvono già.
+
+**Dag p.164 non è una regressione di IR 2**: la correzione esiste dietro
+`--interrupt-corridor drawings`, spento per decisione di Milestone 37. Misurata
+ora sulla metà filetti (`957ed1f`, flag diagnostico spento di default): su cinque
+pagine non rompe nulla e ne aggiusta due — Dag p.164 sposta un nodo solo, DB p.53
+fa leggere la tabella per righe invece che per colonne. Contraddice il «risolve un
+caso solo» che l'aveva lasciato spento. **Non basta ad accenderlo**: sono pagine di
+sviluppo, sul campione cieco l'unica che cambia è `Fab 127` con 42 nodi spostati e
+non è stata guardata, e accendere il flag cambia l'ordine, quindi la base di E-B
+andrebbe rigenerata **e rigiudicata**.
+
+**Milestone chiusa nei commit `502944a`..`957ed1f`.**
