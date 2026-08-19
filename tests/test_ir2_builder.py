@@ -120,7 +120,18 @@ class BuildPageIR2Test(unittest.TestCase):
 
     def test_node_id_is_page_qualified_and_derived_from_the_source(self) -> None:
         page = build_page_ir2(page_id=PAGE, ordered_text_primitives=[_span(3, 1, 0, "testo")])
-        self.assertEqual(page.nodes[0].node_id, "page:0099:b0003:l0001")
+        self.assertEqual(page.nodes[0].node_id, "page:0099:text:b0003:l0001:s0000")
+
+    def test_a_source_line_split_across_bands_gets_distinct_node_ids(self) -> None:
+        # DB p.53: l'ordinamento a bande separa il glifo di elenco dal suo
+        # testo, quindi la stessa riga di sorgente compare due volte. Con la
+        # riga come identita' i due nodi collidevano.
+        glyph = _span(7, 1, 0, "✦", y=0)
+        other = _span(8, 0, 0, "Altra voce.", y=10)
+        text = _span(7, 1, 1, "Arrabbiato – INT", y=20)
+        page = build_page_ir2(page_id=PAGE, ordered_text_primitives=[glyph, other, text])
+        ids = [node.node_id for node in page.nodes]
+        self.assertEqual(len(ids), len(set(ids)))
 
     def test_order_is_a_permutation_and_follows_the_received_order(self) -> None:
         spans = [_span(1, 0, 0, "prima.", y=0), _span(2, 0, 0, "Seconda.", y=10)]

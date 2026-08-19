@@ -237,8 +237,15 @@ def build_page_ir2(
         if kind == "text":
             text, primitives = payload  # type: ignore[misc]
             first = primitives[0]
-            key = _source_line_key(first)
-            suffix = f"{key[0]}:{key[1]}" if key is not None else first.primitive_id
+            # L'identita' viene dal PRIMO PRIMITIVO, non dalla riga. Una riga di
+            # sorgente puo' comparire piu' volte nell'ordine di lettura quando
+            # l'ordinamento a bande la spezza fra due colonne -- misurato su DB
+            # p.53, dove il glifo di elenco finisce in una banda e il suo testo
+            # in un'altra, e `b0007:l0001` compare due volte. Con la riga come
+            # identita' due nodi collidevano e il contratto rifiutava la pagina.
+            # Lo span e' l'ultimo livello dell'id di sorgente, quindi resta
+            # derivato dalla sorgente e stabile.
+            suffix = first.source_observation_id or first.primitive_id
             nodes.append(
                 NodeIR2(
                     node_id=f"{page_id}:{suffix}",
