@@ -44,9 +44,11 @@ from compare_reading_order_with_column_bands import _tree_aware_order  # noqa: E
 from prototype_vertical_slice_page import (  # noqa: E402
     _asset_identity,
     _build_all_analyses,
+    _corridor_blockers,
     _extract_image_bytes,
     _governing_outcome,
     _safe_filename_stem,
+    _split_bands_at_crossings,
     _strip_asset_markers,
     _tree_rows_from_contract,
 )
@@ -106,7 +108,13 @@ def _strip_ir2_notes(markdown: str) -> str:
     )
 
 
-def run(pdf_path: Path, page_number: int, output_dir: Path, base_path: Path | None) -> None:
+def run(
+    pdf_path: Path,
+    page_number: int,
+    output_dir: Path,
+    base_path: Path | None,
+    interrupt_corridor: str = "",
+) -> None:
     page_index = page_number - 1
     generation_id = f"generation:ir2:{page_number:04d}"
     page_id = f"page:{page_number:04d}"
@@ -145,6 +153,21 @@ def run(pdf_path: Path, page_number: int, output_dir: Path, base_path: Path | No
             primitive_page, generation_id=generation_id
         )
         tree = _tree_rows_from_contract(band_analysis.candidates, band_measures)
+        if interrupt_corridor:
+            # Diagnostico, spento di default. Milestone 37 misuro' che la meta'
+            # filetti regge e la meta' embedded_visual annienta (DB p.50 da 83
+            # primitive in banda a 0), e lascio' il flag spento.
+            blockers = _corridor_blockers(
+                primitive_page=primitive_page,
+                analyses=analyses,
+                sources=interrupt_corridor,
+            )
+            cut = _split_bands_at_crossings(tree, blockers)
+            print(
+                f"corridor_interrupt: blockers={len(blockers)} bands={len(tree)}->{len(cut)}",
+                file=sys.stderr,
+            )
+            tree = cut
         ordered, _inside = _tree_aware_order(list(primitive_page.text_primitives), tree)
         ordered_primitives = [primitive for primitive, _group in ordered]
 
@@ -341,13 +364,26 @@ def main() -> None:
     parser.add_argument("--page-number", type=int, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument(
+        "--interrupt-corridor",
+        choices=("both", "drawings", "visuals"),
+        default="",
+        help="diagnostico: spezza le bande dove un filetto o un embedded_visual "
+             "attraversa il corridoio. Spento di default (Milestone 37).",
+    )
+    parser.add_argument(
         "--base",
         type=Path,
         default=None,
         help="page_bands.md della base; se dato, verifica E-B.",
     )
     args = parser.parse_args()
-    run(args.pdf, args.page_number, args.output_dir, args.base)
+    run(
+        args.pdf,
+        args.page_number,
+        args.output_dir,
+        args.base,
+        interrupt_corridor=args.interrupt_corridor,
+    )
 
 
 if __name__ == "__main__":
