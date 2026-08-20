@@ -17,10 +17,12 @@ from typing import cast
 from geometry_model import BBox
 from ir2_model import (
     AssetRefIR2,
+    CellIR2,
     DocumentIR2,
     IR2Provenance,
     NodeIR2,
     PageIR2,
+    TableIR2,
 )
 
 _ROOT_KEYS = frozenset({"schema_version", "provenance", "pages"})
@@ -35,10 +37,13 @@ _NODE_KEYS = frozenset(
         "page_ids",
         "text",
         "asset",
+        "structure",
         "candidate_ids",
         "resolution",
     }
 )
+_STRUCTURE_KEYS = frozenset({"kind", "rows"})
+_CELL_KEYS = frozenset({"row", "column", "text", "primitive_ids"})
 _ASSET_KEYS = frozenset(
     {"digest", "file_name", "bbox", "occurrence_count", "proposed_structural_kind"}
 )
@@ -76,8 +81,30 @@ def _node_to_dict(node: NodeIR2) -> dict[str, object]:
         "page_ids": list(node.page_ids),
         "text": node.text,
         "asset": None if node.asset is None else _asset_to_dict(node.asset),
+        "structure": None if node.structure is None else _structure_to_dict(node.structure),
         "candidate_ids": list(node.candidate_ids),
         "resolution": node.resolution,
+    }
+
+
+def _structure_to_dict(structure: TableIR2) -> dict[str, object]:
+    # ``kind`` discrimina l'unione: oggi ha un solo abitante, e alla seconda
+    # volta -- callout, scheda mostro -- il lettore sceglie su questo campo
+    # invece che indovinare dalla forma.
+    return {
+        "kind": "table",
+        "rows": [
+            [
+                {
+                    "row": cell.row,
+                    "column": cell.column,
+                    "text": cell.text,
+                    "primitive_ids": list(cell.primitive_ids),
+                }
+                for cell in row
+            ]
+            for row in structure.rows
+        ],
     }
 
 
@@ -149,8 +176,49 @@ def _parse_node(value: object, page_path: str, index: int) -> NodeIR2:
         page_ids=_parse_str_tuple(data, "page_ids", f"{path}.page_ids"),
         text=_optional_str(data, "text", f"{path}.text"),
         asset=None if data["asset"] is None else _parse_asset(data["asset"], f"{path}.asset"),
+        structure=(
+            None
+            if data["structure"] is None
+            else _parse_structure(data["structure"], f"{path}.structure")
+        ),
         candidate_ids=_parse_str_tuple(data, "candidate_ids", f"{path}.candidate_ids"),
         resolution=_optional_str(data, "resolution", f"{path}.resolution"),
+    )
+
+
+def _parse_structure(value: object, path: str) -> TableIR2:
+    data = _require_dict(value, path)
+    _validate_exact_keys(data, _STRUCTURE_KEYS, path)
+
+    kind = _require_str(data, "kind", f"{path}.kind")
+    if kind != "table":
+        raise ValueError(f"{path}.kind must be a known structure kind")
+
+    rows: list[tuple[CellIR2, ...]] = []
+    for row_index, row_value in enumerate(_require_list(data, "rows", f"{path}.rows")):
+        row_path = f"{path}.rows[{row_index}]"
+        if not isinstance(row_value, list):
+            raise ValueError(f"{row_path} must be a list")
+        rows.append(
+            tuple(
+                _parse_cell(cell_value, f"{row_path}[{cell_index}]")
+                for cell_index, cell_value in enumerate(cast(list[object], row_value))
+            )
+        )
+    return TableIR2(rows=tuple(rows))
+
+
+def _parse_cell(value: object, path: str) -> CellIR2:
+    data = _require_dict(value, path)
+    _validate_exact_keys(data, _CELL_KEYS, path)
+    for key in ("row", "column"):
+        if type(data[key]) is not int:
+            raise ValueError(f"{path}.{key} must be an int")
+    return CellIR2(
+        row=cast(int, data["row"]),
+        column=cast(int, data["column"]),
+        text=_require_str(data, "text", f"{path}.text"),
+        primitive_ids=_parse_str_tuple(data, "primitive_ids", f"{path}.primitive_ids"),
     )
 
 

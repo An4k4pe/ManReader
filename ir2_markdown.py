@@ -30,11 +30,13 @@ from __future__ import annotations
 
 from ir2_model import (
     KIND_ASSET_NOTE,
+    KIND_TABLE,
     KIND_TEXT_PARAGRAPH,
     AssetRefIR2,
     DocumentIR2,
     NodeIR2,
     PageIR2,
+    TableIR2,
 )
 
 # Politica di resa delle note d'asset, decisione dell'utente del 19 agosto 2026.
@@ -81,6 +83,29 @@ def render_asset_note(asset: AssetRefIR2) -> str:
     return f"> **[{phrase}]** {width:.0f}×{height:.0f} pt{repeated} — `{asset.file_name}`"
 
 
+def render_table(table: TableIR2) -> str:
+    """Render a grid as a Markdown table.
+
+    The first row becomes the header, because Markdown has no table without one.
+    It is a **rendering** choice and it is declared: IR 2 does not say which row
+    is a header, and inventing that claim in the contract would be rendering
+    written into the IR.
+
+    A cell's newlines and pipes are escaped rather than dropped: a Markdown table
+    cannot hold a line break, and losing the character silently would be the
+    content disappearing while every check stays green.
+    """
+
+    def cell_text(text: str) -> str:
+        return text.replace("|", "\\|").replace("\n", " ").strip() or " "
+
+    rows = [[cell_text(cell.text) for cell in row] for row in table.rows]
+    width = len(rows[0])
+    lines = ["| " + " | ".join(rows[0]) + " |", "| " + " | ".join(["---"] * width) + " |"]
+    lines.extend("| " + " | ".join(row) + " |" for row in rows[1:])
+    return "\n".join(lines)
+
+
 def render_node(node: NodeIR2) -> str:
     """Render one node. Unknown kinds are not guessed at."""
 
@@ -90,6 +115,10 @@ def render_node(node: NodeIR2) -> str:
         if node.asset is None:
             raise ValueError("an asset.note node must carry an asset")
         return render_asset_note(node.asset)
+    if node.kind == KIND_TABLE:
+        if node.structure is None:
+            raise ValueError("a table node must carry a structure")
+        return render_table(node.structure)
     raise ValueError(f"no renderer for kind {node.kind!r}")
 
 

@@ -53,7 +53,7 @@ from prototype_vertical_slice_page import (  # noqa: E402
     _tree_rows_from_contract,
 )
 
-from ir2_builder import AssetNoteInput, build_page_ir2  # noqa: E402
+from ir2_builder import AssetNoteInput, TableRegionInput, build_page_ir2  # noqa: E402
 from ir2_markdown import is_rendered_in_body, render_page_markdown  # noqa: E402
 from ir2_model import DocumentIR2, IR2Provenance  # noqa: E402
 from ir2_serialization import document_ir2_from_dict, document_ir2_to_dict  # noqa: E402
@@ -114,6 +114,7 @@ def run(
     output_dir: Path,
     base_path: Path | None,
     interrupt_corridor: str = "",
+    enable_tables: bool = False,
 ) -> None:
     page_index = page_number - 1
     generation_id = f"generation:ir2:{page_number:04d}"
@@ -170,6 +171,35 @@ def run(
             tree = cut
         ordered, _inside = _tree_aware_order(list(primitive_page.text_primitives), tree)
         ordered_primitives = [primitive for primitive, _group in ordered]
+
+        # --- Le regioni tabella ---
+        #
+        # Niente e' calcolato qui: la regione viene da `table_candidate` (producer
+        # gia' wired) e i confini di colonna da `ColumnBandMeasurements`. State.md
+        # assegna quei gutter al consumer di tabelle in queste parole: «column_band
+        # non deve leggere le tabelle, deve dire dove sono i confini di colonna, e
+        # se una regione e' una tabella la gestisce il consumer di tabelle aiutato
+        # da questi gutter». Milestone 37 ha tolto la restrizione al primo livello
+        # proprio per renderli disponibili.
+        gutters = tuple(
+            interval for measure in band_measures for interval in measure.gutter_x_intervals
+        )
+        table_regions: list[TableRegionInput] = []
+        for analysis in analyses:
+            if analysis.provenance.producer_name != "table_candidate":
+                continue
+            for candidate in analysis.candidates:
+                outcome = outcome_by_candidate.get(
+                    (analysis.provenance.producer_name, candidate.candidate_id)
+                )
+                table_regions.append(
+                    TableRegionInput(
+                        bbox=candidate.bbox,
+                        gutter_x_intervals=gutters,
+                        candidate_ids=(candidate.candidate_id,),
+                        resolution=outcome,
+                    )
+                )
 
         # --- Le note d'asset ---
         raw_image_info = document[page_index].get_image_info(hashes=True, xrefs=True)
@@ -234,6 +264,7 @@ def run(
             page_id=page_id,
             ordered_text_primitives=ordered_primitives,
             asset_notes=notes,
+            table_regions=table_regions if enable_tables else (),
         )
         validate_page_ir2_against_primitive_page(ir2_page, primitive_page)
 
@@ -326,6 +357,7 @@ def run(
             f"paragraphs={sum(1 for n in ir2_page.nodes if n.kind == 'text.paragraph')} "
             f"asset_notes={sum(1 for n in ir2_page.nodes if n.kind == 'asset.note')} "
             f"note_in_body={sum(1 for n in ir2_page.nodes if n.kind == 'asset.note' and n.resolution == 'accepted')} "
+            f"tables={sum(1 for n in ir2_page.nodes if n.structure is not None)}/{len(table_regions)} "
             f"text_primitives={len(primitive_page.text_primitives)}",
             file=sys.stderr,
         )
@@ -364,6 +396,14 @@ def main() -> None:
     parser.add_argument("--page-number", type=int, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument(
+        "--tables",
+        action="store_true",
+        help=(
+            "costruisce i nodi tabella. SPENTO di default: il criterio di "
+            "accettazione e' caduto (Esito_TabellaInIR2_v1.md)."
+        ),
+    )
+    parser.add_argument(
         "--interrupt-corridor",
         choices=("both", "drawings", "visuals"),
         default="",
@@ -383,6 +423,7 @@ def main() -> None:
         args.output_dir,
         args.base,
         interrupt_corridor=args.interrupt_corridor,
+        enable_tables=args.tables,
     )
 
 

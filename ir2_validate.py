@@ -56,6 +56,22 @@ def validate_page_ir2_against_primitive_page(
 
     seen: set[str] = set()
     for node in page.nodes:
+        # Un nodo strutturato possiede le primitive delle sue celle, e l'unione
+        # delle celle deve coincidere con cio' che il nodo dichiara: senza questo
+        # la griglia sarebbe dentro il contratto e non verificata da niente, che
+        # e' il difetto che questo modulo esiste per non avere.
+        if node.structure is not None:
+            from_cells = [
+                primitive_id
+                for row in node.structure.rows
+                for cell in row
+                for primitive_id in cell.primitive_ids
+            ]
+            if len(from_cells) != len(set(from_cells)):
+                raise ValueError("a primitive belongs to more than one cell of the same table")
+            if set(from_cells) != set(node.primitive_ids):
+                raise ValueError("the union of the cells must equal the node primitives")
+
         for primitive_id in node.primitive_ids:
             if primitive_id not in known_ids:
                 raise ValueError("node references a primitive absent from the primitive page")

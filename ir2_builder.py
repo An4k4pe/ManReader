@@ -38,10 +38,13 @@ from dataclasses import dataclass
 from geometry_model import BBox
 from ir2_model import (
     KIND_ASSET_NOTE,
+    KIND_TABLE,
     KIND_TEXT_PARAGRAPH,
     AssetRefIR2,
+    CellIR2,
     NodeIR2,
     PageIR2,
+    TableIR2,
 )
 from ir_builder import _HYPHENATED_WORD_RE
 from primitive_model import TextPrimitive
@@ -74,6 +77,25 @@ class AssetNoteInput:
     occurrence_count: int
     anchor_index: int
     proposed_structural_kind: str | None = None
+    candidate_ids: tuple[str, ...] = ()
+    resolution: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class TableRegionInput:
+    """One region the caller believes is a table, with its column boundaries.
+
+    Nothing here is computed by this module. ``bbox`` comes from a
+    ``table_candidate``; ``gutter_x_intervals`` come from
+    ``ColumnBandMeasurements`` -- both are producers already wired, and
+    ``State.md`` assigns those gutters to the table consumer in as many words:
+    «column_band non deve leggere le tabelle, deve dire dove sono i confini di
+    colonna, e se una regione e' una tabella la gestisce il consumer di tabelle
+    aiutato da questi gutter».
+    """
+
+    bbox: BBox
+    gutter_x_intervals: tuple[tuple[float, float], ...] = ()
     candidate_ids: tuple[str, ...] = ()
     resolution: str | None = None
 
@@ -175,19 +197,155 @@ def join_lines(previous_text: str, next_text: str) -> str:
     return f"{left[:-1]}{right}"
 
 
+def column_bounds(region: TableRegionInput) -> list[tuple[float, float]]:
+    """Column intervals of a region: what the gutters leave between them."""
+
+    x0, _y0, x1, _y1 = region.bbox
+    inside = sorted(
+        (max(a, x0), min(b, x1))
+        for a, b in region.gutter_x_intervals
+        if a > x0 and b < x1
+    )
+    bounds: list[tuple[float, float]] = []
+    edge = x0
+    for gutter_start, gutter_end in inside:
+        if gutter_start > edge:
+            bounds.append((edge, gutter_start))
+        edge = max(edge, gutter_end)
+    if x1 > edge:
+        bounds.append((edge, x1))
+    return bounds
+
+
+def _column_of(line: _SourceLine, bounds: list[tuple[float, float]]) -> int | None:
+    """Which column a source line sits in, or None when it does not fit one.
+
+    A line that straddles a gutter belongs to no column, and becomes a residual
+    rather than being pushed into the nearer cell: putting text in the wrong cell
+    silently is worse than leaving it as a paragraph.
+    """
+
+    x0 = min(p.bbox[0] for p in line.primitives)
+    x1 = max(p.bbox[2] for p in line.primitives)
+    for index, (left, right) in enumerate(bounds):
+        if x0 >= left - 0.5 and x1 <= right + 0.5:
+            return index
+    return None
+
+
+def build_table(
+    region: TableRegionInput, lines: Sequence[_SourceLine]
+) -> tuple[TableIR2 | None, list[_SourceLine]]:
+    """Build a grid from the region's lines. Returns (table, residual lines)."""
+
+    bounds = column_bounds(region)
+    if len(bounds) < 2:
+        return None, list(lines)
+
+    placed: list[tuple[int, _SourceLine]] = []
+    residuals: list[_SourceLine] = []
+    for line in lines:
+        column = _column_of(line, bounds)
+        if column is None:
+            residuals.append(line)
+        else:
+            placed.append((column, line))
+    if not placed:
+        return None, residuals
+
+    # Le righe della tabella vengono dalle RIGHE DI SORGENTE raggruppate per
+    # sovrapposizione in y: la geometria dice quali stanno affiancate, non
+    # ricostruisce il testo, che resta quello della sorgente.
+    ordered = sorted(placed, key=lambda item: min(p.bbox[1] for p in item[1].primitives))
+    rows: list[list[tuple[int, _SourceLine]]] = [[ordered[0]]]
+    for column, line in ordered[1:]:
+        top = min(p.bbox[1] for p in line.primitives)
+        bottom = max(max(p.bbox[3] for p in item[1].primitives) for item in rows[-1])
+        if top < bottom - 1.0:
+            rows[-1].append((column, line))
+        else:
+            rows.append([(column, line)])
+
+    grid: list[tuple[CellIR2, ...]] = []
+    for row_index, row in enumerate(rows):
+        by_column: dict[int, list[_SourceLine]] = {}
+        for column, line in row:
+            by_column.setdefault(column, []).append(line)
+        cells: list[CellIR2] = []
+        for column_index in range(len(bounds)):
+            members = sorted(
+                by_column.get(column_index, ()),
+                key=lambda item: min(p.bbox[0] for p in item.primitives),
+            )
+            text = " ".join(line.text.strip() for line in members if line.text.strip())
+            cells.append(
+                CellIR2(
+                    row=row_index,
+                    column=column_index,
+                    text=text,
+                    primitive_ids=tuple(
+                        p.primitive_id for line in members for p in line.primitives
+                    ),
+                )
+            )
+        grid.append(tuple(cells))
+
+    return TableIR2(rows=tuple(grid)), residuals
+
+
 def build_page_ir2(
     *,
     page_id: str,
     ordered_text_primitives: Sequence[TextPrimitive],
     asset_notes: Sequence[AssetNoteInput] = (),
+    table_regions: Sequence[TableRegionInput] = (),
 ) -> PageIR2:
     """Build one IR 2 page. Reading order is the caller's; this only groups."""
 
+    source_lines = group_source_lines(ordered_text_primitives)
+    tables: list[tuple[int, TableIR2, TableRegionInput, tuple[str, ...]]] = []
+    consumed_ids: set[str] = set()
+    for region in table_regions:
+        x0, y0, x1, y1 = region.bbox
+        inside = [
+            line
+            for line in source_lines
+            if all(
+                p.primitive_id not in consumed_ids
+                and p.bbox[0] >= x0 - 0.5
+                and p.bbox[2] <= x1 + 0.5
+                and p.bbox[1] >= y0 - 0.5
+                and p.bbox[3] <= y1 + 0.5
+                for p in line.primitives
+            )
+        ]
+        if not inside:
+            continue
+        table, _residuals = build_table(region, inside)
+        if table is None:
+            continue
+        owned = tuple(
+            primitive_id
+            for row in table.rows
+            for cell in row
+            for primitive_id in cell.primitive_ids
+        )
+        if not owned:
+            continue
+        anchor = min(
+            index
+            for index, primitive in enumerate(ordered_text_primitives)
+            if primitive.primitive_id in set(owned)
+        )
+        tables.append((anchor, table, region, owned))
+        consumed_ids.update(owned)
+
+    remaining = [p for p in ordered_text_primitives if p.primitive_id not in consumed_ids]
     paragraphs: list[tuple[str, tuple[TextPrimitive, ...]]] = []
     pending_text = ""
     pending_primitives: list[TextPrimitive] = []
 
-    for source_line in group_source_lines(ordered_text_primitives):
+    for source_line in group_source_lines(remaining):
         if not pending_primitives:
             pending_text = source_line.text
             pending_primitives = list(source_line.primitives)
@@ -210,27 +368,44 @@ def build_page_ir2(
     # Una versione precedente ordinava tutto per (y0, x0). Passava sulle pagine a
     # colonna singola, dove geometria e lettura coincidono, e falliva su 4 pagine
     # su 10 del campione. Trovato da E-B alla prima esecuzione.
-    paragraph_of_primitive: dict[int, int] = {}
-    consumed = 0
+    # L'ancora delle note indicizza la lista ORIGINALE, non quella residua:
+    # estrarre le celle accorcia la sequenza, e usare la lista residua
+    # sposterebbe le note di tante posizioni quante sono le primitive assorbite.
+    index_of_primitive = {
+        primitive.primitive_id: index
+        for index, primitive in enumerate(ordered_text_primitives)
+    }
+    paragraph_of_original_index: dict[int, int] = {}
     for paragraph_index, (_text, primitives) in enumerate(paragraphs):
-        for _primitive in primitives:
-            paragraph_of_primitive[consumed] = paragraph_index
-            consumed += 1
+        for primitive in primitives:
+            original = index_of_primitive.get(primitive.primitive_id)
+            if original is not None:
+                paragraph_of_original_index[original] = paragraph_index
+
+    def _rank_for(anchor: int) -> int:
+        """Il paragrafo davanti a cui va un elemento ancorato a `anchor`."""
+
+        candidates = [i for i in paragraph_of_original_index if i >= anchor]
+        if not candidates:
+            return len(paragraphs)
+        return paragraph_of_original_index[min(candidates)]
 
     notes_by_rank: dict[int, list[AssetNoteInput]] = {}
     for note in asset_notes:
-        rank = paragraph_of_primitive.get(note.anchor_index, len(paragraphs))
-        notes_by_rank.setdefault(rank, []).append(note)
+        notes_by_rank.setdefault(_rank_for(note.anchor_index), []).append(note)
+
+    tables_by_rank: dict[int, list[tuple[TableIR2, TableRegionInput, tuple[str, ...]]]] = {}
+    for anchor, table, region, owned in tables:
+        tables_by_rank.setdefault(_rank_for(anchor), []).append((table, region, owned))
 
     items: list[tuple[str, object]] = []
-    for index, paragraph in enumerate(paragraphs):
+    for index in range(len(paragraphs) + 1):
+        for entry in tables_by_rank.get(index, ()):
+            items.append(("table", entry))
         for note in sorted(notes_by_rank.get(index, ()), key=lambda item: item.anchor_index):
             items.append(("asset", note))
-        items.append(("text", paragraph))
-    for note in sorted(
-        notes_by_rank.get(len(paragraphs), ()), key=lambda item: item.anchor_index
-    ):
-        items.append(("asset", note))
+        if index < len(paragraphs):
+            items.append(("text", paragraphs[index]))
 
     nodes: list[NodeIR2] = []
     for order, (kind, payload) in enumerate(items):
@@ -254,6 +429,22 @@ def build_page_ir2(
                     primitive_ids=tuple(item.primitive_id for item in primitives),
                     page_ids=(page_id,),
                     text=text,
+                )
+            )
+            continue
+
+        if kind == "table":
+            table, region, owned = payload  # type: ignore[misc]
+            nodes.append(
+                NodeIR2(
+                    node_id=f"{page_id}:table:{owned[0]}",
+                    order=order,
+                    kind=KIND_TABLE,
+                    primitive_ids=owned,
+                    page_ids=(page_id,),
+                    structure=table,
+                    candidate_ids=region.candidate_ids,
+                    resolution=region.resolution,
                 )
             )
             continue

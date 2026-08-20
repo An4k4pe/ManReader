@@ -57,6 +57,7 @@ _KIND_PATTERN = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
 # e quali kind sono gia' stati decisi ma non hanno ancora chi li riempie.
 KIND_TEXT_PARAGRAPH = "text.paragraph"
 KIND_ASSET_NOTE = "asset.note"
+KIND_TABLE = "layout.table"
 # Nel vocabolario, NON in emissione in v0:
 #   text.heading  -- il criterio non esiste; su DB p.99 il solo corpo di pagina
 #                    ne prende uno su quattro. Milestone sua.
@@ -109,12 +110,78 @@ class AssetRefIR2:
 
 
 @dataclass(frozen=True, slots=True)
+class CellIR2:
+    """One cell of a table.
+
+    ``primitive_ids`` may be empty: an empty cell is a legitimate cell, and it
+    owns no text. When it is empty, ``text`` must be empty too -- text without
+    primitives would be text this pipeline did not read from the source.
+    """
+
+    row: int
+    column: int
+    text: str
+    primitive_ids: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        _validate_non_negative_int(self.row, "row")
+        _validate_non_negative_int(self.column, "column")
+        if not isinstance(self.text, str):
+            raise ValueError("text must be a string")
+        _validate_unique_non_empty_ids(self.primitive_ids, "primitive_ids")
+        if self.text and not self.primitive_ids:
+            raise ValueError("a cell with text must own the primitives it came from")
+
+
+@dataclass(frozen=True, slots=True)
+class TableIR2:
+    """A rectangular grid of cells.
+
+    Rectangular on purpose: the grid comes from column boundaries that hold for
+    the whole region, so a row with a different cell count would mean the
+    boundaries were not the region's. Each cell's ``row``/``column`` must match
+    its position, which makes «coordinates complete and non overlapping» true by
+    construction instead of by a separate check.
+    """
+
+    rows: tuple[tuple[CellIR2, ...], ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.rows, tuple) or not self.rows:
+            raise ValueError("rows must be a non-empty tuple")
+
+        width = len(self.rows[0])
+        if width == 0:
+            raise ValueError("a row must have at least one cell")
+
+        for row_index, row in enumerate(self.rows):
+            if not isinstance(row, tuple):
+                raise ValueError("each row must be a tuple")
+            if len(row) != width:
+                raise ValueError("all rows must have the same number of cells")
+            for column_index, cell in enumerate(row):
+                if not isinstance(cell, CellIR2):
+                    raise ValueError("rows must contain CellIR2 values")
+                if cell.row != row_index or cell.column != column_index:
+                    raise ValueError("cell coordinates must match their position")
+
+
+# La categoria, non il kind: alla seconda volta -- callout, scheda mostro -- si
+# allarga questa unione invece di aggiungere un braccio all'invariante di NodeIR2.
+type StructureIR2 = TableIR2
+
+
+@dataclass(frozen=True, slots=True)
 class NodeIR2:
     """One ordered content node.
 
-    Carries either ``text`` or ``asset``, never both and never neither: a node
-    that carries nothing is a hole in the coverage, and a node that carries both
-    would make the emitter guess.
+    Carries exactly one of ``text``, ``asset`` or ``structure``: a node that
+    carries nothing is a hole in the coverage, and a node that carries more than
+    one would make the emitter guess.
+
+    ``text`` may not be the empty string. A node that declares text and has none
+    is indistinguishable from a full one to every check, and it is the shortcut
+    that would pass the tests -- so it is refused here.
 
     ``page_ids`` is a tuple from day one even though v0 always fills it with one
     element: ``AGENTS.MD`` §Semantica e IR requires multi-page provenance, and
@@ -133,6 +200,7 @@ class NodeIR2:
     page_ids: tuple[str, ...]
     text: str | None = None
     asset: AssetRefIR2 | None = None
+    structure: StructureIR2 | None = None
     candidate_ids: tuple[str, ...] = ()
     resolution: str | None = None
 
@@ -148,12 +216,18 @@ class NodeIR2:
             raise ValueError("page_ids must not be empty")
         _validate_unique_non_empty_ids(self.candidate_ids, "candidate_ids")
 
-        if (self.text is None) == (self.asset is None):
-            raise ValueError("a node must carry exactly one of text or asset")
-        if self.text is not None and not isinstance(self.text, str):
-            raise ValueError("text must be a string")
+        carried = [self.text, self.asset, self.structure]
+        if sum(1 for value in carried if value is not None) != 1:
+            raise ValueError("a node must carry exactly one of text, asset or structure")
+        if self.text is not None:
+            if not isinstance(self.text, str):
+                raise ValueError("text must be a string")
+            if not self.text:
+                raise ValueError("text must not be empty")
         if self.asset is not None and not isinstance(self.asset, AssetRefIR2):
             raise ValueError("asset must be an AssetRefIR2")
+        if self.structure is not None and not isinstance(self.structure, TableIR2):
+            raise ValueError("structure must be a StructureIR2")
 
         if self.resolution is not None and self.resolution not in _VALID_RESOLUTIONS:
             raise ValueError("resolution must be accepted, rejected, unresolved, or None")
