@@ -30,6 +30,67 @@ passa, la suite è verde.
 **Il §5 del criterio: una sola regressione fuori dalla tabella ferma il giro.**
 Si ferma.
 
+## 1-bis. CORREZIONE — avevo diagnosticato senza guardare la pagina
+
+Il §1 qui sopra spiegava la fusione senza aver mai aperto Wil p.245. Rilievo
+dell'utente. Guardata, **tre cose di quella spiegazione sono sbagliate**.
+
+**Il `30` non è «un numero incolonnato»**: è il valore di **RESISTENZA** della
+parte `ARTIGLI`, in una colonna nera a destra che ne porta quattro — 20, 10, 30,
+20 — una per ciascuna PARTE. È una struttura a due colonne vera.
+
+**La fusione non peggiora: ripara.** Nel baseline il `30` sta **dentro la frase**
+(«…Lo STRUMENTO» / «30 mantiene Portata…»), perché l'ordine di lettura interlaccia
+la colonna di destra nel testo di sinistra. Toglierlo ricompone la frase giusta.
+
+**La tabella costruita è sbagliata per un'altra ragione**, che il §1 non vedeva:
+inghiotte regioni non correlate — STILI, ABILITÀ, TRATTI, AGGIUNTIVI e PARTI in
+un'unica griglia — e lascia la colonna di mezzo vuota, quindi i valori di
+resistenza non sono appaiati alle loro parti. La regione viene da
+`table_candidate` con `text/lines`, la configurazione che taglia il 61% degli
+span: **il problema è la regione, non solo i gutter**.
+
+Il verdetto del §1 — il criterio è caduto — **resta**. Cambia la spiegazione.
+
+## 1-ter. La misura che conta: ordine o forma?
+
+Su Wil p.245, giudicata dall'utente «terribile» in **entrambe** le versioni, con e
+senza tabelle. Due proxy dichiarati, non due misure:
+
+| | |
+| --- | --- |
+| paragrafi emessi | 55 |
+| **forma mancante** — paragrafi di ≤2 parole | **38 (69%)** |
+| **ordine sbagliato** — risalite di oltre 30pt fra paragrafi consecutivi | **2 (4%)** |
+
+`STILI`, `POSSENTE`, `RAPIDO`, `0`, `PRECISO`, `ANALISI +3`: sulla pagina sono
+**coppie etichetta-valore** e titoli di sezione; in uscita sono paragrafi
+scollegati.
+
+**L'ordine è quasi giusto. È la forma che manca**, e il 69% mescola almeno due
+forme mancanti: i **titoli di sezione** (`text.heading`, criterio inesistente) e
+le **coppie etichetta-valore**.
+
+## 1-quater. Ritiro una mia ritrattazione
+
+Avevo dichiarato **caduto** `text.labelled_entry` — il nodo per la coppia
+etichetta-valore — sulla base di **un box su una pagina**, DB p.99, dove le voci
+uscivano bene senza. **La ritrattazione era prematura**: `POSSENTE 0` e
+`ANALISI +3` sono esattamente quella cosa, e senza una forma che le tenga insieme
+escono come otto paragrafi.
+
+## 1-quinquies. Il cambio di inquadramento
+
+Tre criteri pre-registrati hanno cercato come **distinguere** una scheda mostro da
+una tabella; due sono caduti e uno non è stato eseguito. La misura sopra dice che
+la domanda era sbagliata: **il problema non è distinguerla, è che non esiste una
+forma per rappresentarla.**
+
+E una scheda **contiene** una tabella — la colonna `PARTE × RESISTENZA` di Wil
+p.245 lo è — quindi trattare scheda e tabella come categorie alternative era
+l'impostazione sbagliata fin dall'inizio. Posizione dell'utente, che l'aveva detta
+prima e che ho trattato come una preferenza invece che come un'osservazione.
+
 ## 2. Una cosa scomoda, che non uso per salvare l'esito
 
 Su questa istanza la fusione produce testo **migliore**: `Lo STRUMENTO mantiene
