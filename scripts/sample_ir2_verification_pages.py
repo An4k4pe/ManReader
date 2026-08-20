@@ -28,6 +28,13 @@ SEED = "20260818"
 SAMPLE_SIZE = 10
 MIN_MANUALS = 4
 
+# Esclusioni aggiuntive per il criterio della tabella
+# (`Criterio_TabellaRisolvibile_v1.md` §4, ripreso da `Criterio_TabellaInIR2_v1.md`):
+# le pagine gia' guardate nella sessione sulle schede mostro.
+TABLE_CRITERION_EXCLUSIONS = frozenset({
+    ("DB", 89), ("DrM", 86), ("Vil", 222),
+})
+
 # I 16 manuali del corpus. TabellaManGrafic.pdf e test.pdf non sono manuali e
 # non entrano nel pool.
 MANUALS = (
@@ -63,7 +70,27 @@ def _is_admissible(page: fitz.Page) -> tuple[bool, str]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pdf-dir", type=Path, required=True)
+    parser.add_argument(
+        "--seed",
+        default=SEED,
+        help=f"seed dichiarato nel criterio (default: {SEED}, quello gia' a verbale)",
+    )
+    parser.add_argument(
+        "--size",
+        type=int,
+        default=SAMPLE_SIZE,
+        help=f"pagine da estrarre (default: {SAMPLE_SIZE})",
+    )
+    parser.add_argument(
+        "--exclude-table-criterion-pages",
+        action="store_true",
+        help="esclude anche le pagine gia' guardate nella sessione sulle schede mostro",
+    )
     args = parser.parse_args()
+
+    excluded = DEVELOPMENT_PAGES | (
+        TABLE_CRITERION_EXCLUSIONS if args.exclude_table_criterion_pages else frozenset()
+    )
 
     documents: dict[str, fitz.Document] = {}
     pool: list[tuple[str, int]] = []
@@ -75,17 +102,15 @@ def main() -> None:
         document = fitz.open(path)
         documents[name] = document
         pool.extend(
-            (name, index)
-            for index in range(len(document))
-            if (name, index) not in DEVELOPMENT_PAGES
+            (name, index) for index in range(len(document)) if (name, index) not in excluded
         )
 
     print(f"pool: {len(pool)} pagine da {len(documents)} manuali")
-    print(f"escluse per costruzione: {len(DEVELOPMENT_PAGES)}")
-    print(f"seed: {SEED}")
+    print(f"escluse per costruzione: {len(excluded)}")
+    print(f"seed: {args.seed}")
     print()
 
-    rng = random.Random(SEED)
+    rng = random.Random(args.seed)
     order = rng.sample(pool, len(pool))
 
     sample: list[tuple[str, int]] = []
@@ -93,7 +118,7 @@ def main() -> None:
     extension = 0
 
     for name, index in order:
-        if len(sample) >= SAMPLE_SIZE:
+        if len(sample) >= args.size:
             if len({n for n, _ in sample}) >= MIN_MANUALS:
                 break
             extension += 1
