@@ -1159,4 +1159,114 @@ andrebbe rigenerata **e rigiudicata**.
 
 **Milestone chiusa nei commit `502944a`..`957ed1f`.**
 
+## Milestone 39 — la tabella in IR 2: implementata, criterio caduto, e la domanda riformulata
+
+**Stato in una riga**: `NodeIR2` sa portare una griglia, il meccanismo è
+implementato e testato ma **a default spento** perché il suo criterio è caduto; e
+la misura che ne è seguita dice che la domanda su cui si stava lavorando era
+sbagliata.
+
+### Cosa esiste ora
+
+`NodeIR2.structure` più `TableIR2`/`CellIR2`, con l'invariante a tre braccia
+(«esattamente uno fra `text`, `asset`, `structure`»), `text=""` vietato,
+serializzazione validante con `kind` discriminante dell'unione, validatore che
+esige l'unione delle celle uguale alle primitive del nodo, ed emettitore che rende
+una tabella Markdown. Suite 1369, +21 test. `--tables` accende il meccanismo.
+
+Il campo si chiama **`structure` e non `table`**: alla seconda volta si allarga
+un'unione invece di aggiungere un braccio all'invariante.
+
+Griglia composta da **cose che esistevano già**: la regione da `table_candidate`,
+le colonne dai `gutter_x_intervals` di `column_band`, le righe dalle righe di
+sorgente raggruppate per sovrapposizione in y. **Nessun modulo nuovo, nessuna
+chiamata a pdfplumber oltre a quella del producer.**
+
+### Il criterio è caduto, e ha fatto il suo mestiere
+
+`Criterio_TabellaInIR2_v1.md`, pre-registrato: un errore squalificante — una
+regressione fuori dalla tabella — e due conteggi senza soglia. È scattato su
+**1 pagina su 12**, l'unica in cui il meccanismo avesse prodotto qualcosa.
+**1 tabella costruita su 7 regioni candidate.**
+
+Verbale completo in `Esito_TabellaInIR2_v1.md`, **inclusa una correzione**: la
+prima diagnosi era stata scritta **senza guardare la pagina**, e tre sue
+affermazioni erano false. Rilievo dell'utente.
+
+### La misura che riformula la domanda
+
+Su **Wil p.245**, giudicata dall'utente «terribile» in entrambe le versioni, con e
+senza tabelle. Due proxy dichiarati:
+
+| | |
+| --- | --- |
+| paragrafi emessi | 55 |
+| **forma mancante** — paragrafi di ≤2 parole | **38 (69%)** |
+| **ordine sbagliato** — risalite di oltre 30pt | **2 (4%)** |
+
+**L'ordine è quasi giusto. È la forma che manca.** `STILI`, `POSSENTE`, `0`,
+`ANALISI +3` sono coppie etichetta-valore e titoli di sezione, e in uscita sono
+paragrafi scollegati.
+
+### Tre cose ritirate o riformulate, che non vanno ricitate come stavano
+
+**`text.labelled_entry` non è caduto.** Era stato dichiarato tale sulla base di
+**un box su una pagina** (DB p.99). Wil p.245 mostra che la ritrattazione era
+prematura.
+
+**La domanda «scheda o tabella» era mal posta.** Tre criteri pre-registrati hanno
+cercato come **distinguerle**: due caduti
+(`Esito_RegolaritaTableCandidate_v1.md`, `Esito_SeparatoriVariabili_v1.md`), uno
+registrato e mai eseguito (`Criterio_TabellaRisolvibile_v1.md`). Entrambi i
+caduti per la **stessa causa**: i segnali dipendono da come la cattura ha
+raggruppato il testo, e quel raggruppamento cambia fra due pannelli identici dello
+stesso manuale. Il problema non è distinguere: è che **non esiste una forma per
+rappresentare** una scheda.
+
+**Una scheda contiene una tabella.** La colonna `PARTE × RESISTENZA` di Wil p.245
+lo è. Trattarle come categorie alternative era l'impostazione sbagliata
+dall'inizio — posizione dell'utente, trattata da Chat A come preferenza invece che
+come osservazione.
+
+### I quattro modi in cui una scheda esce male, contati su Wil p.245
+
+1. le strisce di badge esplodono in paragrafi di un token (`POSSENTE` / `0`);
+2. l'ordine interlaccia regioni distinte (`TRATTI` in mezzo a STILI);
+3. i valori della colonna laterale finiscono nel testo di sinistra (il `30`);
+4. le note d'asset stanno tutte in cima — l'ancora per `y`, già dichiarata
+   difettosa.
+
+**Solo il terzo è ciò che la tabella affrontava**, ed è la ragione per cui le due
+uscite sono entrambe illeggibili.
+
+### Aperto, in ordine di quanto blocca
+
+1. **Una forma per la coppia etichetta-valore** — piccola, ricorre ovunque, ed è
+   il 69% del difetto misurato.
+2. **La fusione di paragrafi quando si sottrae testo dal flusso**: succederà a
+   ogni meccanismo che tolga primitive, l'arredo per primo. Oggi la coglie solo
+   il criterio della tabella, e come regressione anche quando ripara.
+3. **`text.heading` in emissione**: criterio inesistente, e su DB p.99 il solo
+   corpo di pagina ne prenderebbe uno su quattro.
+4. **La regione tabella** viene da `text/lines`, che taglia il 61% degli span e
+   inghiotte regioni non correlate. I gutter dentro le regioni sono pochi.
+5. **L'invariante di conservazione dei caratteri** non esiste nel percorso IR 2:
+   il validatore garantisce gli **id**, non i caratteri.
+6. **L'ancora delle note d'asset** è per `y` e sbaglia colonna.
+7. **La rimozione dell'arredo**; **la milestone di uscita dallo shadow mode**, che
+   continua a non esistere.
+
+### Documenti di questa milestone
+
+`Proposta_TabellaInIR2_v1..v3.md` (fuori dal repo, due giri di revisione
+indipendente: la v1 aveva tre criteri che non potevano fallire, la v2 li ha
+sostituiti con due che non potevano passare, la v3 ne ha uno).
+`Domanda_NodoTabellaIR2_v1.md`, superata. `Proposta_RevisioneLavoroPregresso_v1.md`.
+Criteri ed esiti committati: `Criterio_TabellaInIR2_v1.md`,
+`Esito_TabellaInIR2_v1.md`, `Campione_TabellaInIR2_v1.md`,
+`Criterio_StrategiaTabella_v1.md`, `Esito_StrategiaTabella_v1.md`,
+`Criterio_TabellaRisolvibile_v1.md` (registrato, non eseguito).
+
+**Milestone chiusa nei commit `c1f0297`..`7d7b98c`.**
+
 <!-- FINE DI State.md — se non leggi questa riga, la tua copia è troncata: fermati e dillo -->
