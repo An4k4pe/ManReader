@@ -35,6 +35,27 @@ TABLE_CRITERION_EXCLUSIONS = frozenset({
     ("DB", 89), ("DrM", 86), ("Vil", 222),
 })
 
+# Esclusioni per `Criterio_TabellaNormale_v1.md` §3: le pagine guardate mentre il
+# percorso tabella veniva costruito (regione, colonne, righe). Sono il verbale di
+# cosa e' gia' stato visto, non una selezione: escluderle e' cio' che rende cieco
+# il campione. Indici 0-based.
+NORMAL_TABLE_EXCLUSIONS = frozenset({
+    # Le 16 tabelle su cui il meccanismo a massimo numero di colonne e' stato
+    # costruito e misurato (`Esito_RegioneTabellaPerColonne_v1.md`), piu' quelle
+    # tracciate a mano dall'utente. Escluderle e' cio' che rende cieco il
+    # campione successivo.
+    ("Dag", 133), ("Dag", 135), ("DB", 122), ("DrM", 32), ("DrM", 35),
+    ("DrW", 32), ("DrW", 239), ("DrW", 247), ("BoB", 238), ("Wil", 73),
+    ("Dag", 117), ("SV", 43), ("SV", 189), ("Fab", 280), ("Fab", 272),
+    ("Lan", 284), ("Lan", 109),
+    ("DB", 75),    # ARMI DA MISCHIA, 9 colonne
+    ("Lan", 118), ("Lan", 40), ("Lan", 109), ("Lan", 284),
+    ("Fab", 52), ("Fab", 272), ("Fab", 280), ("Fab", 256),
+    ("Dag", 136), ("Dag", 194),
+    ("SV", 43), ("SV", 189),
+    ("Apo", 46), ("Vil", 166), ("Wil", 244), ("DrM", 267), ("FW", 62),
+})
+
 # I 16 manuali del corpus. TabellaManGrafic.pdf e test.pdf non sono manuali e
 # non entrano nel pool.
 MANUALS = (
@@ -86,10 +107,17 @@ def main() -> None:
         action="store_true",
         help="esclude anche le pagine gia' guardate nella sessione sulle schede mostro",
     )
+    parser.add_argument(
+        "--exclude-normal-table-pages",
+        action="store_true",
+        help="esclude le pagine di sviluppo di `Criterio_TabellaNormale_v1.md` §3",
+    )
     args = parser.parse_args()
 
-    excluded = DEVELOPMENT_PAGES | (
-        TABLE_CRITERION_EXCLUSIONS if args.exclude_table_criterion_pages else frozenset()
+    excluded = (
+        DEVELOPMENT_PAGES
+        | (TABLE_CRITERION_EXCLUSIONS if args.exclude_table_criterion_pages else frozenset())
+        | (NORMAL_TABLE_EXCLUSIONS if args.exclude_normal_table_pages else frozenset())
     )
 
     documents: dict[str, fitz.Document] = {}
