@@ -54,6 +54,43 @@ NORMAL_TABLE_EXCLUSIONS = frozenset({
     ("Dag", 136), ("Dag", 194),
     ("SV", 43), ("SV", 189),
     ("Apo", 46), ("Vil", 166), ("Wil", 244), ("DrM", 267), ("FW", 62),
+    # Quattro pagine di sviluppo che mancavano da questa lista, aggiunte da
+    # `Criterio_FormaMancante_v3.md` §4. La lacuna NON nasce qui: lo script
+    # copia `Criterio_TabellaNormale_v1.md:59-62`, che ne elenca 18 mentre il
+    # criterio gemello committato nello stesso commit
+    # (`Criterio_EstensioneRegioneTabella_v1.md:41-42`) ne elencava gia' 17,
+    # quattro delle quali non ci sono finite. Verificato che nessuna delle
+    # quattro compaia fra le 60 pagine di `Campione_TabellaNormale_v1.md`:
+    # quel campione non e' contaminato e il suo verdetto regge.
+    ("DB", 61), ("Lan", 18), ("Lan", 51), ("Wil", 77),
+})
+
+# Esclusioni per `Criterio_FormaMancante_v3.md` §4: le pagine su cui l'utente ha
+# gia' dato un giudizio, e che quindi non possono servire a un criterio la cui
+# regola che decide E' un giudizio dell'utente. Indici 0-based.
+FORMA_MANCANTE_EXCLUSIONS = frozenset({
+    # Il campione di verifica di Milestone 38 (`Campione_UscitaIR2Minima_v1.md`):
+    # su queste l'ordine di lettura e' gia' stato giudicato 10 su 10.
+    ("FWK", 122), ("BiD", 287), ("Apo", 34), ("Vil", 64), ("FWK", 31),
+    ("Wil", 71), ("Dag", 199), ("Fab", 126), ("BoB", 297), ("BiD", 314),
+    # Le 60 pagine di `Campione_TabellaNormale_v1.md`, sulle quali l'utente ha
+    # etichettato a vista le regioni sul render. Elenco LETTERALE, estratto dal
+    # verbale e non rigenerato con lo script: la riga di comando documentata in
+    # quel file oggi escluderebbe 39 pagine invece delle 28 dichiarate -- le 11
+    # del blocco "16 tabelle" sono state appese qui dopo l'estrazione -- e
+    # rieseguirla darebbe un campione diverso da quello che documenta.
+    ("FWK", 146), ("Dag", 356), ("Lan", 21), ("Lan", 282), ("BiD", 207),
+    ("Vil", 69), ("Fab", 7), ("Lan", 165), ("BiD", 227), ("Fab", 106),
+    ("BiD", 306), ("Wil", 173), ("Kul", 176), ("BiD", 34), ("Dag", 254),
+    ("FW", 218), ("Dag", 340), ("Wil", 267), ("FW", 143), ("Apo", 117),
+    ("Lan", 98), ("Dag", 139), ("DIE", 191), ("Dag", 197), ("Wil", 111),
+    ("Fab", 28), ("DB", 53), ("DrM", 182), ("Fab", 11), ("DIE", 319),
+    ("Wil", 109), ("Lan", 220), ("DIE", 128), ("Vil", 75), ("FW", 78),
+    ("Lan", 281), ("DrW", 256), ("Kul", 195), ("SV", 67), ("BiD", 190),
+    ("Lan", 173), ("BoB", 31), ("Dag", 71), ("Wil", 58), ("DrW", 275),
+    ("Lan", 184), ("DIE", 222), ("Lan", 297), ("Lan", 31), ("FWK", 220),
+    ("SV", 177), ("Lan", 289), ("SV", 44), ("BoB", 376), ("DrW", 327),
+    ("Lan", 128), ("Fab", 253), ("BoB", 247), ("FWK", 60), ("Kul", 85),
 })
 
 # I 16 manuali del corpus. TabellaManGrafic.pdf e test.pdf non sono manuali e
@@ -112,12 +149,18 @@ def main() -> None:
         action="store_true",
         help="esclude le pagine di sviluppo di `Criterio_TabellaNormale_v1.md` §3",
     )
+    parser.add_argument(
+        "--exclude-forma-mancante-pages",
+        action="store_true",
+        help="esclude le pagine gia' giudicate dall'utente (`Criterio_FormaMancante_v3.md` §4)",
+    )
     args = parser.parse_args()
 
     excluded = (
         DEVELOPMENT_PAGES
         | (TABLE_CRITERION_EXCLUSIONS if args.exclude_table_criterion_pages else frozenset())
         | (NORMAL_TABLE_EXCLUSIONS if args.exclude_normal_table_pages else frozenset())
+        | (FORMA_MANCANTE_EXCLUSIONS if args.exclude_forma_mancante_pages else frozenset())
     )
 
     documents: dict[str, fitz.Document] = {}
