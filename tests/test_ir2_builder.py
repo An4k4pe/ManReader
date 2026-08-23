@@ -2,6 +2,7 @@ import unittest
 
 from ir2_builder import (
     AssetNoteInput,
+    body_font,
     breaks_paragraph,
     build_page_ir2,
     group_source_lines,
@@ -47,29 +48,98 @@ class GroupSourceLinesTest(unittest.TestCase):
         self.assertEqual(len(group_source_lines([_span(1, 0, 0, "a"), odd])), 2)
 
 
+BODY = "PTSans-Narrow"
+
+
+def _line(block: int, line: int, text: str, font: str = BODY):
+    """Una riga di sorgente sola, col font del suo primo carattere."""
+
+    observation = f"text:b{block:04d}:l{line:04d}:s0000"
+    primitive = TextPrimitive(
+        primitive_id=f"primitive:text:{observation}",
+        bbox=(0.0, 0.0, 10.0, 10.0),
+        text=text,
+        source_observation_id=observation,
+        font_name=font,
+    )
+    return group_source_lines([primitive])[0]
+
+
+def _font_span(index: int, text: str, font: str):
+    observation = f"text:b0001:l0000:s{index:04d}"
+    return TextPrimitive(
+        primitive_id=f"primitive:text:{observation}",
+        bbox=(0.0, 0.0, 10.0, 10.0),
+        text=text,
+        source_observation_id=observation,
+        font_name=font,
+    )
+
+
+def _font_line(block: int, line: int, text: str, y: float = 0.0, font: str = BODY):
+    """Uno span con un font, per i test che dipendono dal font del corpo."""
+
+    observation = f"text:b{block:04d}:l{line:04d}:s0000"
+    return TextPrimitive(
+        primitive_id=f"primitive:text:{observation}",
+        bbox=(0.0, y, 10.0, y + 10.0),
+        text=text,
+        source_observation_id=observation,
+        font_name=font,
+    )
+
+
+class BodyFontTest(unittest.TestCase):
+    def test_counts_characters_and_not_primitives(self) -> None:
+        # Il caso misurato su DB p.99: tante righe corte in grassetto contro
+        # poche righe lunghe di prosa. Contando le primitive vince il grassetto.
+        spans = [_font_span(i, "PF: 8", "Hideout-Bold") for i in range(4)]
+        spans.append(_font_span(4, "x" * 200, "Hideout-Regular"))
+        self.assertEqual(body_font(spans), "Hideout-Regular")
+
+    def test_no_font_at_all_gives_none(self) -> None:
+        self.assertIsNone(body_font([_span(1, 0, 0, "x")]))
+
+
 class BreaksParagraphTest(unittest.TestCase):
-    def test_breaks_on_a_full_stop_before_an_uppercase_start(self) -> None:
-        self.assertTrue(breaks_paragraph("… come normali PNG.", "Resistenza: tutti i danni"))
+    """`Criterio_RotturaParagrafo_v2.md` §1: blocco, con veto lessicale."""
 
-    def test_joins_when_the_sentence_continues_in_lowercase(self) -> None:
-        self.assertFalse(breaks_paragraph("gli scheletri non", "contano come mostri"))
+    def test_inside_one_block_it_never_breaks(self) -> None:
+        # Il difetto misurato su DIE p.380: la regola vecchia spezzava qui,
+        # perche' `GM` e' maiuscolo. Sulla pagina e' un paragrafo solo.
+        previous = _line(3, 3, "qualsiasi altro personaggio richiedera' parecchio impegno")
+        following = _line(3, 4, "GM che interpreta la versione da Classe")
+        self.assertFalse(breaks_paragraph(previous, following, BODY))
 
-    def test_a_colon_does_not_terminate(self) -> None:
-        self.assertFalse(breaks_paragraph("Non-Mostri:", "in combattimento"))
+    def test_a_new_block_breaks(self) -> None:
+        self.assertTrue(breaks_paragraph(_line(6, 0, "GUERRIERO"), _line(7, 0, "PF: 8"), BODY))
 
-    def test_a_colon_before_a_list_marker_does_terminate(self) -> None:
-        self.assertTrue(breaks_paragraph("Armi:", "- spada corta"))
-        self.assertTrue(breaks_paragraph("Armi:", "1 spada corta"))
+    def test_a_lowercase_body_start_vetoes_the_break(self) -> None:
+        # Il salto di colonna misurato su SV p.181: due blocchi, un periodo solo.
+        previous = _line(4, 9, "“Ci penso io!” dice Marta. “Flashback a")
+        following = _line(5, 0, "quando stavo lavorando sui motori")
+        self.assertFalse(breaks_paragraph(previous, following, BODY))
 
-    def test_breaks_before_an_uppercase_start_even_without_punctuation(self) -> None:
-        self.assertTrue(breaks_paragraph("Movimento: 8", "Armatura: cuoio"))
+    def test_a_lowercase_glyph_of_another_font_does_not_veto(self) -> None:
+        # Fab p.248: il pallino e' la lettera `w` in Wingdings, non una minuscola.
+        previous = _line(4, 2, "aggiungi a ogni luogo un dettaglio")
+        following = _line(6, 0, "w Gestisci le informazioni.", font="Wingdings-Regular")
+        self.assertTrue(breaks_paragraph(previous, following, BODY))
 
-    def test_breaks_on_exclamation_and_question_marks(self) -> None:
-        self.assertTrue(breaks_paragraph("Davvero!", "Poi"))
-        self.assertTrue(breaks_paragraph("Davvero?", "Poi"))
+    def test_a_sentence_ending_mid_block_does_not_break(self) -> None:
+        # La clausola caduta con la regola lessicale: un paragrafo contiene
+        # piu' frasi, e il punto a meta' blocco non lo chiude.
+        previous = _line(9, 1, "Il Master ha commesso il crimine.")
+        following = _line(9, 2, "E' possibile, tuttavia, che alcune punizioni")
+        self.assertFalse(breaks_paragraph(previous, following, BODY))
 
     def test_does_not_break_on_an_empty_next_line(self) -> None:
-        self.assertFalse(breaks_paragraph("qualcosa.", ""))
+        self.assertFalse(breaks_paragraph(_line(1, 0, "qualcosa."), _line(2, 0, ""), BODY))
+
+    def test_without_a_body_font_the_veto_never_applies(self) -> None:
+        previous = _line(1, 0, "prima", font="")
+        following = _line(2, 0, "seconda", font="")
+        self.assertTrue(breaks_paragraph(previous, following, None))
 
 
 class JoinLinesTest(unittest.TestCase):
@@ -85,26 +155,55 @@ class JoinLinesTest(unittest.TestCase):
 
 
 class BuildPageIR2Test(unittest.TestCase):
-    def test_builds_the_three_entries_of_a_hanging_indent_box(self) -> None:
-        # Il box Non-Mostri di DB p.99, dove il blocco taglia le voci di traverso.
+    def test_a_hanging_indent_box_comes_out_as_one_paragraph(self) -> None:
+        """Il costo dichiarato di `Criterio_RotturaParagrafo_v2.md` §8.
+
+        Il box Non-Mostri di DB p.99: dentro di esso i blocchi di sorgente sono
+        **sfalsati di una riga** rispetto alle voci -- ``b0003`` porta la fine
+        della prima voce e l'inizio della seconda -- quindi il confine di blocco
+        non cade mai dove finisce una voce, e il veto lessicale unisce il resto.
+        Le tre voci escono come un paragrafo solo.
+
+        Questo test asseriva l'uscita a tre voci della regola lessicale
+        precedente. **Non e' stato adattato al codice**: la regola nuova e' stata
+        misurata contro le etichette a vista dell'utente sulle 46 righe di quella
+        pagina e ne prende 40 giunzioni su 43 contro le 33 della vecchia, il cui
+        prezzo erano dieci rotture in piu' che spezzavano ogni scheda per campo.
+        La variante che recupera questo box -- rompere anche quando la frase
+        precedente e' chiusa e la successiva comincia in maiuscola -- e' stata
+        misurata e **scartata**: porta DB p.99 a 42 su 43 ma su SV p.181 rispezza
+        la prosa a due colonne, da 17 paragrafi a 22 contro i 23 della regola
+        vecchia.
+        """
+
         spans = [
-            _span(2, 0, 0, "Non-Mostri: in combattimento, gli scheletri non ", y=0),
-            _span(3, 0, 0, "contano come mostri, ma come normali PNG.", y=10),
-            _span(3, 1, 0, "Resistenza: tutti i danni sono dimez-", y=20),
-            _span(4, 0, 0, "zati (arrotondando per eccesso).", y=30),
-            _span(4, 1, 0, "Immunità: gli scheletri sono immuni alla paura e ", y=40),
-            _span(5, 0, 0, "a PERSUADERE.", y=50),
+            _font_line(2, 0, "Non-Mostri: in combattimento, gli scheletri non ", y=0),
+            _font_line(3, 0, "contano come mostri, ma come normali PNG.", y=10),
+            _font_line(3, 1, "Resistenza: tutti i danni sono dimez-", y=20),
+            _font_line(4, 0, "zati (arrotondando per eccesso).", y=30),
+            _font_line(4, 1, "Immunità: gli scheletri sono immuni alla paura e ", y=40),
+            _font_line(5, 0, "a PERSUADERE.", y=50),
         ]
         page = build_page_ir2(page_id=PAGE, ordered_text_primitives=spans)
         self.assertEqual(
             [node.text for node in page.nodes],
             [
                 "Non-Mostri: in combattimento, gli scheletri non contano come mostri, "
-                "ma come normali PNG.",
-                "Resistenza: tutti i danni sono dimezzati (arrotondando per eccesso).",
-                "Immunità: gli scheletri sono immuni alla paura e a PERSUADERE.",
+                "ma come normali PNG. Resistenza: tutti i danni sono dimezzati "
+                "(arrotondando per eccesso). Immunità: gli scheletri sono immuni "
+                "alla paura e a PERSUADERE.",
             ],
         )
+
+    def test_a_new_block_in_another_font_still_starts_a_paragraph(self) -> None:
+        # Fab p.248: il pallino Wingdings apre una voce, non continua la prosa.
+        spans = [
+            _font_line(3, 0, "Durante ogni sessione, dovresti attenerti a questi principi:"),
+            _font_line(4, 0, "w Ritrai un mondo meraviglioso.", font="Wingdings-Regular"),
+            _font_line(6, 0, "w Gestisci le informazioni.", font="Wingdings-Regular"),
+        ]
+        page = build_page_ir2(page_id=PAGE, ordered_text_primitives=spans)
+        self.assertEqual(len(page.nodes), 3)
 
     def test_every_primitive_lands_in_exactly_one_node(self) -> None:
         spans = [_span(1, 0, 0, "una frase."), _span(2, 0, 0, "Altra frase.")]

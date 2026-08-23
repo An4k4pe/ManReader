@@ -8,21 +8,24 @@ implementation of the ordering, and it would turn the exit criterion into a
 comparison between two mechanisms instead of a check on this one -- on a project
 that has already had two definitions of the same thing diverge.
 
-The paragraph rules come from ``Criterio_ParagrafoDaRiga_v1.md``, pre-registered
-and committed before this module existed. **The atom is the source line**, and the
-block decides nothing:
+**The atom is the source line**, from ``Criterio_ParagrafoDaRiga_v1.md``:
 
 1. inside a line the spans are concatenated with no separator, ordered by
    ``span_index`` -- the spans already carry their own spacing, and joining them
    with a space adds a second one at every style boundary (measured on DB p.99:
    ``'a '`` + ``'PERSUADERE'`` + ``'.'`` gives ``a PERSUADERE .`` when joined);
-2. between two consecutive lines a paragraph breaks when the next line does not
-   start lowercase, or the previous ends with ``.;!?``, or the previous ends with
-   ``:`` and the next starts with a dash or a digit (the list guard);
-3. hyphenation is rejoined with ``ir_builder``'s regex, at its own conditions.
+2. hyphenation is rejoined with ``ir_builder``'s regex, at its own conditions.
 
-The colon does **not** end a paragraph, unlike ``_ends_with_strong_punctuation``
-in ``markdown_builder``: it is what keeps ``Non-Mostri:`` attached to its text.
+**Where a paragraph breaks** is ``Criterio_RotturaParagrafo_v2.md``, and it
+replaces the purely lexical rule this module was born with. That rule broke a
+paragraph whenever the next line did not start lowercase, which cut a period at
+every acronym, parenthesis and proper noun: a blind sample of 20 pages judged by
+a person named "spaziature" on 17 of them, which in Markdown is a blank line
+inside a sentence. It also split every stat block by field, the fall already
+recorded in ``Esito_ParagrafoDaRiga_Par5_v1.md`` §5.
+
+The rule is now the block boundary with a lexical veto -- see ``breaks_paragraph``
+-- and both signals were already in the pipeline and unused.
 
 Every text primitive of a paragraph goes into the node, including the ones whose
 text is empty. They carry no characters but they are primitives, and leaving them
@@ -32,6 +35,7 @@ out would be a silent exclusion -- ``ir2_validate`` checks exactly this.
 from __future__ import annotations
 
 import re
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -51,8 +55,10 @@ from primitive_model import TextPrimitive
 
 _SOURCE_LINE_PATTERN = re.compile(r"^text:(b\d+):(l\d+):s\d+$")
 _STARTS_LOWERCASE = re.compile(r"^[a-zà-öø-ÿ]")
-_STARTS_LIST_MARKER = re.compile(r"^[-•●◆\d]")
-_PARAGRAPH_TERMINATORS = (".", ";", "!", "?")
+# Il marcatore di elenco e i terminatori di frase erano due clausole della regola
+# lessicale. Cadono con essa: la rottura la decide il blocco, e un periodo che
+# finisce a meta' blocco NON chiude un paragrafo -- un paragrafo contiene piu'
+# frasi. Tenerle sarebbe stato portarsi dietro due eccezioni non piu' esercitate.
 _HYPHEN_AT_END = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ]-$")
 
 
@@ -155,18 +161,73 @@ def group_source_lines(ordered: Sequence[TextPrimitive]) -> list[_SourceLine]:
     return lines
 
 
-def breaks_paragraph(previous_text: str, next_text: str) -> bool:
-    """Decide whether a paragraph breaks between two consecutive source lines."""
+def body_font(primitives: Sequence[TextPrimitive]) -> str | None:
+    """The page's body font: the one carrying the most **characters**.
 
-    previous = previous_text.rstrip()
-    following = next_text.lstrip()
-    if not following:
+    Derived from the page, never a list of font names. It is what lets the rule
+    tell a bullet from a lowercase letter: on Fab p.248 the nine list markers are
+    the letter ``w`` in ``Wingdings-Regular`` while the body is ``PTSans-Narrow``,
+    and `Esito_ParagrafoDaRiga_Par5_v1.md` records the same trap on DrW p.97,
+    where the target symbol is the letter ``o``.
+
+    **Characters and not primitives**, and the difference is not cosmetic.
+    `Criterio_RotturaParagrafo_v2.md` §1 says "la moda dei ``font_name`` delle
+    primitive testuali"; counting primitives gives ``Hideout-Bold`` on DB p.99,
+    because a page of stat blocks has many short bold lines and few long prose
+    ones. The prose carries the characters. Measured against the user's labels on
+    that page: 37 junctions right out of 43 counting primitives, **40 counting
+    characters**. The deviation from the letter of the criterion is declared
+    here; its binding constraint -- derived from the page, never a list -- holds
+    either way.
+    """
+
+    counts: Counter[str] = Counter()
+    for primitive in primitives:
+        if primitive.font_name:
+            counts[primitive.font_name] += len(primitive.text)
+    if not counts:
+        return None
+    return counts.most_common(1)[0][0]
+
+
+def breaks_paragraph(
+    previous: _SourceLine, following: _SourceLine, page_body_font: str | None
+) -> bool:
+    """Decide whether a paragraph breaks between two consecutive source lines.
+
+    The rule of `Criterio_RotturaParagrafo_v2.md` §1, and it has **no
+    parameters**: a paragraph breaks where the source block changes, unless the
+    next line opens with a lowercase character *of the body font*.
+
+    Both signals were already in the pipeline and neither was used here. The
+    block lives in every ``source_observation_id`` and was ratified once
+    (`Criterio_ParagrafoDaBlocco_v1.md`) before Milestone 38 switched it off on
+    the evidence of a single page; the font comes from ``TextPrimitive``.
+
+    The lexical test survives with its **role reversed**, and that is the whole
+    design. It used to *force* a break whenever the next line was not lowercase,
+    which split a paragraph at every acronym, parenthesis and proper noun -- the
+    "spaziature" that 17 pages out of 20 of a blind sample complained about. Here
+    it can only *veto* a break the block boundary already proposed, so its way of
+    failing flips from breaking too much to breaking too little. That is a
+    declared preference, not a measurement: better two paragraphs joined than one
+    cut in three.
+
+    The block alone does not do: on a two-column page a paragraph running from
+    the foot of one column to the head of the next is two blocks, and breaking
+    there cuts a sentence in half (measured on SV p.181, 27 paragraphs against
+    23).
+    """
+
+    if previous.block == following.block:
         return False
-    if previous.endswith(":") and _STARTS_LIST_MARKER.match(following):
+    text = following.text.lstrip()
+    if not text:
+        return False
+    if not _STARTS_LOWERCASE.match(text):
         return True
-    if not _STARTS_LOWERCASE.match(following):
-        return True
-    return previous.endswith(_PARAGRAPH_TERMINATORS)
+    opening_font = following.primitives[0].font_name if following.primitives else None
+    return opening_font != page_body_font
 
 
 def join_lines(previous_text: str, next_text: str) -> str:
@@ -344,19 +405,25 @@ def build_page_ir2(
     paragraphs: list[tuple[str, tuple[TextPrimitive, ...]]] = []
     pending_text = ""
     pending_primitives: list[TextPrimitive] = []
+    previous_line: _SourceLine | None = None
+    # Il font del corpo si desume dalla pagina INTERA, non dal residuo: togliere
+    # le celle di una tabella non deve poter cambiare quale font e' il corpo.
+    page_body_font = body_font(ordered_text_primitives)
 
     for source_line in group_source_lines(remaining):
-        if not pending_primitives:
+        if previous_line is None:
             pending_text = source_line.text
             pending_primitives = list(source_line.primitives)
+            previous_line = source_line
             continue
-        if breaks_paragraph(pending_text, source_line.text):
+        if breaks_paragraph(previous_line, source_line, page_body_font):
             paragraphs.append((pending_text.strip(), tuple(pending_primitives)))
             pending_text = source_line.text
             pending_primitives = list(source_line.primitives)
         else:
             pending_text = join_lines(pending_text, source_line.text)
             pending_primitives.extend(source_line.primitives)
+        previous_line = source_line
     if pending_primitives:
         paragraphs.append((pending_text.strip(), tuple(pending_primitives)))
 
