@@ -22,6 +22,7 @@ from primitive_model import (
 )
 from primitive_normalizer import (
     NORMALIZED_PRIMITIVE_SCHEMA_VERSION,
+    font_traits_from_flags,
     normalize_backend_page_capture,
 )
 
@@ -153,7 +154,11 @@ class PrimitiveNormalizerTest(unittest.TestCase):
         self.assertEqual(text.source_observation_id, "text:1")
         self.assertEqual(text.font_name, "Example")
         self.assertEqual(text.font_size, 10.0)
-        self.assertEqual(text.font_traits, ())
+        # La fixture porta `font_flags=17`, cioe' bold (16) piu' superscript (1).
+        # Questa riga asseriva la tupla VUOTA, che era il difetto: il campo
+        # esisteva, era validato, e il normalizzatore ci scriveva `()` buttando
+        # via l'informazione catturata.
+        self.assertEqual(text.font_traits, ("bold", "superscript"))
         self.assertEqual(text.color, (0.1, 0.2, 0.3, 1.0))
         self.assertEqual(text.direction, (1.0, 0.0))
 
@@ -278,3 +283,27 @@ class PrimitiveNormalizerTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FontTraitsFromFlagsTest(unittest.TestCase):
+    """Il campo che esisteva, era validato, e questo modulo svuotava."""
+
+    def test_no_flags_gives_no_traits(self) -> None:
+        self.assertEqual(font_traits_from_flags(None), ())
+        self.assertEqual(font_traits_from_flags(0), ())
+
+    def test_bold_and_serif_of_a_real_title(self) -> None:
+        # Wil idx 103, titolo `I Wilder`: GaramondPremrPro-Bd, flags=20.
+        self.assertEqual(font_traits_from_flags(20), ("bold", "serifed"))
+
+    def test_bold_italic_and_serif_of_a_real_side_note(self) -> None:
+        # DIE p.380, note a margine: MinionPro-SemiboldIt, flags=22.
+        self.assertEqual(font_traits_from_flags(22), ("bold", "italic", "serifed"))
+
+    def test_the_order_is_fixed_and_not_the_bit_order(self) -> None:
+        # `font_traits` e' una tupla e il modello ne vieta i duplicati: l'uscita
+        # dev'essere deterministica, non dipendere dall'ordine dei bit.
+        self.assertEqual(
+            font_traits_from_flags(1 | 2 | 4 | 8 | 16),
+            ("bold", "italic", "superscript", "monospaced", "serifed"),
+        )

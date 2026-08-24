@@ -29,6 +29,48 @@ from primitive_model import (
 NORMALIZED_PRIMITIVE_SCHEMA_VERSION = "1"
 _IDENTITY_TRANSFORM: AffineMatrix = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
 
+# I bit di `font_flags` che PyMuPDF mette su ogni span, tradotti in tratti.
+# L'ordine e' fisso perche' l'uscita sia deterministica: `font_traits` e' una
+# tupla e il modello ne vieta i duplicati.
+#
+# Sono **fatti tipografici, non ruoli semantici**: dire che uno span e' in
+# grassetto non dice che sia un titolo, e la distinzione e' quella che
+# `AGENTS.MD` §Primitive impone ("non contengono ruoli semantici", "non
+# contengono classificazioni definitive").
+#
+# Il campo esisteva su `TextPrimitive`, era validato, e questo modulo ci scriveva
+# una tupla vuota: l'informazione era catturata (`pymupdf_capture.py:146`),
+# conservata (`capture_model.py:108`) e buttata qui. Un campione cieco di 20
+# pagine giudicate da una persona ha chiesto i grassetti su 13
+# (`Esito_FormaMancante_v1.md` §3).
+_FONT_FLAG_TRAITS: tuple[tuple[int, str], ...] = (
+    (16, "bold"),
+    (2, "italic"),
+    (1, "superscript"),
+    (8, "monospaced"),
+    (4, "serifed"),
+)
+
+
+def font_traits_from_flags(flags: int | None) -> tuple[str, ...]:
+    """Traduce i `font_flags` dello span nei tratti della primitiva.
+
+    **Solo i flag, mai il nome del font.** Riconoscere il grassetto da ``-Bd``,
+    ``Semibold`` o ``Black`` sarebbe una lista di sottostringhe, cioe' l'hardcode
+    su parola che `AGENTS.MD` §Regole operative punto 7 vieta come soluzione
+    primaria.
+
+    **Limite dichiarato**: dove un PDF marchi il grassetto solo nel nome del font
+    e non nei flag, quel grassetto qui si perde. Sulle pagine verificate i due
+    concordano -- il titolo di Wil idx 103 e' ``GaramondPremrPro-Bd`` con
+    ``flags=20``, le note a margine di DIE p.380 sono ``MinionPro-SemiboldIt``
+    con ``flags=22`` -- ma non e' stato misurato su un campione.
+    """
+
+    if not flags:
+        return ()
+    return tuple(name for bit, name in _FONT_FLAG_TRAITS if flags & bit)
+
 
 def normalize_backend_page_capture(
     capture: BackendPageCapture,
@@ -95,7 +137,7 @@ def _normalize_text_observation(
         source_observation_id=observation.observation_id,
         font_name=observation.font_name,
         font_size=observation.font_size,
-        font_traits=(),
+        font_traits=font_traits_from_flags(observation.font_flags),
         color=observation.color,
         direction=_normalized_direction(observation.direction),
     )
