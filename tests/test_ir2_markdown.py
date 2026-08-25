@@ -7,7 +7,15 @@ from ir2_markdown import (
     render_node,
     render_page_markdown,
 )
-from ir2_model import AssetRefIR2, DocumentIR2, IR2Provenance, NodeIR2, PageIR2
+from ir2_model import (
+    KIND_TEXT_PARAGRAPH,
+    AssetRefIR2,
+    DocumentIR2,
+    IR2Provenance,
+    NodeIR2,
+    PageIR2,
+    TextRunIR2,
+)
 
 PAGE = "page:0099"
 
@@ -188,3 +196,53 @@ class RenderDocumentTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RenderRunsTest(unittest.TestCase):
+    """`Criterio_UscitaLeggibile_v1.md` A: lo stile inline arriva in uscita."""
+
+    def _node(self, runs):
+        return NodeIR2(
+            node_id="n",
+            order=0,
+            kind=KIND_TEXT_PARAGRAPH,
+            primitive_ids=("p",),
+            page_ids=("page:0001",),
+            text="".join(run.text for run in runs),
+            runs=tuple(runs),
+        )
+
+    def test_without_runs_the_output_is_exactly_the_text(self) -> None:
+        node = NodeIR2(
+            node_id="n",
+            order=0,
+            kind=KIND_TEXT_PARAGRAPH,
+            primitive_ids=("p",),
+            page_ids=("page:0001",),
+            text="testo semplice",
+        )
+        self.assertEqual(render_node(node), "testo semplice")
+
+    def test_bold_and_italic_inside_a_paragraph(self) -> None:
+        node = self._node(
+            [
+                TextRunIR2("Usa il Master. Le regole di ", ("serifed",)),
+                TextRunIR2("DIE", ("italic", "serifed")),
+                TextRunIR2(" contano.", ("serifed",)),
+            ]
+        )
+        self.assertEqual(render_node(node), "Usa il Master. Le regole di *DIE* contano.")
+
+    def test_bold_and_italic_together(self) -> None:
+        node = self._node([TextRunIR2("nota", ("bold", "italic"))])
+        self.assertEqual(render_node(node), "***nota***")
+
+    def test_traits_without_a_markdown_form_are_ignored(self) -> None:
+        # `serifed`, `monospaced` e `superscript` restano sul nodo e non si
+        # rendono: inventargli una resa sarebbe far mentire l'adattatore.
+        node = self._node([TextRunIR2("x", ("serifed", "monospaced", "superscript"))])
+        self.assertEqual(render_node(node), "x")
+
+    def test_the_junction_space_stays_outside_the_markup(self) -> None:
+        node = self._node([TextRunIR2("forte ", ("bold",)), TextRunIR2("piano", ())])
+        self.assertEqual(render_node(node), "**forte** piano")

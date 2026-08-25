@@ -172,6 +172,33 @@ type StructureIR2 = TableIR2
 
 
 @dataclass(frozen=True, slots=True)
+class TextRunIR2:
+    """A stretch of a node's text with one set of typographic traits.
+
+    Additive by design: ``NodeIR2.text`` stays the plain string, and ``runs``
+    describes how it is set. Nothing that reads ``text`` needs to change, the
+    conservation check keeps comparing plain characters, and an emitter that
+    ignores ``runs`` produces exactly what it produced before.
+
+    Traits are typographic facts and not semantic roles -- ``bold`` does not mean
+    "heading". They arrive from ``TextPrimitive.font_traits``, which
+    ``primitive_normalizer`` fills from the span flags.
+
+    A run per style and not a style per node, because on real pages a paragraph
+    is not uniform: measured on six pages, **46% of paragraphs carry more than
+    one style** (50 carry two, 13 carry three, out of 138).
+    """
+
+    text: str
+    traits: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.text, str) or not self.text:
+            raise ValueError("run text must be a non-empty string")
+        _validate_unique_non_empty_ids(self.traits, "traits")
+
+
+@dataclass(frozen=True, slots=True)
 class NodeIR2:
     """One ordered content node.
 
@@ -201,6 +228,7 @@ class NodeIR2:
     text: str | None = None
     asset: AssetRefIR2 | None = None
     structure: StructureIR2 | None = None
+    runs: tuple[TextRunIR2, ...] = ()
     candidate_ids: tuple[str, ...] = ()
     resolution: str | None = None
 
@@ -228,6 +256,18 @@ class NodeIR2:
             raise ValueError("asset must be an AssetRefIR2")
         if self.structure is not None and not isinstance(self.structure, TableIR2):
             raise ValueError("structure must be a StructureIR2")
+
+        if self.runs:
+            if self.text is None:
+                raise ValueError("runs may only describe a node that carries text")
+            for run in self.runs:
+                if not isinstance(run, TextRunIR2):
+                    raise ValueError("runs must contain TextRunIR2 values")
+            # I run DESCRIVONO il testo, non lo sostituiscono: se le due cose
+            # divergessero l'emettitore avrebbe due verita' e ne sceglierebbe una
+            # in silenzio. Questo e' l'unico invariante che il campo aggiunge.
+            if "".join(run.text for run in self.runs) != self.text:
+                raise ValueError("runs must concatenate to text")
 
         if self.resolution is not None and self.resolution not in _VALID_RESOLUTIONS:
             raise ValueError("resolution must be accepted, rejected, unresolved, or None")

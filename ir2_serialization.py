@@ -23,6 +23,7 @@ from ir2_model import (
     NodeIR2,
     PageIR2,
     TableIR2,
+    TextRunIR2,
 )
 
 _ROOT_KEYS = frozenset({"schema_version", "provenance", "pages"})
@@ -38,10 +39,12 @@ _NODE_KEYS = frozenset(
         "text",
         "asset",
         "structure",
+        "runs",
         "candidate_ids",
         "resolution",
     }
 )
+_RUN_KEYS = frozenset({"text", "traits"})
 _STRUCTURE_KEYS = frozenset({"kind", "rows"})
 _CELL_KEYS = frozenset({"row", "column", "text", "primitive_ids"})
 _ASSET_KEYS = frozenset(
@@ -82,6 +85,7 @@ def _node_to_dict(node: NodeIR2) -> dict[str, object]:
         "text": node.text,
         "asset": None if node.asset is None else _asset_to_dict(node.asset),
         "structure": None if node.structure is None else _structure_to_dict(node.structure),
+        "runs": [{"text": run.text, "traits": list(run.traits)} for run in node.runs],
         "candidate_ids": list(node.candidate_ids),
         "resolution": node.resolution,
     }
@@ -181,9 +185,29 @@ def _parse_node(value: object, page_path: str, index: int) -> NodeIR2:
             if data["structure"] is None
             else _parse_structure(data["structure"], f"{path}.structure")
         ),
+        runs=_parse_runs(data["runs"], f"{path}.runs"),
         candidate_ids=_parse_str_tuple(data, "candidate_ids", f"{path}.candidate_ids"),
         resolution=_optional_str(data, "resolution", f"{path}.resolution"),
     )
+
+
+def _parse_runs(value: object, path: str) -> tuple[TextRunIR2, ...]:
+    """I run di stile. Validanti come tutto il resto del modulo, mai permissivi."""
+
+    if not isinstance(value, list):
+        raise ValueError(f"{path} must be a list")
+    runs: list[TextRunIR2] = []
+    for run_index, item in enumerate(value):
+        item_path = f"{path}[{run_index}]"
+        data = _require_dict(item, item_path)
+        _validate_exact_keys(data, _RUN_KEYS, item_path)
+        runs.append(
+            TextRunIR2(
+                text=_require_str(data, "text", f"{item_path}.text"),
+                traits=_parse_str_tuple(data, "traits", f"{item_path}.traits"),
+            )
+        )
+    return tuple(runs)
 
 
 def _parse_structure(value: object, path: str) -> TableIR2:

@@ -49,6 +49,7 @@ from ir2_model import (
     NodeIR2,
     PageIR2,
     TableIR2,
+    TextRunIR2,
 )
 from ir_builder import _HYPHENATED_WORD_RE
 from primitive_model import TextPrimitive
@@ -258,6 +259,95 @@ def join_lines(previous_text: str, next_text: str) -> str:
     return f"{left[:-1]}{right}"
 
 
+def runs_for_line(line: _SourceLine) -> list[TextRunIR2]:
+    """The line's spans, merged into runs of equal traits.
+
+    Empty spans contribute no character and therefore no run; they stay in the
+    node's ``primitive_ids`` all the same, which is what ``ir2_validate`` checks.
+    """
+
+    runs: list[TextRunIR2] = []
+    for primitive in line.primitives:
+        if not primitive.text:
+            continue
+        traits = tuple(primitive.font_traits)
+        if runs and runs[-1].traits == traits:
+            runs[-1] = TextRunIR2(runs[-1].text + primitive.text, traits)
+        else:
+            runs.append(TextRunIR2(primitive.text, traits))
+    return runs
+
+
+def _strip_runs(runs: list[TextRunIR2]) -> tuple[TextRunIR2, ...]:
+    """I run del paragrafo finito, spogliati come lo e' il suo `text`."""
+
+    return tuple(_lstrip_runs(_rstrip_runs(runs)))
+
+
+def _rstrip_runs(runs: list[TextRunIR2]) -> list[TextRunIR2]:
+    out = list(runs)
+    while out:
+        stripped = out[-1].text.rstrip()
+        if stripped:
+            out[-1] = TextRunIR2(stripped, out[-1].traits)
+            break
+        out.pop()
+    return out
+
+
+def _lstrip_runs(runs: list[TextRunIR2]) -> list[TextRunIR2]:
+    out = list(runs)
+    while out:
+        stripped = out[0].text.lstrip()
+        if stripped:
+            out[0] = TextRunIR2(stripped, out[0].traits)
+            break
+        out.pop(0)
+    return out
+
+
+def join_runs(left_runs: list[TextRunIR2], right_runs: list[TextRunIR2]) -> list[TextRunIR2]:
+    """The run-level mirror of ``join_lines``, character for character.
+
+    It must reproduce the same three cases -- plain join with a space, join with
+    a space despite a trailing hyphen, dehyphenation -- because ``NodeIR2``
+    refuses runs that do not concatenate to ``text``. Mirroring is deliberate:
+    the alternative was to rebuild the runs by aligning them to an already
+    joined string, and the space this inserts and the hyphen it removes belong
+    to no primitive, so no alignment can be exact.
+
+    The inserted space is attached to the **left** run: it is the junction of two
+    lines and it has no traits of its own, and giving it the traits of what comes
+    before keeps a bold word from growing a bold space in front of the next one.
+    """
+
+    left = _rstrip_runs(left_runs)
+    right = _lstrip_runs(right_runs)
+    if not left:
+        return right
+    if not right:
+        return left
+
+    left_text = "".join(run.text for run in left)
+    right_text = "".join(run.text for run in right)
+    dehyphenate = False
+    if _HYPHEN_AT_END.search(left_text):
+        window = f"{left_text[-2:]} {right_text[:1]}"
+        dehyphenate = _HYPHENATED_WORD_RE.sub("", window) != window
+
+    if dehyphenate:
+        tail = left[-1]
+        left = left[:-1] + ([TextRunIR2(tail.text[:-1], tail.traits)] if len(tail.text) > 1 else [])
+    else:
+        tail = left[-1]
+        left = left[:-1] + [TextRunIR2(tail.text + " ", tail.traits)]
+
+    if left and right and left[-1].traits == right[0].traits:
+        merged = TextRunIR2(left[-1].text + right[0].text, right[0].traits)
+        return left[:-1] + [merged] + right[1:]
+    return left + right
+
+
 def column_bounds(region: TableRegionInput) -> list[tuple[float, float]]:
     """Column intervals of a region: what the gutters leave between them."""
 
@@ -402,9 +492,10 @@ def build_page_ir2(
         consumed_ids.update(owned)
 
     remaining = [p for p in ordered_text_primitives if p.primitive_id not in consumed_ids]
-    paragraphs: list[tuple[str, tuple[TextPrimitive, ...]]] = []
+    paragraphs: list[tuple[str, tuple[TextPrimitive, ...], tuple[TextRunIR2, ...]]] = []
     pending_text = ""
     pending_primitives: list[TextPrimitive] = []
+    pending_runs: list[TextRunIR2] = []
     previous_line: _SourceLine | None = None
     # Il font del corpo si desume dalla pagina INTERA, non dal residuo: togliere
     # le celle di una tabella non deve poter cambiare quale font e' il corpo.
@@ -414,18 +505,25 @@ def build_page_ir2(
         if previous_line is None:
             pending_text = source_line.text
             pending_primitives = list(source_line.primitives)
+            pending_runs = runs_for_line(source_line)
             previous_line = source_line
             continue
         if breaks_paragraph(previous_line, source_line, page_body_font):
-            paragraphs.append((pending_text.strip(), tuple(pending_primitives)))
+            paragraphs.append(
+                (pending_text.strip(), tuple(pending_primitives), _strip_runs(pending_runs))
+            )
             pending_text = source_line.text
             pending_primitives = list(source_line.primitives)
+            pending_runs = runs_for_line(source_line)
         else:
             pending_text = join_lines(pending_text, source_line.text)
             pending_primitives.extend(source_line.primitives)
+            pending_runs = join_runs(pending_runs, runs_for_line(source_line))
         previous_line = source_line
     if pending_primitives:
-        paragraphs.append((pending_text.strip(), tuple(pending_primitives)))
+        paragraphs.append(
+            (pending_text.strip(), tuple(pending_primitives), _strip_runs(pending_runs))
+        )
 
     # I paragrafi NON si riordinano: l'ordine ricevuto e' l'ordine di lettura, e
     # riordinarli per geometria lo scavalcherebbe. Le note si inseriscono
@@ -443,7 +541,7 @@ def build_page_ir2(
         for index, primitive in enumerate(ordered_text_primitives)
     }
     paragraph_of_original_index: dict[int, int] = {}
-    for paragraph_index, (_text, primitives) in enumerate(paragraphs):
+    for paragraph_index, (_text, primitives, _runs) in enumerate(paragraphs):
         for primitive in primitives:
             original = index_of_primitive.get(primitive.primitive_id)
             if original is not None:
@@ -477,7 +575,7 @@ def build_page_ir2(
     nodes: list[NodeIR2] = []
     for order, (kind, payload) in enumerate(items):
         if kind == "text":
-            text, primitives = payload  # type: ignore[misc]
+            text, primitives, runs = payload  # type: ignore[misc]
             first = primitives[0]
             # L'identita' viene dal PRIMO PRIMITIVO, non dalla riga. Una riga di
             # sorgente puo' comparire piu' volte nell'ordine di lettura quando
@@ -496,6 +594,7 @@ def build_page_ir2(
                     primitive_ids=tuple(item.primitive_id for item in primitives),
                     page_ids=(page_id,),
                     text=text,
+                    runs=runs,
                 )
             )
             continue

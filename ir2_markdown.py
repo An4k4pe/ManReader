@@ -106,11 +106,53 @@ def render_table(table: TableIR2) -> str:
     return "\n".join(lines)
 
 
+# Solo i due tratti che il Markdown sa dire. `serifed`, `monospaced` e
+# `superscript` restano registrati sul nodo e **ignorati qui**: il primitivo li
+# conserva perche' buttarli sarebbe la stessa perdita che questo lavoro ripara,
+# ma inventargli una resa sarebbe far mentire l'adattatore sul PDF. Un tratto
+# registrato e non reso non e' un difetto, ed e' scritto perche' nessuno lo conti
+# come tale.
+_MARKUP = (("bold", "**"), ("italic", "*"))
+
+
+def render_runs(node: NodeIR2) -> str:
+    """Il testo del nodo con grassetto e corsivo, dai run.
+
+    Senza run -- o con un solo run senza tratti -- torna esattamente il testo di
+    prima: il campo e' additivo e un nodo che non lo porta rende come sempre.
+
+    Il markup si chiude e riapre a ogni run invece di cercare l'estensione
+    massima: la seconda cosa richiederebbe di riordinare i delimitatori attorno
+    agli spazi, ed e' il genere di furbizia che rompe su un caso che nessuno ha
+    guardato. Gli spazi di giunzione stanno **dentro** il run che li precede
+    (vedi `ir2_builder.join_runs`), quindi un `**parola **` non si forma perche'
+    lo spazio non e' mai in testa a un run marcato.
+    """
+
+    text = node.text or ""
+    if not node.runs:
+        return text
+
+    pieces: list[str] = []
+    for run in node.runs:
+        piece = run.text
+        stripped = piece.strip()
+        if stripped:
+            leading = piece[: len(piece) - len(piece.lstrip())]
+            trailing = piece[len(piece.rstrip()) :]
+            for trait, delimiter in _MARKUP:
+                if trait in run.traits:
+                    stripped = f"{delimiter}{stripped}{delimiter}"
+            piece = f"{leading}{stripped}{trailing}"
+        pieces.append(piece)
+    return "".join(pieces)
+
+
 def render_node(node: NodeIR2) -> str:
     """Render one node. Unknown kinds are not guessed at."""
 
     if node.kind == KIND_TEXT_PARAGRAPH:
-        return node.text or ""
+        return render_runs(node)
     if node.kind == KIND_ASSET_NOTE:
         if node.asset is None:
             raise ValueError("an asset.note node must carry an asset")
