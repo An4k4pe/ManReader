@@ -232,16 +232,40 @@ Per ogni task:
     quell'assunzione, non dopo (lezione di Milestone 35: la premessa d'origine, mai
     verificata visivamente, si è rivelata fattualmente sbagliata dopo sette giri di
     revisione basati solo sui numeri).
-15. Prima di eseguire una misura che deve decidere se una linea di lavoro prosegue,
-    registrare per iscritto il criterio di falsificazione — statistica, soglia, ambito,
-    esclusioni — e il modello nullo con la sua debolezza dichiarata. Il criterio deve
-    vincolare esplicitamente **il caso da cui l'affermazione è nata**, non un caso qualsiasi
-    del campione. Lezione della chiusura del contenimento IVF/EV: il criterio registrato
-    vincolava Fab e ha prodotto una ritrattazione netta, mentre una lettura post-hoc degli
-    stessi identici dati avrebbe dichiarato l'esito positivo su altri due manuali sopra
-    soglia. Vale anche per le esclusioni: fissarle prima impedisce di scartare a posteriori
-    i casi scomodi.
-16. `State.md` termina con una riga sentinella HTML che ne dichiara la fine. Chi lo legge
+15. **Il campione che dà il verdetto è l'unica cosa sigillata.** Prima di eseguire la
+    misura che decide se una linea di lavoro prosegue, registrare per iscritto il criterio
+    di falsificazione — statistica, soglia, ambito, esclusioni — e il modello nullo con la
+    sua debolezza dichiarata. Il criterio deve vincolare esplicitamente **il caso da cui
+    l'affermazione è nata**, non un caso qualsiasi del campione. Lezione della chiusura del
+    contenimento IVF/EV: il criterio registrato vincolava Fab e ha prodotto una
+    ritrattazione netta, mentre una lettura post-hoc degli stessi identici dati avrebbe
+    dichiarato l'esito positivo su altri due manuali sopra soglia. Vale anche per le
+    esclusioni: fissarle prima impedisce di scartare a posteriori i casi scomodi.
+16. **Progettare il meccanismo non richiede un criterio, e iterare su pagine già spese è
+    gratis.** Il §15 vincola la misura che dà il verdetto, non l'esplorazione che la
+    precede: si prova, si misura su pagine di sviluppo o già giudicate, si cambia idea
+    quante volte serve, e nulla di tutto questo va pre-registrato. Il criterio si scrive
+    **quando si sa che cosa si sta mettendo alla prova**. Lezione della sessione del 22-24
+    agosto 2026: cinque documenti di criterio per due misure eseguite, e tre di quelle
+    riscritture nascono dall'aver nominato un meccanismo prima di averlo verificato — il
+    §3 di `Criterio_RotturaParagrafo_v1.md` indicava una regola geometrica che la prima
+    misura ha falsificato, e la regola che ha poi retto il verdetto non era fra quelle in
+    gara. Il §15 letto come «prima di toccare qualunque cosa serve un criterio» costa più
+    di quanto protegga; letto come «il campione di accettazione non si guarda finché non è
+    ora» ha impedito, nella stessa sessione, un salvataggio a posteriori e una soglia
+    tarata su una pagina sola.
+17. **Il peso del documento sta al peso della decisione.** Un criterio può stare in una
+    pagina: che cosa si misura, su quale campione, con quale barra, che cosa lo squalifica,
+    che cosa resta fuori. Un giro di revisione indipendente si spende sui cambi di
+    contratto e sulle misure che decidono una direzione, non su ogni documento — e uno solo
+    basta, salvo che la posta sia l'apertura di uno stadio nuovo.
+18. **Il verbale dev'essere ricontrollabile senza la cartella di lavoro.** Un numero citato
+    in un esito va accompagnato da ciò che permette di rifarlo — seed, ordine, esclusioni,
+    risposte grezze — e non dagli artefatti generati, che non si committano. Lezione del 24
+    agosto 2026: la cartella temporanea è stata ripulita e le 18 risposte di un confronto
+    A/B esistevano solo nella conversazione; la chiave era riproducibile dal repo per
+    fortuna, non per costruzione.
+19. `State.md` termina con una riga sentinella HTML che ne dichiara la fine. Chi lo legge
     deve verificare di averla ricevuta: se non compare, la copia è troncata e va dichiarato
     invece di ragionarci sopra. Lezione della migrazione di Milestone 36: il file aveva
     superato il cap di lettura degli strumenti di fetch, e una sessione ha ragionato per un
@@ -615,6 +639,20 @@ Non avviare:
 - OCR;
 - SQLite;
 - nuova struttura completa del repository.
+
+**Aprire uno stadio non è estenderlo.** Questa lista vieta di *aprire*: la decisione
+architetturale dedicata serve per il primo passo dentro una voce, ed è quello che hanno
+fatto Milestone 26 per il clustering, 34 per Resolution, 38 per IR 2. Un'aggiunta
+**additiva** a uno stadio già aperto — un campo nuovo su un contratto esistente, un `kind`
+nuovo in un vocabolario che si dichiara aperto — richiede il criterio del §15 e i test, non
+un'altra decisione dedicata.
+
+Distinzione registrata il 24 agosto 2026, su rilievo dell'utente. Fino ad allora ogni
+allargamento del contratto IR 2 si prendeva una milestone intera, e il costo di quella
+cerimonia era diventato la ragione principale per rimandare il lavoro che il campione
+cieco aveva indicato come il più utile: lo stile inline, chiesto su 13 pagine su 20 in
+`Esito_FormaMancante_v1.md`. Il freno resta dove serve — aprire uno stadio nuovo — e
+smette di applicarsi a un campo in più.
 
 ## Aggiornamento documenti
 
