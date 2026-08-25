@@ -30,6 +30,42 @@ stata aperta finché tutte e 18 le risposte non erano date.
 **Il margine sulla seconda condizione è nullo.** Va citato così: il criterio ha
 retto con il vecchio esattamente sul tetto, non con due pagine di margine.
 
+### 1-bis. Le 18 risposte e la chiave
+
+Il §1 riportava solo l'aggregato, e il numero non era ricontrollabile da nessuno.
+La lacuna si è vista quando la cartella di lavoro è stata ripulita e il file
+della chiave è sparito: quelle risposte esistevano **solo nella conversazione**.
+
+**La chiave è però riproducibile dal solo materiale committato**, e lo è stata:
+il seed `20260825` sta nel criterio, l'ordine delle pagine in
+`Campione_FormaMancante_v1.md` righe 21-40, e le due pagine identiche sono
+nominate qui sopra. `scripts/build_ab_comparison.py` estrae un numero casuale
+**solo** per le pagine non identiche, quindi la sequenza dipende unicamente da
+quei tre dati. Riprodotta e verificata: **18 su 18 identiche**.
+
+| # | pagina | A | B | risposta | vince |
+| --- | --- | --- | --- | --- | --- |
+| 01 | Lan idx 20 | vecchio | NUOVO | B | **NUOVO** |
+| 02 | SV idx 3 | NUOVO | vecchio | A | **NUOVO** |
+| 03 | Dag idx 251 | NUOVO | vecchio | B | vecchio |
+| 04 | Wil idx 72 | vecchio | NUOVO | B | **NUOVO** |
+| 05 | Kul idx 219 | NUOVO | vecchio | uguali | pari |
+| 06 | Lan idx 364 | NUOVO | vecchio | A | **NUOVO** |
+| 07 | DIE idx 399 | vecchio | NUOVO | B | **NUOVO** |
+| 08 | DIE idx 382 | vecchio | NUOVO | B | **NUOVO** |
+| 09 | Vil idx 208 | vecchio | NUOVO | B | **NUOVO** |
+| 10 | SV idx 369 | vecchio | NUOVO | uguali | pari |
+| 11 | Fab idx 171 | NUOVO | vecchio | A | **NUOVO** |
+| 12 | Fab idx 286 | vecchio | NUOVO | uguali | pari |
+| 13 | DrM idx 172 | vecchio | NUOVO | B | **NUOVO** |
+| 14 | DrM idx 184 | NUOVO | vecchio | A | **NUOVO** |
+| 15 | Lan idx 116 | vecchio | NUOVO | B | **NUOVO** |
+| 16 | Fab idx 118 | vecchio | NUOVO | uguali | pari |
+| 17 | DrW idx 272 | NUOVO | vecchio | B | vecchio |
+| 18 | Fab idx 142 | vecchio | NUOVO | B | **NUOVO** |
+
+Le due sconfitte, righe 03 e 17, hanno la causa verificata nel §5.
+
 ## 2. Il §5 — l'errore squalificante
 
 > conservazione: **OK su tutte e 40 le pagine**
