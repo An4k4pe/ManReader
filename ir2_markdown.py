@@ -164,9 +164,35 @@ def render_node(node: NodeIR2) -> str:
     raise ValueError(f"no renderer for kind {node.kind!r}")
 
 
-def is_rendered_in_body(node: NodeIR2, *, render_unresolved: bool) -> bool:
-    """Whether a node belongs in the body, or in the review channel instead."""
+def is_rendered_in_body(
+    node: NodeIR2,
+    *,
+    render_unresolved: bool,
+    excluded_node_ids: frozenset[str] = frozenset(),
+) -> bool:
+    """Whether a node belongs in the body, or in the review channel instead.
 
+    ``excluded_node_ids`` is a **policy the caller computes**, not a mark on the
+    node: nothing is written to `NodeIR2`, the serialization is unchanged, and no
+    new ``kind`` is born. It is the same shape as ``RENDER_UNRESOLVED_ASSET_NOTES``
+    above -- a parameter with a declared default rather than a constant hidden in
+    a branch -- and it extends a gate that is already open: `5bbb5f5` decided that
+    an asset whose candidate Resolution did not accept stays a node and is
+    filtered at rendering.
+
+    **The difference is declared and not hidden.** That gate keys on
+    ``resolution``, which is a decision Resolution took about a candidate. Here
+    there is no candidate and no Resolution, so **nothing downstream can refuse
+    this exclusion** -- which is why `Criterio_ArredoRicorrente_v3.md` puts its
+    veto at zero and checks the junction around every removed item. If nobody can
+    refuse it later, the check has to be there.
+
+    The declared cost: the decision does not survive serialization, so the
+    Markdown and the review channel must be produced in the same run.
+    """
+
+    if node.node_id in excluded_node_ids:
+        return False
     if node.kind != KIND_ASSET_NOTE:
         return True
     if render_unresolved:
@@ -178,12 +204,16 @@ def render_page_markdown(
     page: PageIR2,
     *,
     render_unresolved_assets: bool = RENDER_UNRESOLVED_ASSET_NOTES,
+    excluded_node_ids: frozenset[str] = frozenset(),
 ) -> str:
     """Render one page. Nodes are emitted in ``order``, which is reading order.
 
     Asset notes whose candidate Resolution did not accept are **not** rendered by
     default; they stay in IR 2 as nodes and belong to the review channel. See
     ``RENDER_UNRESOLVED_ASSET_NOTES``.
+
+    ``excluded_node_ids`` carries the furniture policy the caller computed; see
+    ``is_rendered_in_body``.
     """
 
     if not isinstance(page, PageIR2):
@@ -194,7 +224,11 @@ def render_page_markdown(
         for rendered in (
             render_node(node)
             for node in sorted(page.nodes, key=lambda n: n.order)
-            if is_rendered_in_body(node, render_unresolved=render_unresolved_assets)
+            if is_rendered_in_body(
+                node,
+                render_unresolved=render_unresolved_assets,
+                excluded_node_ids=excluded_node_ids,
+            )
         )
         if rendered
     ]
