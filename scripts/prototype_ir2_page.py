@@ -53,6 +53,10 @@ from prototype_vertical_slice_page import (  # noqa: E402
     _tree_rows_from_contract,
 )
 
+from document_furniture_policy import furniture_node_ids, furniture_slots  # noqa: E402
+from document_text_recurrence_measurements import (  # noqa: E402
+    measure_document_text_recurrence,
+)
 from ir2_builder import AssetNoteInput, TableRegionInput, build_page_ir2  # noqa: E402
 from ir2_markdown import is_rendered_in_body, render_page_markdown  # noqa: E402
 from ir2_model import DocumentIR2, IR2Provenance, NodeIR2  # noqa: E402
@@ -106,6 +110,36 @@ def _strip_ir2_notes(markdown: str) -> str:
     return "\n".join(
         line for line in markdown.splitlines() if not line.startswith(_ASSET_NOTE_LINE_PREFIX)
     )
+
+
+def document_furniture_slots(document: fitz.Document, *, sample: int):
+    """Gli slot d'arredo del documento, ricatturandone le pagine.
+
+    `sample` limita quante pagine si guardano, centrate sul documento: un
+    manuale da 400 pagine ricatturato per intero costa minuti, e la ricorrenza
+    non ha bisogno di tutte per essere stabile. E' un parametro di costo e non
+    una soglia della regola -- ma va dichiarato, perche' un campione contiguo
+    corto sovrastima le intestazioni di capitolo, che su una finestra stretta
+    sono su tutte le pagine e su un manuale intero no.
+    """
+
+    first = max(0, len(document) // 2 - sample // 2)
+    pages: list = []
+    for index in range(first, min(len(document), first + sample)):
+        page = document[index]
+        if page.rotation != 0 or tuple(page.mediabox) != tuple(page.cropbox):
+            continue
+        capture = capture_pymupdf_page(
+            page,
+            source_id="diagnostic-source",
+            page_id=f"page:{index:04d}",
+            capture_id=f"furniture:{index:04d}",
+        )
+        pages.append(
+            (normalize_backend_page_capture(capture), (page.get_label() or "").strip())
+        )
+    measured = measure_document_text_recurrence([primitive for primitive, _ in pages])
+    return furniture_slots(pages, measured)
 
 
 def review_lines_for(
@@ -175,6 +209,8 @@ def run(
     base_path: Path | None,
     interrupt_corridor: str = "",
     enable_tables: bool = False,
+    remove_furniture: bool = False,
+    furniture_sample: int = 60,
 ) -> None:
     page_index = page_number - 1
     generation_id = f"generation:ir2:{page_number:04d}"
@@ -320,11 +356,14 @@ def run(
             )
 
         # --- I quattro moduli ---
+        page_label = (page.get_label() or "").strip() or None
+
         ir2_page = build_page_ir2(
             page_id=page_id,
             ordered_text_primitives=ordered_primitives,
             asset_notes=notes,
             table_regions=table_regions if enable_tables else (),
+            page_label=page_label,
         )
         validate_page_ir2_against_primitive_page(ir2_page, primitive_page)
 
@@ -346,7 +385,28 @@ def run(
             json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
         )
 
-        markdown = render_page_markdown(ir2_page)
+        # La politica dell'arredo e' DOCUMENT-LEVEL: per sapere se uno slot di
+        # questa pagina e' arredo bisogna aver visto le altre. Non c'e' modo di
+        # evitarlo -- e' la ragione stessa per cui il segnale funziona -- e non
+        # c'e' deserializzatore di NormalizedPrimitivePage, quindi le pagine si
+        # ricatturano. Costa, ed e' spento di default: acceso solo dal giro che
+        # esegue `Criterio_ArredoRicorrente_v3.md`.
+        excluded_node_ids: frozenset[str] = frozenset()
+        if remove_furniture:
+            slots = document_furniture_slots(document, sample=furniture_sample)
+            excluded_node_ids = furniture_node_ids(
+                primitive_page,
+                [(node.node_id, node.primitive_ids) for node in ir2_page.nodes],
+                slots.all_slots,
+            )
+            print(
+                f"arredo: {len(slots.from_label)} slot da etichetta, "
+                f"{len(slots.from_recurrence)} da ricorrenza, "
+                f"{len(excluded_node_ids)} nodi fuori dal corpo",
+                file=sys.stderr,
+            )
+
+        markdown = render_page_markdown(ir2_page, excluded_node_ids=excluded_node_ids)
         (output_dir / "page_ir2.md").write_text(markdown, encoding="utf-8")
 
         # --- Canale review: cio' che NON entra nel corpo, e perche' ---
@@ -359,7 +419,9 @@ def run(
         not_rendered = [
             node
             for node in ir2_page.nodes
-            if not is_rendered_in_body(node, render_unresolved=False)
+            if not is_rendered_in_body(
+                node, render_unresolved=False, excluded_node_ids=excluded_node_ids
+            )
         ]
         # Un nodo di TESTO non ha `asset`, quindi si conta per il proprio `kind`.
         # Senza questo un paragrafo tolto dal corpo non comparirebbe da nessuna
@@ -448,6 +510,22 @@ def main() -> None:
              "attraversa il corridoio. Spento di default (Milestone 37).",
     )
     parser.add_argument(
+        "--arredo",
+        action="store_true",
+        help=(
+            "toglie dal corpo l'arredo ricorrente e lo manda in review "
+            "(Criterio_ArredoRicorrente_v3.md). SPENTO di default: richiede di "
+            "ricatturare altre pagine del manuale, perche' il segnale e' "
+            "document-level e NormalizedPrimitivePage non ha deserializzatore."
+        ),
+    )
+    parser.add_argument(
+        "--arredo-pagine",
+        type=int,
+        default=60,
+        help="quante pagine ricatturare per la misura di ricorrenza (default 60)",
+    )
+    parser.add_argument(
         "--base",
         type=Path,
         default=None,
@@ -460,6 +538,8 @@ def main() -> None:
         args.output_dir,
         args.base,
         interrupt_corridor=args.interrupt_corridor,
+        remove_furniture=args.arredo,
+        furniture_sample=args.arredo_pagine,
         enable_tables=args.tables,
     )
 

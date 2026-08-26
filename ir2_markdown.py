@@ -205,6 +205,7 @@ def render_page_markdown(
     *,
     render_unresolved_assets: bool = RENDER_UNRESOLVED_ASSET_NOTES,
     excluded_node_ids: frozenset[str] = frozenset(),
+    render_page_label: bool = True,
 ) -> str:
     """Render one page. Nodes are emitted in ``order``, which is reading order.
 
@@ -219,7 +220,14 @@ def render_page_markdown(
     if not isinstance(page, PageIR2):
         raise ValueError("page must be a PageIR2")
 
-    blocks = [
+    blocks: list[str] = []
+    if render_page_label and page.page_label:
+        # Il numero stampato che il PDF dichiara, non uno dedotto. Sta nella
+        # stessa forma delle note d'asset -- una riga breve che dice che cosa
+        # c'era -- perche' e' la stessa cosa: un elemento della pagina reso come
+        # riferimento invece che lasciato in mezzo al testo.
+        blocks.append(f"> **[pagina {page.page_label}]**")
+    blocks += [
         rendered
         for rendered in (
             render_node(node)

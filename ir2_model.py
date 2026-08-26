@@ -275,13 +275,32 @@ class NodeIR2:
 
 @dataclass(frozen=True, slots=True)
 class PageIR2:
-    """One page. The order of ``nodes`` is reading order."""
+    """One page. The order of ``nodes`` is reading order.
+
+    ``page_label`` e' il numero **stampato** che il PDF dichiara per questa
+    pagina (``/PageLabels``, letto da ``page.get_label()``). E' un fatto del
+    documento e non una deduzione: dove il PDF non lo dichiara resta ``None``, e
+    PyMuPDF non sintetizza il numero fisico.
+
+    Serve a due cose. Dice **di quale pagina stampata si tratta** -- indicazione
+    dell'utente: referenziare il numero serve a sapere che pagina si sta
+    trattando. E chiude la terza delle tre numerazioni che questo progetto tiene
+    separate e che gli sono gia' costate un giro di etichette: ``idx`` 0-based
+    degli script, pagina del file 1-based, numero stampato -- l'ultimo finora
+    dichiarato «non verificato e da non citare».
+
+    Il campo esiste **indipendentemente** dal fatto che il numero venga poi
+    riconosciuto e tolto dal corpo: il fatto non dipende dal riconoscimento.
+    """
 
     page_id: str
     nodes: tuple[NodeIR2, ...] = ()
+    page_label: str | None = None
 
     def __post_init__(self) -> None:
         _validate_non_empty_string(self.page_id, "page_id")
+        if self.page_label is not None:
+            _validate_non_empty_string(self.page_label, "page_label")
         if not isinstance(self.nodes, tuple):
             raise ValueError("nodes must be a tuple")
 
