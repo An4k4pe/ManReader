@@ -52,16 +52,39 @@ restano 7 slot, tutti arredo. Il document-level è portante.
 
 ### Ramo 1 — l'etichetta di pagina, che è un fatto e non una soglia
 
-Il PDF **dichiara** il numero stampato: `page.get_label()` di PyMuPDF. Cinque
-manuali su sei del corpus lo dichiarano.
+Il PDF **dichiara** il numero stampato: `page.get_label()` di PyMuPDF.
 
 > Nella fascia bassa, un testo che **contiene l'etichetta della sua pagina** e non
 > è più lungo di essa di oltre tre caratteri **è** il numero di pagina.
 
-Nessuna ricorrenza, nessuna percentuale, nessun parametro tarato. Misurato su
-sei manuali, 40 pagine ciascuno: **DIE 39/40, DB 33/40, Lan 38/40, SV 39/40,
-Fab 40/40**; Wil non dichiara etichette e cade nel ramo 2. Il margine dei tre
-caratteri esiste perché Lan stampa `[99]` per l'etichetta `99`.
+Nessuna ricorrenza, nessuna percentuale, nessun parametro tarato. Il margine dei
+tre caratteri è l'unico numero del ramo, ed esiste perché Lan stampa `[99]` per
+l'etichetta `99`.
+
+**Il metodo c'è sempre, i dati no.** `get_label()` esiste su ogni documento ma
+torna stringa vuota quando il PDF non dichiara `/PageLabels` nel catalogo:
+PyMuPDF **non sintetizza** il numero fisico, riporta ciò che il documento
+dichiara. È per questo che è un fatto e non un'euristica, e l'assenza è essa
+stessa un'informazione. Verificato sul catalogo di Wil, che non ce l'ha, contro
+DIE che ne dichiara due regole — romani dalla pagina 0, decimali dalla 12.
+
+**Misurato sul corpus intero**, 16 manuali, 40 pagine campionate al centro di
+ciascuno (`scripts/scan_page_labels.py`):
+
+| | manuali | |
+| --- | --- | --- |
+| etichetta dichiarata **e** trovata in fondo | **11** | 35-40 su 40 ciascuno |
+| dichiarata, nessun testo in fondo alla pagina | 2 | BoB, Kul |
+| nessuna etichetta dichiarata | 3 | FW, FWK, Wil |
+
+Su BoB e Kul non è l'etichetta a essere sbagliata: **nella fascia bassa non c'è
+testo affatto**, quindi non c'è niente da togliere. La regola **fallisce in
+sicurezza** — senza riscontro non rimuove nulla — ed è la proprietà che permette
+di applicarla senza guardia.
+
+Una versione precedente di questo paragrafo diceva «cinque manuali su sei»,
+misurato sul campione di progettazione. Il corpus intero lo corregge in
+entrambe le direzioni, ed è la ragione per cui il numero va preso da lì.
 
 **E il numero non si butta: diventa provenienza.** `PageIR2` guadagna
 `page_label`, preso da `get_label()` — additivo, e disponibile **anche dove il
