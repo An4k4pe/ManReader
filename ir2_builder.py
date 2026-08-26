@@ -162,6 +162,64 @@ def group_source_lines(ordered: Sequence[TextPrimitive]) -> list[_SourceLine]:
     return lines
 
 
+def _with_redraws(ids: tuple[str, ...], redraw_ids: dict[str, tuple[str, ...]]) -> tuple[str, ...]:
+    """Gli id del nodo piu' quelli dei ridisegni dei suoi gemelli."""
+
+    if not redraw_ids:
+        return ids
+    out: list[str] = []
+    for primitive_id in ids:
+        out.append(primitive_id)
+        out.extend(redraw_ids.get(primitive_id, ()))
+    return tuple(out)
+
+
+def redrawn_duplicates(
+    ordered: Sequence[TextPrimitive],
+) -> tuple[list[TextPrimitive], dict[str, tuple[str, ...]]]:
+    """Separa i ridisegni: stesso testo, **stessa bbox**, sulla stessa pagina.
+
+    Un PDF puo' disegnare lo stesso glifo due volte nello stesso punto -- effetto
+    di ombra o di contorno, comune nei manuali illustrati. Due primitive con
+    testo identico e bbox identica sono lo stesso segno sulla pagina, non due,
+    e senza questa separazione il testo esce **due volte**.
+
+    Misurato su due manuali e due elementi diversi: su Wil idx 103 il titolo
+    `I Wilder` esce due volte da 13 paragrafi (`Esito_FormaMancante_v1.md` §5,
+    segnalato dall'utente); su Fab il numero di pagina e' doppio su **6 pagine su
+    40**, con bbox identica al quarto decimale.
+
+    **Va fatto a livello di pagina, non di riga**: su Wil le due copie stanno in
+    righe di sorgente diverse dello stesso blocco (`b0002:l0000` e `b0002:l0001`),
+    su Fab in blocchi diversi (`b0000` e `b0004`). E' per questo che il ridisegno
+    produce un paragrafo in piu' e non un carattere in piu'.
+
+    **Nessuna soglia**: l'uguaglianza e' esatta su testo e bbox. Due glifi
+    identici nello stesso identico punto sono sovrapposti per definizione.
+
+    Il duplicato **non sparisce**: torna nella mappa, e il chiamante lo aggiunge
+    ai `primitive_ids` del nodo che porta il suo gemello. `ir2_validate` esige
+    che ogni primitiva sia coperta, e una rimozione silenziosa sarebbe
+    l'esclusione che `AGENTS.MD` §Coverage vieta.
+    """
+
+    kept: list[TextPrimitive] = []
+    twin_of: dict[tuple[str, BBox], str] = {}
+    duplicates: dict[str, list[str]] = {}
+    for primitive in ordered:
+        if not primitive.text:
+            kept.append(primitive)
+            continue
+        key = (primitive.text, primitive.bbox)
+        twin = twin_of.get(key)
+        if twin is None:
+            twin_of[key] = primitive.primitive_id
+            kept.append(primitive)
+        else:
+            duplicates.setdefault(twin, []).append(primitive.primitive_id)
+    return kept, {twin: tuple(ids) for twin, ids in duplicates.items()}
+
+
 def body_font(primitives: Sequence[TextPrimitive]) -> str | None:
     """The page's body font: the one carrying the most **characters**.
 
@@ -453,6 +511,11 @@ def build_page_ir2(
 ) -> PageIR2:
     """Build one IR 2 page. Reading order is the caller's; this only groups."""
 
+    # I ridisegni escono dal flusso PRIMA di qualunque raggruppamento: stanno in
+    # righe e blocchi diversi dal gemello, quindi a valle sarebbero gia' diventati
+    # una riga in piu' e poi un paragrafo in piu'. Tornano dentro come copertura
+    # sul nodo del gemello, mai come testo.
+    ordered_text_primitives, redraw_ids = redrawn_duplicates(ordered_text_primitives)
     source_lines = group_source_lines(ordered_text_primitives)
     tables: list[tuple[int, TableIR2, TableRegionInput, tuple[str, ...]]] = []
     consumed_ids: set[str] = set()
@@ -591,7 +654,9 @@ def build_page_ir2(
                     node_id=f"{page_id}:{suffix}",
                     order=order,
                     kind=KIND_TEXT_PARAGRAPH,
-                    primitive_ids=tuple(item.primitive_id for item in primitives),
+                    primitive_ids=_with_redraws(
+                        tuple(item.primitive_id for item in primitives), redraw_ids
+                    ),
                     page_ids=(page_id,),
                     text=text,
                     runs=runs,

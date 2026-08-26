@@ -7,6 +7,7 @@ from ir2_builder import (
     build_page_ir2,
     group_source_lines,
     join_lines,
+    redrawn_duplicates,
 )
 from primitive_model import TextPrimitive
 
@@ -337,3 +338,52 @@ class BuildPageIR2Test(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RedrawnDuplicatesTest(unittest.TestCase):
+    """Lo stesso glifo disegnato due volte nello stesso punto."""
+
+    def _at(self, block: int, line: int, text: str, x: float, y: float):
+        observation = f"text:b{block:04d}:l{line:04d}:s0000"
+        return TextPrimitive(
+            primitive_id=f"primitive:text:{observation}",
+            bbox=(x, y, x + 10.0, y + 10.0),
+            text=text,
+            source_observation_id=observation,
+        )
+
+    def test_same_text_same_bbox_in_another_line_is_one_mark(self) -> None:
+        # Wil idx 103: `I Wilder` in b0002:l0000 e b0002:l0001, bbox identica.
+        primitives = [
+            self._at(2, 0, "I Wilder", 68.504, 66.918),
+            self._at(2, 1, "I Wilder", 68.504, 66.918),
+        ]
+        kept, redraws = redrawn_duplicates(primitives)
+        self.assertEqual([p.text for p in kept], ["I Wilder"])
+        self.assertEqual(
+            redraws, {primitives[0].primitive_id: (primitives[1].primitive_id,)}
+        )
+
+    def test_same_text_at_another_place_is_two_marks(self) -> None:
+        primitives = [self._at(1, 0, "6", 10.0, 10.0), self._at(1, 1, "6", 10.0, 40.0)]
+        kept, redraws = redrawn_duplicates(primitives)
+        self.assertEqual(len(kept), 2)
+        self.assertEqual(redraws, {})
+
+    def test_the_redraw_stays_covered_by_the_node_of_its_twin(self) -> None:
+        # La copertura e' l'invariante: una rimozione silenziosa sarebbe
+        # l'esclusione che AGENTS.MD §Coverage vieta.
+        primitives = [
+            self._at(0, 0, "176", 14.019, 551.091),
+            self._at(4, 0, "176", 14.019, 551.091),
+        ]
+        page = build_page_ir2(page_id=PAGE, ordered_text_primitives=primitives)
+        self.assertEqual([node.text for node in page.nodes], ["176"])
+        covered = {pid for node in page.nodes for pid in node.primitive_ids}
+        self.assertEqual(covered, {p.primitive_id for p in primitives})
+
+    def test_an_empty_span_is_never_treated_as_a_redraw(self) -> None:
+        primitives = [self._at(1, 0, "", 1.0, 1.0), self._at(1, 0, "", 1.0, 1.0)]
+        kept, redraws = redrawn_duplicates(primitives)
+        self.assertEqual(len(kept), 2)
+        self.assertEqual(redraws, {})
