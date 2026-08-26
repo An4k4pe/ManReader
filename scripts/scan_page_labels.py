@@ -15,8 +15,15 @@ Verificato sul catalogo: Wil non ha ``/PageLabels``
 DIE ne ha due regole -- numeri romani dalla pagina 0, decimali dalla 12.
 
 **Il contenimento e non l'uguaglianza**, con un margine di tre caratteri: Lan
-stampa ``[99]`` per l'etichetta ``99``. Il margine e' l'unico numero di questo
-ramo, ed e' li' per quella ragione.
+stampa ``[99]`` per l'etichetta ``99``.
+
+**Nessun vincolo di posizione**, ed e' una correzione a verbale. Una prima
+versione cercava solo nella fascia bassa e concludeva che BoB e Kul non
+stampassero il numero: falso, **BoB lo mette sul lato destro in alto**
+(``x=0,91 y=0,18``) e **Kul in cima** (``x=0,25 y=0,04``). La guardia contro la
+coincidenza -- su una pagina numerata ``6`` un ``6`` nel corpo combacia -- non e'
+la posizione ma la **ricorrenza dello slot**: lo stesso punto che porta
+l'etichetta della propria pagina su un quarto delle pagine, ciascuna con la sua.
 
 Uso::
 
@@ -34,25 +41,28 @@ MANUALS = (
     "Apo", "BiD", "BoB", "Dag", "DB", "DIE", "DrM", "DrW",
     "Fab", "FW", "FWK", "Kul", "Lan", "SV", "Vil", "Wil",
 )
-BOTTOM_BAND = 0.90
 LABEL_SLACK = 3
+POSITION_GRID = 100
+MIN_SHARE = 0.25
 
 
-def label_in_bottom_text(page: fitz.Page, label: str) -> bool:
-    """L'etichetta compare, contenuta, in un testo corto in fondo alla pagina."""
+def label_slots(page: fitz.Page, label: str) -> set[tuple[int, int]]:
+    """Gli slot in cui compare l'etichetta della pagina, ovunque essa sia."""
 
-    height = page.rect.height
+    width, height = page.rect.width, page.rect.height
+    found: set[tuple[int, int]] = set()
     for block in page.get_text("dict", flags=fitz.TEXTFLAGS_TEXT)["blocks"]:
         for line in block.get("lines", []):
             for span in line["spans"]:
                 text = span["text"].strip()
-                if (
-                    span["bbox"][1] > height * BOTTOM_BAND
-                    and label in text
-                    and len(text) <= len(label) + LABEL_SLACK
-                ):
-                    return True
-    return False
+                if label in text and len(text) <= len(label) + LABEL_SLACK:
+                    found.add(
+                        (
+                            round(span["bbox"][0] / width * POSITION_GRID),
+                            round(span["bbox"][1] / height * POSITION_GRID),
+                        )
+                    )
+    return found
 
 
 def main() -> None:
@@ -62,7 +72,7 @@ def main() -> None:
     args = parser.parse_args()
 
     con_etichette = 0
-    print(f"{'manuale':<8} {'pagine':>7} {'regole':>7} {'etichetta in fondo':>20}")
+    print(f"{'manuale':<8} {'pagine':>7} {'regole':>7} {'slot':>7}  dove")
     for name in MANUALS:
         path = args.pdf_dir / f"{name}.pdf"
         if not path.is_file():
@@ -71,11 +81,12 @@ def main() -> None:
         with fitz.open(path) as document:
             rules = document.get_page_labels()
             if not rules:
-                print(f"{name:<8} {len(document):>7} {'nessuna':>7} {'-':>20}")
+                print(f"{name:<8} {len(document):>7} {'nessuna':>7} {'-':>7}")
                 continue
             con_etichette += 1
             first = max(0, len(document) // 2 - args.pagine // 2)
-            found = examined = 0
+            hits: dict[tuple[int, int], int] = {}
+            examined = 0
             for index in range(first, min(len(document), first + args.pagine)):
                 page = document[index]
                 if page.rotation != 0 or tuple(page.mediabox) != tuple(page.cropbox):
@@ -84,9 +95,11 @@ def main() -> None:
                 if not label:
                     continue
                 examined += 1
-                found += label_in_bottom_text(page, label)
-            share = f"{found}/{examined}" if examined else "n/d"
-            print(f"{name:<8} {len(document):>7} {len(rules):>7} {share:>20}")
+                for slot in label_slots(page, label):
+                    hits[slot] = hits.get(slot, 0) + 1
+            good = [(slot, n) for slot, n in hits.items() if n >= examined * MIN_SHARE]
+            where = ", ".join(f"x{slot[0]}/y{slot[1]}" for slot, _ in sorted(good)[:2])
+            print(f"{name:<8} {len(document):>7} {len(rules):>7} {len(good):>7}  {where}")
 
     print(f"\nmanuali che dichiarano /PageLabels: {con_etichette} su {len(MANUALS)}")
 

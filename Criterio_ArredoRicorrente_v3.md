@@ -54,12 +54,24 @@ restano 7 slot, tutti arredo. Il document-level è portante.
 
 Il PDF **dichiara** il numero stampato: `page.get_label()` di PyMuPDF.
 
-> Nella fascia bassa, un testo che **contiene l'etichetta della sua pagina** e non
-> è più lungo di essa di oltre tre caratteri **è** il numero di pagina.
+> Uno **slot** che porta l'**etichetta della propria pagina** — testo che la
+> contiene e non è più lungo di essa di oltre tre caratteri — su almeno il 25%
+> delle pagine, **è** lo slot del numero di pagina. **Nessun vincolo di
+> posizione.**
 
-Nessuna ricorrenza, nessuna percentuale, nessun parametro tarato. Il margine dei
-tre caratteri è l'unico numero del ramo, ed esiste perché Lan stampa `[99]` per
-l'etichetta `99`.
+Il margine dei tre caratteri esiste perché Lan stampa `[99]` per l'etichetta
+`99`. La ricorrenza dello slot non è qui una soglia sul rumore: è la guardia
+contro la coincidenza — su una pagina numerata `6` un `6` nel corpo combacia, ma
+non combacia **nello stesso slot su un quarto delle pagine**, ciascuna con la
+propria etichetta diversa.
+
+**La fascia è stata tolta, ed è una correzione di un mio errore verificato.** La
+prima stesura vincolava il ramo 1 all'8% inferiore, e concludeva che BoB e Kul
+«non stampano il numero in fondo, o non è testo». Falso: **BoB lo stampa sul lato
+destro in alto** (`x=0,91 y=0,18`) e **Kul in cima** (`x=0,25 y=0,04`), in testo,
+e l'etichetta lo trova esattamente. Ero io a guardare solo in fondo — il punto 14
+di `AGENTS.MD`, ispezionare le pagine prima di asserire cosa mostrano, violato da
+chi lo cita. Rilievo dell'utente.
 
 **Il metodo c'è sempre, i dati no.** `get_label()` esiste su ogni documento ma
 torna stringa vuota quando il PDF non dichiara `/PageLabels` nel catalogo:
@@ -68,23 +80,24 @@ dichiara. È per questo che è un fatto e non un'euristica, e l'assenza è essa
 stessa un'informazione. Verificato sul catalogo di Wil, che non ce l'ha, contro
 DIE che ne dichiara due regole — romani dalla pagina 0, decimali dalla 12.
 
-**Misurato sul corpus intero**, 16 manuali, 40 pagine campionate al centro di
-ciascuno (`scripts/scan_page_labels.py`):
+**Misurato sul corpus intero**, 16 manuali, 40 pagine al centro di ciascuno
+(`scripts/scan_page_labels.py`): **13 manuali su 16 dichiarano le etichette, e su
+tutti e 13 la regola trova lo slot** — uno o due per manuale, che è l'alternanza
+recto/verso. I tre senza etichetta (FW, FWK, Wil) cadono nel ramo 2.
 
-| | manuali | |
-| --- | --- | --- |
-| etichetta dichiarata **e** trovata in fondo | **11** | 35-40 su 40 ciascuno |
-| dichiarata, nessun testo in fondo alla pagina | 2 | BoB, Kul |
-| nessuna etichetta dichiarata | 3 | FW, FWK, Wil |
+Wil è il caso che chiarisce la natura del segnale: **stampa i numeri** — `159` a
+`x=0,91 y=0,94` — e **non dichiara nulla**. Il fatto non è il numero sulla
+pagina, è la dichiarazione del documento, e dove manca la regola non ha niente
+con cui confrontare.
 
-Su BoB e Kul non è l'etichetta a essere sbagliata: **nella fascia bassa non c'è
-testo affatto**, quindi non c'è niente da togliere. La regola **fallisce in
-sicurezza** — senza riscontro non rimuove nulla — ed è la proprietà che permette
-di applicarla senza guardia.
+La regola **fallisce in sicurezza**: senza etichetta dichiarata, o senza uno slot
+che la porti con regolarità, non rimuove nulla.
 
-Una versione precedente di questo paragrafo diceva «cinque manuali su sei»,
-misurato sul campione di progettazione. Il corpus intero lo corregge in
-entrambe le direzioni, ed è la ragione per cui il numero va preso da lì.
+Due numeri di questa sezione sono già stati corretti una volta ciascuno. Dicevo
+«cinque manuali su sei» misurando sul campione di progettazione, ed erano 13 su
+16 sul corpus; e dicevo 11 su 16 col vincolo di fascia, che erano 13 su 13
+togliendolo. Entrambe le correzioni sono venute dal guardare più in là, non dal
+misurare meglio.
 
 **E il numero non si butta: diventa provenienza.** `PageIR2` guadagna
 `page_label`, preso da `get_label()` — additivo, e disponibile **anche dove il
