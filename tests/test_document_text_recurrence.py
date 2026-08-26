@@ -108,3 +108,18 @@ class ContractTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OffPageSlotTest(unittest.TestCase):
+    def test_a_slot_outside_the_page_is_a_position_not_an_error(self) -> None:
+        # Il vivo di stampa: un testo puo' stare oltre il bordo. Una prima
+        # versione validava x e y non-negativi e falliva su Apo alla prima
+        # esecuzione fuori dai manuali di progettazione.
+        slot = TextSlotRecurrence(x=-3, y=-1, page_count=1, page_indices=(0,), texts=("a",))
+        self.assertEqual((slot.x, slot.y), (-3, -1))
+
+    def test_a_primitive_above_the_page_top_is_measured(self) -> None:
+        page = _page(0, ("bleed", 10.0, -4.0))
+        measured = measure_document_text_recurrence([page])
+        self.assertEqual(len(measured.slots), 1)
+        self.assertLess(measured.slots[0].y, 0)

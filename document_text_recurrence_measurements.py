@@ -84,8 +84,15 @@ class TextSlotRecurrence:
     texts: tuple[str, ...]
 
     def __post_init__(self) -> None:
-        _validate_int(self.x, "x")
-        _validate_int(self.y, "y")
+        # x e y sono POSIZIONI, non conteggi, e possono uscire dalla pagina:
+        # un testo puo' stare oltre il bordo -- il vivo di stampa, gia' a
+        # verbale in Milestone 38 con un'occorrenza a x 699-1284 su una pagina
+        # larga 581. Una prima versione li validava non-negativi e falliva su
+        # Apo alla prima esecuzione fuori dai manuali di progettazione.
+        if isinstance(self.x, bool) or not isinstance(self.x, int):
+            raise ValueError("x must be an int")
+        if isinstance(self.y, bool) or not isinstance(self.y, int):
+            raise ValueError("y must be an int")
         _validate_int(self.page_count, "page_count", positive=True)
         if len(self.page_indices) != self.page_count:
             raise ValueError("page_indices must have page_count entries")
