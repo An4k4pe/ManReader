@@ -55,7 +55,7 @@ from prototype_vertical_slice_page import (  # noqa: E402
 
 from ir2_builder import AssetNoteInput, TableRegionInput, build_page_ir2  # noqa: E402
 from ir2_markdown import is_rendered_in_body, render_page_markdown  # noqa: E402
-from ir2_model import DocumentIR2, IR2Provenance  # noqa: E402
+from ir2_model import DocumentIR2, IR2Provenance, NodeIR2  # noqa: E402
 from ir2_serialization import document_ir2_from_dict, document_ir2_to_dict  # noqa: E402
 from ir2_validate import validate_page_ir2_against_primitive_page  # noqa: E402
 from ir_builder import _HYPHENATED_WORD_RE  # noqa: E402
@@ -106,6 +106,66 @@ def _strip_ir2_notes(markdown: str) -> str:
     return "\n".join(
         line for line in markdown.splitlines() if not line.startswith(_ASSET_NOTE_LINE_PREFIX)
     )
+
+
+def review_lines_for(
+    page_id: str,
+    not_rendered: list[NodeIR2],
+    by_kind: Counter[str],
+    review_rows: list[tuple[str, str]],
+) -> list[str]:
+    """Il contenuto di `review_ir2.md`, come funzione perche' sia verificabile.
+
+    Era codice in linea dentro `run`. Cio' che scrive e' il materiale su cui
+    `Criterio_ArredoRicorrente_v3.md` §4 chiede un giudizio: se non si puo'
+    esercitare senza produrre una pagina intera, quel giudizio non e'
+    materialmente eseguibile.
+    """
+
+    review_lines = [f"# Review IR 2 — {page_id}", ""]
+    review_lines.append(
+        f"Nodi non resi nel corpo: **{len(not_rendered)}**. "
+        f"Occorrenze senza raster: **{len(review_rows)}**."
+    )
+    review_lines.append("")
+    if by_kind:
+        review_lines.append("## Per genere strutturale proposto")
+        review_lines.append("")
+        for kind, count in sorted(by_kind.items(), key=lambda item: (-item[1], item[0])):
+            review_lines.append(f"- {kind}: {count}")
+        review_lines.append("")
+    if not_rendered:
+        review_lines.append("## Nodi non resi")
+        review_lines.append("")
+        for node in not_rendered:
+            asset = node.asset
+            if asset is not None:
+                size = (
+                    f" {asset.bbox[2] - asset.bbox[0]:.0f}"
+                    f"×{asset.bbox[3] - asset.bbox[1]:.0f} pt"
+                )
+                review_lines.append(
+                    f"- `{node.node_id}` resolution={node.resolution}"
+                    f" kind={asset.proposed_structural_kind}{size}"
+                )
+                continue
+            # Il TESTO va riportato per intero, non descritto: chi giudica
+            # deve poter dire se una voce tolta e' arredo o contenuto, e da
+            # `node_id` e `kind` non lo puo' dire. Niente troncamento: un
+            # paragrafo tolto per errore si riconosce da com'e' fatto, e
+            # tagliarlo a N caratteri nasconderebbe proprio il caso lungo.
+            review_lines.append(
+                f"- `{node.node_id}` kind={node.kind}"
+                f" primitive={len(node.primitive_ids)}"
+            )
+            for line in (node.text or "").splitlines() or [""]:
+                review_lines.append(f"  > {line}")
+        review_lines.append("")
+    for primitive_id, reason in review_rows:
+        review_lines.append(f"## occurrence {primitive_id}")
+        review_lines.append(f"- {reason}")
+        review_lines.append("")
+    return review_lines
 
 
 def run(
@@ -301,41 +361,18 @@ def run(
             for node in ir2_page.nodes
             if not is_rendered_in_body(node, render_unresolved=False)
         ]
+        # Un nodo di TESTO non ha `asset`, quindi si conta per il proprio `kind`.
+        # Senza questo un paragrafo tolto dal corpo non comparirebbe da nessuna
+        # parte nel riepilogo, e il file esiste per essere l'elenco da cui si
+        # guarda.
         by_kind: Counter[str] = Counter(
             (node.asset.proposed_structural_kind or "(nessun candidato)")
-            for node in not_rendered
             if node.asset is not None
+            else node.kind
+            for node in not_rendered
         )
 
-        review_lines = [f"# Review IR 2 — {page_id}", ""]
-        review_lines.append(
-            f"Nodi non resi nel corpo: **{len(not_rendered)}**. "
-            f"Occorrenze senza raster: **{len(review_rows)}**."
-        )
-        review_lines.append("")
-        if by_kind:
-            review_lines.append("## Per genere strutturale proposto")
-            review_lines.append("")
-            for kind, count in sorted(by_kind.items(), key=lambda item: (-item[1], item[0])):
-                review_lines.append(f"- {kind}: {count}")
-            review_lines.append("")
-        if not_rendered:
-            review_lines.append("## Nodi non resi")
-            review_lines.append("")
-            for node in not_rendered:
-                asset = node.asset
-                size = "" if asset is None else (
-                    f" {asset.bbox[2] - asset.bbox[0]:.0f}×{asset.bbox[3] - asset.bbox[1]:.0f} pt"
-                )
-                review_lines.append(
-                    f"- `{node.node_id}` resolution={node.resolution}"
-                    f" kind={asset.proposed_structural_kind if asset else None}{size}"
-                )
-            review_lines.append("")
-        for primitive_id, reason in review_rows:
-            review_lines.append(f"## occurrence {primitive_id}")
-            review_lines.append(f"- {reason}")
-            review_lines.append("")
+        review_lines = review_lines_for(page_id, not_rendered, by_kind, review_rows)
         (output_dir / "review_ir2.md").write_text(
             "\n".join(review_lines) + "\n", encoding="utf-8"
         )
