@@ -28,7 +28,7 @@ from ir2_model import (
 
 _ROOT_KEYS = frozenset({"schema_version", "provenance", "pages"})
 _PROVENANCE_KEYS = frozenset({"source_id", "generation_id", "producer_names"})
-_PAGE_KEYS = frozenset({"page_id", "page_label", "nodes"})
+_PAGE_KEYS = frozenset({"page_id", "page_label", "page_label_deduced", "nodes"})
 _NODE_KEYS = frozenset(
     {
         "node_id",
@@ -69,6 +69,7 @@ def document_ir2_to_dict(document: DocumentIR2) -> dict[str, object]:
             {
                 "page_id": page.page_id,
                 "page_label": page.page_label,
+                "page_label_deduced": page.page_label_deduced,
                 "nodes": [_node_to_dict(node) for node in page.nodes],
             }
             for page in document.pages
@@ -158,6 +159,7 @@ def _parse_page(value: object, index: int) -> PageIR2:
     return PageIR2(
         page_id=_require_str(data, "page_id", f"{path}.page_id"),
         page_label=_optional_str(data, "page_label", f"{path}.page_label"),
+        page_label_deduced=bool(data.get("page_label_deduced", False)),
         nodes=tuple(
             _parse_node(node_value, path, node_index)
             for node_index, node_value in enumerate(_require_list(data, "nodes", f"{path}.nodes"))

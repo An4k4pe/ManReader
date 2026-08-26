@@ -509,6 +509,7 @@ def build_page_ir2(
     asset_notes: Sequence[AssetNoteInput] = (),
     table_regions: Sequence[TableRegionInput] = (),
     page_label: str | None = None,
+    page_label_deduced: bool = False,
 ) -> PageIR2:
     """Build one IR 2 page. Reading order is the caller's; this only groups."""
 
@@ -702,4 +703,9 @@ def build_page_ir2(
             )
         )
 
-    return PageIR2(page_id=page_id, nodes=tuple(nodes), page_label=page_label)
+    return PageIR2(
+        page_id=page_id,
+        nodes=tuple(nodes),
+        page_label=page_label,
+        page_label_deduced=page_label_deduced,
+    )

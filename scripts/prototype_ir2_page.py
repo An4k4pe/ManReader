@@ -53,7 +53,11 @@ from prototype_vertical_slice_page import (  # noqa: E402
     _tree_rows_from_contract,
 )
 
-from document_furniture_policy import furniture_node_ids, furniture_slots  # noqa: E402
+from document_furniture_policy import (  # noqa: E402
+    deduced_number_slots,
+    furniture_node_ids,
+    furniture_slots,
+)
 from document_text_recurrence_measurements import (  # noqa: E402
     measure_document_text_recurrence,
 )
@@ -113,7 +117,7 @@ def _strip_ir2_notes(markdown: str) -> str:
 
 
 def document_furniture_slots(document: fitz.Document, *, sample: int):
-    """Gli slot d'arredo del documento, ricatturandone le pagine.
+    """Gli slot d'arredo del documento e i numeri dedotti, ricatturandone le pagine.
 
     `sample` limita quante pagine si guardano, centrate sul documento: un
     manuale da 400 pagine ricatturato per intero costa minuti, e la ricorrenza
@@ -125,10 +129,12 @@ def document_furniture_slots(document: fitz.Document, *, sample: int):
 
     first = max(0, len(document) // 2 - sample // 2)
     pages: list = []
+    indices: list[int] = []
     for index in range(first, min(len(document), first + sample)):
         page = document[index]
         if page.rotation != 0 or tuple(page.mediabox) != tuple(page.cropbox):
             continue
+        indices.append(index)
         capture = capture_pymupdf_page(
             page,
             source_id="diagnostic-source",
@@ -139,7 +145,21 @@ def document_furniture_slots(document: fitz.Document, *, sample: int):
             (normalize_backend_page_capture(capture), (page.get_label() or "").strip())
         )
     measured = measure_document_text_recurrence([primitive for primitive, _ in pages])
-    return furniture_slots(pages, measured)
+    slots = furniture_slots(pages, measured)
+
+    # I numeri **dedotti** per indice di pagina, dove il documento non dichiara
+    # niente. Servono alla provenienza, non alla rimozione: la rimozione la fa
+    # gia' `slots.from_sequence`. Sono due usi separati dello stesso fatto e il
+    # criterio li tiene separati perche' possono fallire separati.
+    deduced: dict[int, str] = {}
+    if not any(label for _, label in pages):
+        found = deduced_number_slots([primitive for primitive, _ in pages])
+        deduced = {
+            indices[position]: value
+            for position, value in found.by_page_position.items()
+            if position < len(indices)
+        }
+    return slots, deduced
 
 
 def review_lines_for(
@@ -356,7 +376,24 @@ def run(
             )
 
         # --- I quattro moduli ---
+        #
+        # L'arredo si calcola **prima** di costruire la pagina, e non e' un
+        # riordino di comodo: dove il documento non dichiara le etichette il
+        # numero stampato arriva da li', e il contratto vuole saperlo alla
+        # costruzione. La rimozione invece potrebbe restare dopo -- sono due usi
+        # separati dello stesso fatto, come dice `Criterio_NumeroDedotto_v1.md`.
+        furniture_slots_found = None
+        deduced_labels: dict[int, str] = {}
+        if remove_furniture:
+            furniture_slots_found, deduced_labels = document_furniture_slots(
+                document, sample=furniture_sample
+            )
+
         page_label = (page.get_label() or "").strip() or None
+        page_label_deduced = False
+        if page_label is None and page_index in deduced_labels:
+            page_label = deduced_labels[page_index]
+            page_label_deduced = True
 
         ir2_page = build_page_ir2(
             page_id=page_id,
@@ -364,6 +401,7 @@ def run(
             asset_notes=notes,
             table_regions=table_regions if enable_tables else (),
             page_label=page_label,
+            page_label_deduced=page_label_deduced,
         )
         validate_page_ir2_against_primitive_page(ir2_page, primitive_page)
 
@@ -392,8 +430,8 @@ def run(
         # ricatturano. Costa, ed e' spento di default: acceso solo dal giro che
         # esegue `Criterio_ArredoRicorrente_v3.md`.
         excluded_node_ids: frozenset[str] = frozenset()
-        if remove_furniture:
-            slots = document_furniture_slots(document, sample=furniture_sample)
+        if furniture_slots_found is not None:
+            slots = furniture_slots_found
             excluded_node_ids = furniture_node_ids(
                 primitive_page,
                 [(node.node_id, node.primitive_ids) for node in ir2_page.nodes],
@@ -402,7 +440,9 @@ def run(
             print(
                 f"arredo: {len(slots.from_label)} slot da etichetta, "
                 f"{len(slots.from_recurrence)} da ricorrenza, "
-                f"{len(excluded_node_ids)} nodi fuori dal corpo",
+                f"{len(slots.from_sequence)} da sequenza dedotta, "
+                f"{len(excluded_node_ids)} nodi fuori dal corpo"
+                + (f" — numero dedotto: {page_label}" if page_label_deduced else ""),
                 file=sys.stderr,
             )
 

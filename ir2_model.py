@@ -277,10 +277,22 @@ class NodeIR2:
 class PageIR2:
     """One page. The order of ``nodes`` is reading order.
 
-    ``page_label`` e' il numero **stampato** che il PDF dichiara per questa
-    pagina (``/PageLabels``, letto da ``page.get_label()``). E' un fatto del
-    documento e non una deduzione: dove il PDF non lo dichiara resta ``None``, e
-    PyMuPDF non sintetizza il numero fisico.
+    ``page_label`` e' il numero **stampato** di questa pagina. Di norma e' un
+    fatto che il PDF dichiara (``/PageLabels``, letto da ``page.get_label()``);
+    dove il PDF non dichiara nulla puo' essere **dedotto leggendolo dalla
+    pagina**, e allora ``page_label_deduced`` e' ``True``.
+
+    **I due non sono lo stesso fatto**, ed e' la ragione per cui il flag esiste
+    invece di lasciare il campo indistinto: uno e' cio' che l'editore ha scritto,
+    l'altro cio' che abbiamo letto. Un consumatore dell'IR deve poter rifiutare
+    una deduzione; chi legge il Markdown no, e infatti la resa e' la stessa.
+    Dedurre e' governato da `Criterio_NumeroDedotto_v1.md`, il cui veto §5.A --
+    zero disaccordi contro le etichette dichiarate di 13 manuali -- e' cio' che
+    rende difendibile una resa indistinguibile.
+
+    Dove non si dichiara ne' si deduce resta ``None``: PyMuPDF non sintetizza il
+    numero fisico, e ``idx + 1`` sarebbe un'invenzione (su DIE l'etichetta a
+    ``idx`` 50 e' ``39``).
 
     Serve a due cose. Dice **di quale pagina stampata si tratta** -- indicazione
     dell'utente: referenziare il numero serve a sapere che pagina si sta
@@ -296,11 +308,19 @@ class PageIR2:
     page_id: str
     nodes: tuple[NodeIR2, ...] = ()
     page_label: str | None = None
+    page_label_deduced: bool = False
 
     def __post_init__(self) -> None:
         _validate_non_empty_string(self.page_id, "page_id")
         if self.page_label is not None:
             _validate_non_empty_string(self.page_label, "page_label")
+        if not isinstance(self.page_label_deduced, bool):
+            raise ValueError("page_label_deduced must be a bool")
+        # Un flag che dichiara la provenienza di un valore assente non dichiara
+        # niente, e lasciarlo passare renderebbe rappresentabile uno stato che
+        # non significa nulla.
+        if self.page_label_deduced and self.page_label is None:
+            raise ValueError("page_label_deduced requires a page_label")
         if not isinstance(self.nodes, tuple):
             raise ValueError("nodes must be a tuple")
 

@@ -19,12 +19,22 @@ Da qui i due modi, ed entrambi si stampano:
     poterla riprodurre e mostrare di quanto sbagliava.
 
 ``--modo completo``
-    Dove l'etichetta manca, il numero stampato viene **dedotto** da uno slot che
-    porta un numero su almeno meta' delle pagine e la cui sequenza e' strettamente
-    crescente. E' una deduzione, non una dichiarazione, e sta qui come **verita' di
-    riferimento per la misura**, non come regola di rimozione: dedurre per contare
-    cio' che la regola manca e' lecito, dedurre per togliere sarebbe il terzo ramo,
-    che va scritto in un criterio prima di essere eseguito.
+    Dove l'etichetta manca, il numero stampato viene **dedotto** con
+    ``document_furniture_policy.deduced_number_slots``.
+
+**Una circolarita' da dichiarare, non da nascondere.** Da quando
+`Criterio_NumeroDedotto_v1.md` ha reso quella deduzione anche una **regola di
+rimozione** (ramo 3), sui manuali senza etichetta numeratore e denominatore
+vengono dalla stessa funzione, e la loro copertura tende al 100% per costruzione.
+Non e' un difetto occulto della misura: e' cio' che il §5.B del criterio ammette,
+ed e' il motivo per cui il numero informativo resta la copertura sui manuali con
+etichetta **dichiarata**, dove la verita' di riferimento e' indipendente.
+
+La deduzione **non** e' pero' arbitraria: il veto §5.A la confronta con le
+etichette dichiarate di 13 manuali (`scripts/check_deduced_numbers.py`). E la
+circolarita' non e' totale nemmeno qui -- il denominatore conta il numero ovunque
+compaia sulla pagina, la regola toglie solo i nodi **interamente** dentro gli slot
+dedotti -- ma e' abbastanza stretta da non poterne ricavare una conferma.
 
 Uso::
 
@@ -43,7 +53,11 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from document_furniture_policy import furniture_slots, slot_of  # noqa: E402
+from document_furniture_policy import (  # noqa: E402
+    deduced_number_slots,
+    furniture_slots,
+    slot_of,
+)
 from document_text_recurrence_measurements import (  # noqa: E402
     measure_document_text_recurrence,
     normalize_text,
@@ -52,58 +66,6 @@ from primitive_normalizer import normalize_backend_page_capture  # noqa: E402
 from pymupdf_capture import capture_pymupdf_page  # noqa: E402
 
 UNUSED_MANUALS = ("Apo", "BiD", "BoB", "Dag", "DrM", "DrW", "FW", "FWK", "Kul", "Vil")
-# Uno slot deve portare un numero su almeno questa frazione delle pagine per
-# essere candidato. E' larga di proposito: serve a scartare il rumore, non a
-# selezionare, e la monotonia e' il vero filtro.
-#
-# **Un quarto e non meta'**, ed e' un difetto che questa misura ha trovato da
-# sola: FW e FWK stampano il numero **a lati alterni**, quindi ogni slot ne porta
-# meta' -- 20 e 20 su FW, 18 e 16 su FWK. Una soglia a meta' ne prendeva uno solo,
-# e il denominatore restava dimezzato dopo che era gia' stato azzerato una volta.
-DEDUCED_MIN_SHARE = 0.25
-
-
-def _as_number(text: str) -> int | None:
-    stripped = normalize_text(text).strip("[]() .-")
-    return int(stripped) if stripped.isdigit() else None
-
-
-def deduce_printed_numbers(pages: list) -> dict[int, str]:
-    """Il numero stampato per posizione, dedotto da una sequenza crescente.
-
-    Torna vuoto se nessuno slot qualifica: preferisce non sapere a indovinare.
-    """
-
-    per_slot: dict[tuple[int, int], dict[int, int]] = {}
-    for position, page in enumerate(pages):
-        for primitive in page.text_primitives:
-            value = _as_number(primitive.text)
-            if value is not None:
-                per_slot.setdefault(slot_of(primitive, page), {})[position] = value
-
-    def monotone(values: dict[int, int]) -> bool:
-        ordered = [values[k] for k in sorted(values)]
-        return all(b > a for a, b in zip(ordered, ordered[1:], strict=False))
-
-    merged: dict[int, int] = {}
-    for values in per_slot.values():
-        if len(values) < len(pages) * DEDUCED_MIN_SHARE or not monotone(values):
-            continue
-        # Gli slot si **fondono** invece di competere: un numero a lati alterni
-        # vive in due slot che sono la stessa cosa, e sceglierne uno perderebbe
-        # meta' delle pagine.
-        #
-        # Ma due slot che rivendicano la **stessa** pagina con valori diversi non
-        # sono un numero a lati alterni: sono due colonne, e qui non c'e' modo di
-        # sapere quale sia la pagina. Rifiutare e' l'unica risposta onesta, e
-        # senza questa guardia `update` ne sceglieva una in silenzio.
-        if any(merged.get(k, v) != v for k, v in values.items()):
-            return {}
-        merged.update(values)
-    # La fusione va comunque rimessa alla prova: due slot disgiunti e ciascuno
-    # crescente possono intrecciarsi in una sequenza che non lo e'.
-    return {p: str(v) for p, v in merged.items()} if monotone(merged) else {}
-
 
 def measure(pdf_path: Path, sample: int, complete: bool) -> tuple[int, int, int]:
     """(presenti, tolte, pagine esaminate) per un manuale."""
@@ -135,8 +97,10 @@ def measure(pdf_path: Path, sample: int, complete: bool) -> tuple[int, int, int]
 
         truth = labels
         if complete and not any(labels):
-            deduced = deduce_printed_numbers(pages)
-            truth = [deduced.get(position, "") for position in range(len(pages))]
+            found = deduced_number_slots(pages)
+            truth = [
+                found.by_page_position.get(position, "") for position in range(len(pages))
+            ]
 
         present = removed = 0
         for page, label in zip(pages, truth, strict=True):

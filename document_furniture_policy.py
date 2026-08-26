@@ -35,6 +35,16 @@ sbagliare, perche' l'errore opposto e' perdita di contenuto.
 **La fascia da sola non basterebbe**, misurato: su Lan, senza la ricorrenza,
 prende ``+1``, ``.``, ``La``, ``PNU Classe Student``. E' la ragione per cui il
 ramo 2 e' document-level e non page-local.
+
+**Ramo 3 -- la sequenza crescente**, `Criterio_NumeroDedotto_v1.md`. Dove il
+documento non dichiara **nessuna** etichetta, il numero stampato si **deduce** da
+uno slot che porta un numero crescente pagina dopo pagina. Chiude la caduta
+misurata in `Esito_ArredoRicorrente_v1.md`: FW e FWK stampano il numero al centro
+dei lati, dove ne' il ramo 1 (non ha con che confrontare) ne' il ramo 2 (guarda
+solo la fascia bassa) arrivano, e stavano allo 0%.
+
+Il ramo 3 **tace dove il documento dichiara**: li' il ramo 1 ha un fatto, e una
+deduzione che gli si sovrapponesse sarebbe una congettura al posto di un dato.
 """
 
 from __future__ import annotations
@@ -52,6 +62,10 @@ from primitive_model import NormalizedPrimitivePage, TextPrimitive
 EDGE_BAND = 0.08
 RECURRENCE_SHARE = 0.25
 LABEL_SLACK = 3
+# Cio' che il ramo 3 accetta come numero, prima di guardare se cresce. Le
+# parentesi ci sono perche' Lan stampa `[99]`, ed e' lo stesso margine che
+# `_carries_label` concede al ramo 1.
+_NUMBER_STRIP = "[]() .-"
 
 Slot = tuple[int, int]
 
@@ -85,10 +99,11 @@ class FurnitureSlots:
 
     from_label: frozenset[Slot]
     from_recurrence: frozenset[Slot]
+    from_sequence: frozenset[Slot] = frozenset()
 
     @property
     def all_slots(self) -> frozenset[Slot]:
-        return self.from_label | self.from_recurrence
+        return self.from_label | self.from_recurrence | self.from_sequence
 
 
 def label_slots(
@@ -132,18 +147,99 @@ def recurrent_edge_slots(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class DeducedNumbers:
+    """L'esito del ramo 3: gli slot che portano il numero, e il numero per pagina.
+
+    Vuoto quando la deduzione **rifiuta**, che e' una risposta e non un errore:
+    un meccanismo che deduce sempre qualcosa non e' falsificabile.
+    """
+
+    slots: frozenset[Slot]
+    by_page_position: dict[int, str]
+
+    def __bool__(self) -> bool:
+        return bool(self.slots)
+
+
+def _as_number(text: str) -> int | None:
+    stripped = normalize_text(text).strip(_NUMBER_STRIP)
+    return int(stripped) if stripped.isdigit() else None
+
+
+def _rising(values: dict[int, int]) -> bool:
+    ordered = [values[k] for k in sorted(values)]
+    return all(b > a for a, b in zip(ordered, ordered[1:], strict=False))
+
+
+def deduced_number_slots(
+    pages: Sequence[NormalizedPrimitivePage],
+    *,
+    share: float = RECURRENCE_SHARE,
+) -> DeducedNumbers:
+    """Ramo 3. `Criterio_NumeroDedotto_v1.md` §1.
+
+    Il chiamante deve gia' aver stabilito che il documento non dichiara niente:
+    questa funzione non vede le etichette, apposta, perche' e' la stessa funzione
+    che il §5.A esegue sui 13 manuali che dichiarano per confrontarla con la
+    verita' di riferimento. Se guardasse le etichette non ci sarebbe controllo.
+    """
+
+    per_slot: dict[Slot, dict[int, int]] = {}
+    for position, page in enumerate(pages):
+        for primitive in page.text_primitives:
+            value = _as_number(primitive.text)
+            if value is not None:
+                per_slot.setdefault(slot_of(primitive, page), {})[position] = value
+
+    minimum = len(pages) * share
+    chosen: set[Slot] = set()
+    merged: dict[int, int] = {}
+    for slot, values in per_slot.items():
+        if len(values) < minimum or not _rising(values):
+            continue
+        # Gli slot si fondono invece di competere: un numero a lati alterni vive
+        # in due slot che sono la stessa cosa, e ogni slot ne porta meta'.
+        #
+        # Ma due slot che rivendicano la **stessa** pagina con valori diversi non
+        # sono un numero alternato: sono due colonne, e qui non c'e' modo di
+        # sapere quale sia la pagina. Rifiutare e' l'unica risposta onesta.
+        if any(merged.get(k, v) != v for k, v in values.items()):
+            return DeducedNumbers(frozenset(), {})
+        merged.update(values)
+        chosen.add(slot)
+    if not chosen or not _rising(merged):
+        return DeducedNumbers(frozenset(), {})
+    return DeducedNumbers(
+        frozenset(chosen), {k: str(v) for k, v in merged.items()}
+    )
+
+
 def furniture_slots(
     pages: Sequence[tuple[NormalizedPrimitivePage, str]],
     measurements: DocumentTextRecurrenceMeasurements,
     *,
     share: float = RECURRENCE_SHARE,
     band: float = EDGE_BAND,
+    deduce: bool = True,
 ) -> FurnitureSlots:
-    """I due rami insieme, tenuti distinti."""
+    """I tre rami insieme, tenuti distinti.
+
+    Il ramo 3 scatta **solo** se nessuna pagina porta un'etichetta dichiarata.
+    `deduce=False` lo spegne, e serve a misurare che cosa aggiunge.
+    """
+
+    declared = [(page, label) for page, label in pages]
+    from_sequence: frozenset[Slot] = frozenset()
+    if deduce and not any(label.strip() for _, label in declared):
+        from_sequence = deduced_number_slots(
+            [page for page, _ in declared], share=share
+        ).slots
 
     return FurnitureSlots(
         from_label=label_slots(pages, share=share),
         from_recurrence=recurrent_edge_slots(measurements, share=share, band=band),
+        from_sequence=from_sequence,
     )
 
 
