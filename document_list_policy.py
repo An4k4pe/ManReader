@@ -226,3 +226,65 @@ def list_item_flags(
         run.append(entry)
     close()
     return flags
+
+
+# Un intero di una o due cifre, un separatore e uno spazio. Le due cifre bastano:
+# un elenco con piu' di 99 voci non e' un elenco, e tre cifre aprirebbero la
+# porta agli anni e ai valori di scheda.
+_NUMBERED = re.compile(r"^(\d{1,2})([.)\]])\s")
+
+
+def split_number(text: str) -> tuple[str, str] | None:
+    """(numero, resto) se la riga apre una voce numerata, altrimenti ``None``."""
+
+    stripped = text.lstrip()
+    match = _NUMBERED.match(stripped)
+    if match is None:
+        return None
+    return match.group(1), stripped[match.end() :].lstrip()
+
+
+def numbered_item_flags(lines: Sequence[tuple[str, str]]) -> list[bool]:
+    """Quali righe sono voci di un elenco **numerato**.
+
+    `Criterio_ElencoNumerato_v1.md` §1. Il segnale sono gli **interi
+    consecutivi**, e non e' una soglia: `1, 2, 3` non capita per caso, e non c'e'
+    niente da tarare.
+
+    Il vincolo di blocco viene dalla misura, non dal gusto. Sui 16 manuali le
+    righe che aprono con un numero sono 36 in tutto, e la maggior parte **non e'
+    un elenco**: su DIE `8. BESTIARIO` e' una testatina ripetuta su nove pagine, e
+    `1. ASPETTO` / `2. …` / `3. ECHI` sono titoli di sezione in blocchi `b0005`,
+    `b0009`, `b0012`. Senza il vincolo diventerebbero voci; con il vincolo cadono
+    da soli, perche' la testatina ripete lo **stesso** numero e i titoli stanno in
+    blocchi lontani.
+
+    La pagina non compare qui perche' il chiamante lavora gia' per pagina.
+    """
+
+    candidates: list[tuple[int, int, int]] = []
+    for position, (block, text) in enumerate(lines):
+        parsed = split_number(text)
+        number = _block_number(block)
+        if parsed is None or number is None:
+            continue
+        candidates.append((number, position, int(parsed[0])))
+    candidates.sort()
+
+    flags = [False] * len(lines)
+    run: list[tuple[int, int, int]] = []
+
+    def close() -> None:
+        if len(run) >= 2:
+            for _block, position, _value in run:
+                flags[position] = True
+        run.clear()
+
+    for entry in candidates:
+        if run:
+            previous = run[-1]
+            if not (entry[2] == previous[2] + 1 and entry[0] in (previous[0], previous[0] + 1)):
+                close()
+        run.append(entry)
+    close()
+    return flags

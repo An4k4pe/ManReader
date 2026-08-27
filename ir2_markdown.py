@@ -28,11 +28,12 @@ would risk inventing it.
 
 from __future__ import annotations
 
-from document_list_policy import strip_marker
+from document_list_policy import split_number, strip_marker
 from ir2_model import (
     KIND_ASSET_NOTE,
     KIND_TABLE,
     KIND_TEXT_LIST_ITEM,
+    KIND_TEXT_LIST_ITEM_ORDERED,
     KIND_TEXT_PARAGRAPH,
     AssetRefIR2,
     DocumentIR2,
@@ -264,9 +265,27 @@ def render_list_item(node: NodeIR2, markers: frozenset[str]) -> str:
     return f"- {render_runs(stripped_node)}"
 
 
+def render_ordered_item(node: NodeIR2) -> str:
+    """Una voce numerata, col **suo** numero e non uno rinumerato da 1.
+
+    `Criterio_ElencoNumerato_v1.md` §2: un elenco che continua da una pagina
+    prima e comincia da `4.`, riscritto `1.`, direbbe una cosa falsa. Markdown
+    accetta il numero di partenza.
+    """
+
+    rendered = render_runs(node)
+    parsed = split_number(rendered)
+    if parsed is None:
+        return rendered
+    number, body = parsed
+    return f"{number}. {body}" if body.strip() else ""
+
+
 def render_node(node: NodeIR2, markers: frozenset[str] = frozenset()) -> str:
     """Render one node. Unknown kinds are not guessed at."""
 
+    if node.kind == KIND_TEXT_LIST_ITEM_ORDERED:
+        return render_ordered_item(node)
     if node.kind == KIND_TEXT_LIST_ITEM:
         return render_list_item(node, markers)
     if node.kind == KIND_TEXT_PARAGRAPH:
@@ -381,6 +400,8 @@ def render_page_markdown(
         if not rendered:
             continue
         marker = marker_of(node) if node.kind == KIND_TEXT_LIST_ITEM else None
+        if node.kind == KIND_TEXT_LIST_ITEM_ORDERED:
+            marker = "#numerato"
         # **Un marcatore diverso e' un elenco diverso.** Su FWK `•` apre le voci
         # che ne introducono altre e `*` le voci vere: unirle tutte darebbe un
         # elenco solo di otto voci dove il manuale ne ha tre. L'annidamento resta

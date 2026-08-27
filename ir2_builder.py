@@ -39,12 +39,17 @@ from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from document_list_policy import list_item_flags, opens_a_list_item  # noqa: I001
+from document_list_policy import (  # noqa: I001
+    list_item_flags,
+    numbered_item_flags,
+    opens_a_list_item,
+)
 from geometry_model import BBox
 from ir2_model import (
     KIND_ASSET_NOTE,
     KIND_TABLE,
     KIND_TEXT_LIST_ITEM,
+    KIND_TEXT_LIST_ITEM_ORDERED,
     KIND_TEXT_PARAGRAPH,
     AssetRefIR2,
     CellIR2,
@@ -683,7 +688,7 @@ def build_page_ir2(
 
     remaining = [p for p in ordered_text_primitives if p.primitive_id not in consumed_ids]
     paragraphs: list[
-        tuple[str, tuple[TextPrimitive, ...], tuple[TextRunIR2, ...], bool]
+        tuple[str, tuple[TextPrimitive, ...], tuple[TextRunIR2, ...], bool, bool]
     ] = []
     pending_text = ""
     pending_primitives: list[TextPrimitive] = []
@@ -694,10 +699,13 @@ def build_page_ir2(
     page_body_font = body_font(ordered_text_primitives)
 
     bound_lines = bind_marker_glyphs(group_source_lines(remaining), list_markers)
-    item_flags = list_item_flags(
-        [(line.block, line.text) for line in bound_lines], list_markers, scale_signatures
-    )
+    keyed = [(line.block, line.text) for line in bound_lines]
+    item_flags = list_item_flags(keyed, list_markers, scale_signatures)
+    # Le voci numerate hanno un segnale proprio -- gli interi consecutivi -- e non
+    # passano dai marcatori, che sono caratteri non alfanumerici.
+    ordered_flags = numbered_item_flags(keyed)
     pending_is_item = False
+    pending_is_ordered = False
 
     for position, source_line in enumerate(bound_lines):
         if previous_line is None:
@@ -705,6 +713,7 @@ def build_page_ir2(
             pending_primitives = list(source_line.primitives)
             pending_runs = runs_for_line(source_line)
             pending_is_item = item_flags[position]
+            pending_is_ordered = ordered_flags[position]
             previous_line = source_line
             continue
         if breaks_paragraph(
@@ -712,7 +721,7 @@ def build_page_ir2(
             source_line,
             page_body_font,
             list_markers,
-            item_flags[position],
+            item_flags[position] or ordered_flags[position],
         ):
             paragraphs.append(
                 (
@@ -720,9 +729,11 @@ def build_page_ir2(
                     tuple(pending_primitives),
                     _strip_runs(pending_runs),
                     pending_is_item,
+                    pending_is_ordered,
                 )
             )
             pending_is_item = item_flags[position]
+            pending_is_ordered = ordered_flags[position]
             pending_text = source_line.text
             pending_primitives = list(source_line.primitives)
             pending_runs = runs_for_line(source_line)
@@ -738,6 +749,7 @@ def build_page_ir2(
                 tuple(pending_primitives),
                 _strip_runs(pending_runs),
                 pending_is_item,
+                pending_is_ordered,
             )
         )
 
@@ -757,7 +769,7 @@ def build_page_ir2(
         for index, primitive in enumerate(ordered_text_primitives)
     }
     paragraph_of_original_index: dict[int, int] = {}
-    for paragraph_index, (_text, primitives, _runs, _item) in enumerate(paragraphs):
+    for paragraph_index, (_text, primitives, _runs, _item, _ord) in enumerate(paragraphs):
         for primitive in primitives:
             original = index_of_primitive.get(primitive.primitive_id)
             if original is not None:
@@ -791,7 +803,7 @@ def build_page_ir2(
     nodes: list[NodeIR2] = []
     for order, (kind, payload) in enumerate(items):
         if kind == "text":
-            text, primitives, runs, is_list_item = payload  # type: ignore[misc]
+            text, primitives, runs, is_list_item, is_ordered = payload  # type: ignore[misc]
             first = primitives[0]
             # L'identita' viene dal PRIMO PRIMITIVO, non dalla riga. Una riga di
             # sorgente puo' comparire piu' volte nell'ordine di lettura quando
@@ -807,7 +819,11 @@ def build_page_ir2(
                     node_id=f"{page_id}:{suffix}",
                     order=order,
                     kind=(
-                        KIND_TEXT_LIST_ITEM if is_list_item else KIND_TEXT_PARAGRAPH
+                        KIND_TEXT_LIST_ITEM_ORDERED
+                        if is_ordered
+                        else KIND_TEXT_LIST_ITEM
+                        if is_list_item
+                        else KIND_TEXT_PARAGRAPH
                     ),
                     primitive_ids=_with_redraws(
                         tuple(item.primitive_id for item in primitives), redraw_ids

@@ -60,6 +60,11 @@ KIND_TEXT_PARAGRAPH = "text.paragraph"
 # resa e' diversa e il vocabolario di IR 2 dichiara i generi, non li deduce.
 # `Criterio_Elenchi_v1.md`.
 KIND_TEXT_LIST_ITEM = "text.list_item"
+# Una voce di elenco **numerato**. Kind suo perche' la resa e' diversa e il
+# numero va conservato: `Criterio_ElencoNumerato_v1.md` §2 vieta di rinumerare
+# da 1, perche' un elenco che continua da una pagina prima e comincia da `4.`
+# riscritto `1.` direbbe una cosa falsa.
+KIND_TEXT_LIST_ITEM_ORDERED = "text.list_item_ordered"
 KIND_ASSET_NOTE = "asset.note"
 KIND_TABLE = "layout.table"
 # Nel vocabolario, NON in emissione in v0:
