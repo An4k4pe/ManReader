@@ -47,13 +47,34 @@ consecutivi**.
 
 > - **Scala di valori** — un blocco con due o più caratteri **distinti**,
 >   ciascuno **una volta sola**, e la stessa tupla ordinata ricorre in **almeno un
->   altro blocco** del documento. Si guarda **per prima**.
+>   altro blocco** del documento. Si guarda **per prima**, e un carattere che è
+>   gradino di una scala **non è un marcatore in tutto il documento**.
 > - **Elenco** — una corsa di **due o più** righe con lo **stesso** carattere.
 > - **Né l'uno né l'altro** — tutto il resto, e in particolare una corsa di **una
 >   riga sola**.
 >
 > Solo il secondo caso produce un elenco. Negli altri due il glifo **resta nel
 > testo** e le righe restano paragrafi.
+
+### Perché il gradino esce da tutto il documento, non solo dal suo blocco
+
+**Emendamento scritto durante l'implementazione e prima del giudizio**, e va
+dichiarato invece che infilato. La prima stesura toglieva i glifi di scala **solo
+nei blocchi dove la scala compare per intero**. Non basta, misurato: su DrM una
+pagina di minion ha **sei blocchi consecutivi con un solo `!` ciascuno** — il
+tier `≤11` di sei creature diverse. Ognuno è una firma `('!',)`, che non è una
+scala; ma sono blocchi consecutivi con lo stesso carattere, quindi la regola
+delle corse ne farebbe **un elenco di sei voci**. È esattamente la voce 09 del
+giudizio precedente, dove `2 damage` compare due volte senza che si capisca di
+chi sia.
+
+Se un carattere è gradino di una scala **da qualche parte** nel documento, in
+quel documento porta valore, e non lo si promuove a pallino altrove.
+
+Nota che la regola delle corse **da sola** già copre il caso della scheda intera:
+`!`, `@`, `#` sono caratteri diversi, non fanno corsa fra loro, e tre corse di una
+riga non sono elenchi. La firma serve al caso del minion, non a quello che l'ha
+suggerita.
 
 ### Perché la corsa e non il blocco, e come l'ho scoperto
 

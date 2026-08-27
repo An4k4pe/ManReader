@@ -58,8 +58,11 @@ from document_furniture_policy import (  # noqa: E402
     furniture_node_ids,
     furniture_slots,
 )
-from document_line_start_measurements import measure_document_line_starts  # noqa: E402
-from document_list_policy import list_markers  # noqa: E402
+from document_line_start_measurements import (  # noqa: E402
+    count_block_signatures,
+    measure_document_line_starts,
+)
+from document_list_policy import list_markers, value_scale_signatures  # noqa: E402
 from document_text_recurrence_measurements import (  # noqa: E402
     measure_document_text_recurrence,
 )
@@ -168,6 +171,10 @@ def document_furniture_slots(document: fitz.Document, *, sample: int):
     # document-level come l'arredo, e ricatturare le pagine due volte
     # raddoppierebbe il costo del giro per niente.
     markers = list_markers(measure_document_line_starts(captured))
+    # Le firme di blocco escono dalla stessa scansione: dire quali sequenze
+    # di glifi siano una scala di valori richiede di aver visto piu' blocchi,
+    # ed e' un fatto document-level come l'arredo e i marcatori.
+    scales = value_scale_signatures(count_block_signatures(captured, markers))
 
     # I numeri **dedotti** per indice di pagina, dove il documento non dichiara
     # niente. Servono alla provenienza, non alla rimozione: la rimozione la fa
@@ -181,7 +188,7 @@ def document_furniture_slots(document: fitz.Document, *, sample: int):
             for position, value in found.by_page_position.items()
             if position < len(indices)
         }
-    return slots, deduced, markers
+    return slots, deduced, markers, scales
 
 
 def review_lines_for(
@@ -411,9 +418,10 @@ def run(
         furniture_slots_found = None
         deduced_labels: dict[int, str] = {}
         markers: frozenset[str] = frozenset()
+        scales: frozenset[tuple[str, ...]] = frozenset()
         if remove_furniture or render_lists:
-            found_slots, deduced_labels, found_markers = document_furniture_slots(
-                document, sample=furniture_sample
+            found_slots, deduced_labels, found_markers, found_scales = (
+                document_furniture_slots(document, sample=furniture_sample)
             )
             if remove_furniture:
                 furniture_slots_found = found_slots
@@ -421,9 +429,12 @@ def run(
                 deduced_labels = {}
             if render_lists:
                 markers = found_markers
+                scales = found_scales
                 print(
                     "elenchi: marcatori "
-                    + (", ".join(f"{m!r} U+{ord(m):04X}" for m in sorted(markers)) or "nessuno"),
+                    + (", ".join(f"{m!r} U+{ord(m):04X}" for m in sorted(markers)) or "nessuno")
+                    + " — scale di valori: "
+                    + (", ".join(repr("".join(f)) for f in sorted(scales)) or "nessuna"),
                     file=sys.stderr,
                 )
 

@@ -34,7 +34,9 @@ che restituisce posizioni e non tocca le primitive.
 
 from __future__ import annotations
 
+import re
 import unicodedata
+from collections.abc import Sequence
 
 from document_line_start_measurements import LineStartMeasurements
 
@@ -114,3 +116,113 @@ def strip_marker(text: str, markers: frozenset[str]) -> str:
     while stripped and stripped[0] in markers:
         stripped = stripped[1:].lstrip()
     return stripped
+
+
+_BLOCK_NUMBER = re.compile(r"^b(\d+)$")
+
+
+def value_scale_signatures(
+    counted: dict[tuple[str, ...], int],
+) -> frozenset[tuple[str, ...]]:
+    """Le firme di blocco che sono una **scala di valori**, non un elenco.
+
+    `Criterio_ScalaDiValori_v1.md` §1. Tre condizioni, nessuna tarata:
+
+    - **due o piu' caratteri distinti** -- un elenco usa un carattere solo;
+    - **ciascuno una volta sola** -- una scala non ripete i suoi gradini, ed e'
+      cio' che salva l'annidamento di FWK, dove i caratteri sono due (`•` e `*`)
+      ma `*` si ripete;
+    - **la firma ricorre in almeno un altro blocco** -- una scala e' una
+      convenzione del documento, non un caso di un blocco.
+
+    Misurato: su DrM `!@#` compare in 43 blocchi, tre glifi distinti senza
+    ripetizioni, e sono i tre esiti di un tiro (`≤11`, `12-16`, `17+`).
+    """
+
+    return frozenset(
+        signature
+        for signature, count in counted.items()
+        if len(set(signature)) >= 2 and len(signature) == len(set(signature)) and count >= 2
+    )
+
+
+def _block_number(block: str) -> int | None:
+    match = _BLOCK_NUMBER.match(block)
+    return int(match.group(1)) if match else None
+
+
+def list_item_flags(
+    lines: Sequence[tuple[str, str]],
+    markers: frozenset[str],
+    scales: frozenset[tuple[str, ...]] = frozenset(),
+) -> list[bool]:
+    """Quali righe sono voci d'elenco. `lines` e' (blocco, testo) in ordine sorgente.
+
+    **L'unita' e' la corsa**, non il blocco: una sequenza massimale di righe con
+    lo **stesso** marcatore che stanno nello stesso blocco o in blocchi
+    **consecutivi**. Una corsa di due o piu' e' un elenco; una corsa di una riga
+    sola non lo e'.
+
+    Perche' la corsa e non il blocco, misurato su DB e scritto nel criterio: DB
+    ha 312 blocchi che portano `✦`, **uno per blocco**, quindi «due righe nello
+    stesso blocco» avrebbe dichiarato che DB non ha nessun elenco -- ed e'
+    esattamente la condizione che ha fatto cadere `Criterio_Elenchi_v1.md`.
+
+    A idx 60 un elenco vero e' cinque `✦` in blocchi consecutivi (b0015..b0019);
+    a idx 13 le righe di costo stanno in b0001 e b0003, con b0002 in mezzo che
+    **non porta marcatore**, e la catena si spezza. Non si contano le righe fra
+    due marcatori: sarebbe una soglia, e la catena risponde senza sceglierla.
+
+    I blocchi la cui firma e' una **scala** escono prima di tutto: li' il glifo
+    porta un valore, e nessuna corsa lo puo' promuovere a voce.
+    """
+
+    # **Un carattere che e' gradino di una scala non e' un marcatore in questo
+    # documento**, e non solo nei blocchi dove la scala compare per intero.
+    # Misurato: su DrM una pagina di minion ha sei blocchi consecutivi con un
+    # solo `!` ciascuno -- il tier `≤11` di sei creature diverse. Per la regola
+    # delle corse sarebbero una corsa di sei, cioe' un elenco di danni scollegati
+    # dove `2 damage` compare due volte senza che si capisca di chi sia.
+    # Escludere il carattere a livello di documento e' cio' che lo impedisce.
+    graduated = {character for signature in scales for character in signature}
+    markers = markers - graduated
+
+    by_block: dict[str, list[str]] = {}
+    for block, text in lines:
+        stripped = text.strip()
+        if stripped and stripped[0] in markers:
+            by_block.setdefault(block, []).append(stripped[0])
+    scale_blocks = {
+        block for block, opening in by_block.items() if tuple(opening) in scales
+    }
+
+    candidates: list[tuple[int, int, str]] = []
+    for position, (block, text) in enumerate(lines):
+        stripped = text.strip()
+        if not stripped or stripped[0] not in markers or block in scale_blocks:
+            continue
+        number = _block_number(block)
+        if number is None:
+            continue
+        candidates.append((number, position, stripped[0]))
+    candidates.sort()
+
+    flags = [False] * len(lines)
+    run: list[tuple[int, int, str]] = []
+
+    def close() -> None:
+        if len(run) >= 2:
+            for _number, position, _marker in run:
+                flags[position] = True
+        run.clear()
+
+    for entry in candidates:
+        if run:
+            previous = run[-1]
+            same_marker = entry[2] == previous[2]
+            adjacent = entry[0] in (previous[0], previous[0] + 1)
+            if not (same_marker and adjacent):
+                close()
+        run.append(entry)
+    close()
+    return flags

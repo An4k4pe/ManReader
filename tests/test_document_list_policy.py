@@ -13,7 +13,7 @@ from document_line_start_measurements import (
     LineStartMeasurements,
     measure_document_line_starts,
 )
-from document_list_policy import list_markers, strip_marker
+from document_list_policy import list_item_flags, list_markers, strip_marker
 from geometry_model import PageGeometry
 from ir2_builder import _SourceLine, bind_marker_glyphs
 from primitive_model import NormalizedPrimitivePage, TextPrimitive
@@ -114,13 +114,29 @@ class MeasurementContractTest(unittest.TestCase):
 class BindMarkerGlyphsTest(unittest.TestCase):
     """Il glifo d'elenco riattaccato al testo della sua voce."""
 
-    def _line(self, block: str, line: str, text: str) -> _SourceLine:
-        return _SourceLine(block=block, line=line, text=text, primitives=())
+    def _line(
+        self, block: str, line: str, text: str, x: float = 0.0, y: float = 0.0
+    ) -> _SourceLine:
+        """Una riga sorgente con geometria vera.
+
+        Serve davvero: il legame glifo-testo chiede che i due si sovrappongano in
+        verticale, e senza bbox la regola non ha niente da guardare. Le y qui
+        sono quelle misurate su FW p.168 -- il glifo a 499,2-515,2 e il suo testo
+        a 499,2-519,7.
+        """
+
+        primitive = TextPrimitive(
+            primitive_id=f"primitive:{block}:{line}",
+            bbox=(x, y, x + 40.0, y + 16.0),
+            text=text,
+            source_observation_id=f"text:{block}:{line}:s0000",
+        )
+        return _SourceLine(block=block, line=line, text=text, primitives=(primitive,))
 
     def test_a_lone_glyph_takes_the_next_line_of_its_own_block(self) -> None:
         lines = [
-            self._line("b0011", "l0000", "•\t"),
-            self._line("b0011", "l0001", "Afflizione"),
+            self._line("b0011", "l0000", "•\t", x=57.7, y=499.2),
+            self._line("b0011", "l0001", "Afflizione", x=72.7, y=499.2),
         ]
         bound = bind_marker_glyphs(lines, frozenset("•"))
         self.assertEqual([line.text for line in bound], ["•\tAfflizione"])
@@ -130,10 +146,10 @@ class BindMarkerGlyphsTest(unittest.TestCase):
         # glifo della seconda colonna fra il glifo della prima e il suo testo, e
         # senza il blocco il glifo di sinistra si prendeva il testo di destra.
         lines = [
-            self._line("b0011", "l0000", "•\t"),
-            self._line("b0012", "l0000", "•\t"),
-            self._line("b0011", "l0001", "Afflizione"),
-            self._line("b0012", "l0001", "Bruti"),
+            self._line("b0011", "l0000", "•\t", x=57.7, y=499.2),
+            self._line("b0012", "l0000", "•\t", x=213.6, y=499.2),
+            self._line("b0011", "l0001", "Afflizione", x=72.7, y=499.2),
+            self._line("b0012", "l0001", "Bruti", x=228.6, y=499.2),
         ]
         bound = bind_marker_glyphs(lines, frozenset("•"))
         self.assertEqual([line.text for line in bound], ["•\tAfflizione", "•\tBruti"])
@@ -141,13 +157,83 @@ class BindMarkerGlyphsTest(unittest.TestCase):
     def test_a_glyph_without_a_partner_is_left_alone(self) -> None:
         # Inventargli un compagno sarebbe la fusione di righe distinte che questo
         # builder ha gia' corretto tre volte.
-        lines = [self._line("b0011", "l0000", "•"), self._line("b0022", "l0000", "Prosa")]
+        lines = [
+            self._line("b0011", "l0000", "•", y=499.2),
+            self._line("b0022", "l0000", "Prosa", y=499.2),
+        ]
         bound = bind_marker_glyphs(lines, frozenset("•"))
         self.assertEqual([line.text for line in bound], ["•", "Prosa"])
 
     def test_without_markers_nothing_moves(self) -> None:
-        lines = [self._line("b0011", "l0000", "•"), self._line("b0011", "l0001", "X")]
+        lines = [
+            self._line("b0011", "l0000", "•", y=499.2),
+            self._line("b0011", "l0001", "X", y=499.2),
+        ]
         self.assertEqual(bind_marker_glyphs(lines, frozenset()), lines)
+
+
+    def test_a_partner_on_another_visual_line_is_not_taken(self) -> None:
+        # DB: il glifo sta su una riga sua e la riga successiva dello stesso
+        # blocco e' la CONTINUAZIONE della voce precedente, non il testo della
+        # propria. Senza il vincolo verticale usciva `✦nel tempo.` come voce.
+        lines = [
+            self._line("b0016", "l0000", "✦", y=300.0),
+            self._line("b0016", "l0001", "nel tempo.", y=284.0),
+        ]
+        bound = bind_marker_glyphs(lines, frozenset("✦"))
+        self.assertEqual([line.text for line in bound], ["✦", "nel tempo."])
+
+
+class ListItemFlagsTest(unittest.TestCase):
+    """`Criterio_ScalaDiValori_v1.md` §1: l'unita' e' la corsa, non il blocco."""
+
+    def test_a_run_across_consecutive_blocks_is_a_list(self) -> None:
+        # DB idx 60: cinque `✦` in blocchi consecutivi, uno per blocco.
+        lines = [(f"b{15 + i:04d}", f"✦Voce {i}") for i in range(5)]
+        self.assertEqual(list_item_flags(lines, frozenset("✦")), [True] * 5)
+
+    def test_a_gap_of_an_unmarked_block_breaks_the_run(self) -> None:
+        # DB idx 13: le righe di costo stanno in b0001 e b0003, con b0002 in
+        # mezzo che non porta marcatore. Una corsa di una riga non e' un elenco.
+        lines = [
+            ("b0001", "✦Punti Volontà: 3"),
+            ("b0001", "Prosa che descrive la capacità"),
+            ("b0002", "CAPACITÀ: SCONTROSO"),
+            ("b0003", "✦Punti Volontà: —"),
+        ]
+        self.assertEqual(list_item_flags(lines, frozenset("✦")), [False] * 4)
+
+    def test_a_run_inside_one_block_is_a_list(self) -> None:
+        lines = [("b0007", f"*\t Voce {i}") for i in range(4)]
+        self.assertEqual(list_item_flags(lines, frozenset("*")), [True] * 4)
+
+    def test_a_scale_block_never_produces_items(self) -> None:
+        # DrM: `!@#` sono i tre esiti di un tiro, e il glifo E' il valore.
+        lines = [
+            ("b0004", "!\t 5 fire damage"),
+            ("b0004", "@\t 9 fire damage"),
+            ("b0004", "#\t 11 fire damage"),
+        ]
+        markers = frozenset("!@#")
+        # Gia' senza la firma: marcatori diversi non fanno corsa, e tre corse di
+        # una riga non sono elenchi.
+        self.assertEqual(list_item_flags(lines, markers), [False, False, False])
+        self.assertEqual(
+            list_item_flags(lines, markers, frozenset({("!", "@", "#")})),
+            [False, False, False],
+        )
+
+    def test_a_graduated_character_is_not_a_marker_anywhere(self) -> None:
+        # DrM, pagina di minion: sei blocchi consecutivi con un solo `!`
+        # ciascuno, il tier `≤11` di sei creature diverse. Per la sola regola
+        # delle corse sarebbero un elenco di sei voci.
+        lines = [(f"b{10 + i:04d}", "!\t 2 damage") for i in range(6)]
+        markers = frozenset("!@#")
+        self.assertEqual(list_item_flags(lines, markers), [True] * 6)
+        self.assertEqual(
+            list_item_flags(lines, markers, frozenset({("!", "@", "#")})),
+            [False] * 6,
+        )
 
 
 if __name__ == "__main__":

@@ -39,7 +39,7 @@ from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from document_list_policy import opens_a_list_item  # noqa: I001
+from document_list_policy import list_item_flags, opens_a_list_item  # noqa: I001
 from geometry_model import BBox
 from ir2_model import (
     KIND_ASSET_NOTE,
@@ -164,6 +164,24 @@ def group_source_lines(ordered: Sequence[TextPrimitive]) -> list[_SourceLine]:
     return lines
 
 
+def _shares_a_visual_line(glyph: _SourceLine, other: _SourceLine) -> bool:
+    """Le due righe si sovrappongono in verticale.
+
+    Il confronto e' fra le **estensioni verticali**: un glifo e il testo della sua
+    voce stanno alla stessa altezza -- misurato su FW, glifo y=499,2-515,2 e
+    `Afflizione` y=499,2-519,7 -- mentre una riga sotto non si sovrappone. Non c'e'
+    tolleranza da scegliere: o le due fasce si intersecano o no.
+    """
+
+    if not glyph.primitives or not other.primitives:
+        return False
+    top = max(p.bbox[1] for p in glyph.primitives)
+    bottom = min(p.bbox[3] for p in glyph.primitives)
+    other_top = max(p.bbox[1] for p in other.primitives)
+    other_bottom = min(p.bbox[3] for p in other.primitives)
+    return min(bottom, other_bottom) > max(top, other_top)
+
+
 def bind_marker_glyphs(
     lines: list[_SourceLine], markers: frozenset[str]
 ) -> list[_SourceLine]:
@@ -188,6 +206,13 @@ def bind_marker_glyphs(
     Cerca **in avanti**, non solo la riga adiacente: fra il glifo e il suo testo
     l'ordine di lettura puo' aver infilato righe di un altro blocco.
 
+    **E il compagno deve stare sulla stessa riga visiva del glifo.** Il blocco da
+    solo non basta, misurato su DB: li' il glifo sta su una riga sua e la riga
+    successiva dello stesso blocco e' la **continuazione della voce precedente**
+    -- `nel tempo.` -- non il testo della propria. Senza il vincolo verticale
+    usciva `✦nel tempo.` come voce, e il vero testo della voce restava un
+    paragrafo senza glifo.
+
     Un glifo che non trova il suo testo resta com'e': inventargli un compagno
     sarebbe la fusione di righe distinte che questo builder ha gia' corretto tre
     volte.
@@ -207,7 +232,9 @@ def bind_marker_glyphs(
             (
                 other
                 for other in remaining
-                if other.block == line.block and other.text.strip()
+                if other.block == line.block
+                and other.text.strip()
+                and _shares_a_visual_line(line, other)
             ),
             None,
         )
@@ -318,6 +345,7 @@ def breaks_paragraph(
     following: _SourceLine,
     page_body_font: str | None,
     list_markers: frozenset[str] = frozenset(),
+    following_is_list_item: bool | None = None,
 ) -> bool:
     """Decide whether a paragraph breaks between two consecutive source lines.
 
@@ -359,13 +387,19 @@ def breaks_paragraph(
     # volte su 41. Senza questa riga usciva `- ` vuoto e il testo finiva in un
     # paragrafo a parte, cioe' l'elenco peggiorava la pagina invece di
     # migliorarla.
-    if (
-        previous.text.strip()
-        and previous.text.strip() in list_markers
-        and not opens_a_list_item(following.text, list_markers)
-    ):
+    # `following_is_list_item` viene dalla politica delle corse, che sa cose che
+    # questa riga da sola non puo' sapere: se il suo blocco e' una scala di
+    # valori, e se la corsa a cui appartiene e' lunga abbastanza da essere un
+    # elenco. Senza, si ricade sul solo carattere iniziale -- che e' cio' che
+    # `Esito_Elenchi_v1.md` ha visto cadere 9 volte su 14.
+    opens_item = (
+        opens_a_list_item(following.text, list_markers)
+        if following_is_list_item is None
+        else following_is_list_item
+    )
+    if previous.text.strip() and previous.text.strip() in list_markers and not opens_item:
         return False
-    if opens_a_list_item(following.text, list_markers):
+    if opens_item:
         return True
     if previous.block == following.block:
         return False
@@ -600,6 +634,7 @@ def build_page_ir2(
     page_label: str | None = None,
     page_label_deduced: bool = False,
     list_markers: frozenset[str] = frozenset(),
+    scale_signatures: frozenset[tuple[str, ...]] = frozenset(),
 ) -> PageIR2:
     """Build one IR 2 page. Reading order is the caller's; this only groups."""
 
@@ -658,22 +693,36 @@ def build_page_ir2(
     # le celle di una tabella non deve poter cambiare quale font e' il corpo.
     page_body_font = body_font(ordered_text_primitives)
 
-    for source_line in bind_marker_glyphs(group_source_lines(remaining), list_markers):
+    bound_lines = bind_marker_glyphs(group_source_lines(remaining), list_markers)
+    item_flags = list_item_flags(
+        [(line.block, line.text) for line in bound_lines], list_markers, scale_signatures
+    )
+    pending_is_item = False
+
+    for position, source_line in enumerate(bound_lines):
         if previous_line is None:
             pending_text = source_line.text
             pending_primitives = list(source_line.primitives)
             pending_runs = runs_for_line(source_line)
+            pending_is_item = item_flags[position]
             previous_line = source_line
             continue
-        if breaks_paragraph(previous_line, source_line, page_body_font, list_markers):
+        if breaks_paragraph(
+            previous_line,
+            source_line,
+            page_body_font,
+            list_markers,
+            item_flags[position],
+        ):
             paragraphs.append(
                 (
                     pending_text.strip(),
                     tuple(pending_primitives),
                     _strip_runs(pending_runs),
-                    opens_a_list_item(pending_text, list_markers),
+                    pending_is_item,
                 )
             )
+            pending_is_item = item_flags[position]
             pending_text = source_line.text
             pending_primitives = list(source_line.primitives)
             pending_runs = runs_for_line(source_line)
@@ -688,7 +737,7 @@ def build_page_ir2(
                 pending_text.strip(),
                 tuple(pending_primitives),
                 _strip_runs(pending_runs),
-                opens_a_list_item(pending_text, list_markers),
+                pending_is_item,
             )
         )
 

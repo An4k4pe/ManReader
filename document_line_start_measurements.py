@@ -161,3 +161,45 @@ def measure_document_line_starts(
         opens_with_text=dict(with_text),
         line_count=seen,
     )
+
+
+def block_marker_signature(
+    page: NormalizedPrimitivePage, markers: frozenset[str]
+) -> list[tuple[str, tuple[str, ...]]]:
+    """(blocco, firma) per ogni blocco che apre almeno una riga con un candidato.
+
+    La firma tiene l'**ordine** e le **ripetizioni**: ``('!', '@', '#')`` non e' la
+    stessa cosa di ``('*', '*', '*')``, ed e' esattamente la differenza fra una
+    scala di valori e un elenco (`Criterio_ScalaDiValori_v1.md` §1).
+    """
+
+    per_block: dict[str, dict[str, str]] = defaultdict(dict)
+    for primitive in page.text_primitives:
+        match = _OBSERVATION.match(primitive.source_observation_id or "")
+        if match is None:
+            continue
+        block, line = match.group(1), match.group(2)
+        per_block[block][line] = per_block[block].get(line, "") + primitive.text
+
+    signatures: list[tuple[str, tuple[str, ...]]] = []
+    for block, by_line in per_block.items():
+        opening = [
+            by_line[line].strip()[0]
+            for line in sorted(by_line)
+            if by_line[line].strip() and by_line[line].strip()[0] in markers
+        ]
+        if opening:
+            signatures.append((block, tuple(opening)))
+    return signatures
+
+
+def count_block_signatures(
+    pages: Sequence[NormalizedPrimitivePage], markers: frozenset[str]
+) -> dict[tuple[str, ...], int]:
+    """Quante volte ogni firma ricorre nel documento."""
+
+    counted: Counter[tuple[str, ...]] = Counter()
+    for page in pages:
+        for _block, signature in block_marker_signature(page, markers):
+            counted[signature] += 1
+    return dict(counted)
