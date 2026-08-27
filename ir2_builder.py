@@ -39,10 +39,12 @@ from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from document_list_policy import opens_a_list_item  # noqa: I001
 from geometry_model import BBox
 from ir2_model import (
     KIND_ASSET_NOTE,
     KIND_TABLE,
+    KIND_TEXT_LIST_ITEM,
     KIND_TEXT_PARAGRAPH,
     AssetRefIR2,
     CellIR2,
@@ -250,7 +252,10 @@ def body_font(primitives: Sequence[TextPrimitive]) -> str | None:
 
 
 def breaks_paragraph(
-    previous: _SourceLine, following: _SourceLine, page_body_font: str | None
+    previous: _SourceLine,
+    following: _SourceLine,
+    page_body_font: str | None,
+    list_markers: frozenset[str] = frozenset(),
 ) -> bool:
     """Decide whether a paragraph breaks between two consecutive source lines.
 
@@ -278,6 +283,28 @@ def breaks_paragraph(
     23).
     """
 
+    # Una voce d'elenco rompe SEMPRE, anche dentro lo stesso blocco: e' li' che
+    # le voci vivono, ed e' la ragione per cui uscivano schiacciate in un
+    # paragrafo solo. `Criterio_Elenchi_v1.md` §1.
+    #
+    # Rompe solo cio' che **apre** una voce, non cio' che la segue: una voce che
+    # va a capo continua sulla riga dopo senza marcatore, e romperla la
+    # taglierebbe in due. Il prezzo e' che l'ultima voce puo' assorbire la prosa
+    # che segue nello stesso blocco, ed e' il verso in cui questo builder ha gia'
+    # dichiarato di preferire di sbagliare.
+    # Una riga fatta del **solo** marcatore non e' una voce: e' il glifo, e il
+    # testo della voce e' la riga dopo. Misurato su FW, dove `•` sta da solo 41
+    # volte su 41. Senza questa riga usciva `- ` vuoto e il testo finiva in un
+    # paragrafo a parte, cioe' l'elenco peggiorava la pagina invece di
+    # migliorarla.
+    if (
+        previous.text.strip()
+        and previous.text.strip() in list_markers
+        and not opens_a_list_item(following.text, list_markers)
+    ):
+        return False
+    if opens_a_list_item(following.text, list_markers):
+        return True
     if previous.block == following.block:
         return False
     text = following.text.lstrip()
@@ -510,6 +537,7 @@ def build_page_ir2(
     table_regions: Sequence[TableRegionInput] = (),
     page_label: str | None = None,
     page_label_deduced: bool = False,
+    list_markers: frozenset[str] = frozenset(),
 ) -> PageIR2:
     """Build one IR 2 page. Reading order is the caller's; this only groups."""
 
@@ -557,7 +585,9 @@ def build_page_ir2(
         consumed_ids.update(owned)
 
     remaining = [p for p in ordered_text_primitives if p.primitive_id not in consumed_ids]
-    paragraphs: list[tuple[str, tuple[TextPrimitive, ...], tuple[TextRunIR2, ...]]] = []
+    paragraphs: list[
+        tuple[str, tuple[TextPrimitive, ...], tuple[TextRunIR2, ...], bool]
+    ] = []
     pending_text = ""
     pending_primitives: list[TextPrimitive] = []
     pending_runs: list[TextRunIR2] = []
@@ -573,9 +603,14 @@ def build_page_ir2(
             pending_runs = runs_for_line(source_line)
             previous_line = source_line
             continue
-        if breaks_paragraph(previous_line, source_line, page_body_font):
+        if breaks_paragraph(previous_line, source_line, page_body_font, list_markers):
             paragraphs.append(
-                (pending_text.strip(), tuple(pending_primitives), _strip_runs(pending_runs))
+                (
+                    pending_text.strip(),
+                    tuple(pending_primitives),
+                    _strip_runs(pending_runs),
+                    opens_a_list_item(pending_text, list_markers),
+                )
             )
             pending_text = source_line.text
             pending_primitives = list(source_line.primitives)
@@ -587,7 +622,12 @@ def build_page_ir2(
         previous_line = source_line
     if pending_primitives:
         paragraphs.append(
-            (pending_text.strip(), tuple(pending_primitives), _strip_runs(pending_runs))
+            (
+                pending_text.strip(),
+                tuple(pending_primitives),
+                _strip_runs(pending_runs),
+                opens_a_list_item(pending_text, list_markers),
+            )
         )
 
     # I paragrafi NON si riordinano: l'ordine ricevuto e' l'ordine di lettura, e
@@ -606,7 +646,7 @@ def build_page_ir2(
         for index, primitive in enumerate(ordered_text_primitives)
     }
     paragraph_of_original_index: dict[int, int] = {}
-    for paragraph_index, (_text, primitives, _runs) in enumerate(paragraphs):
+    for paragraph_index, (_text, primitives, _runs, _item) in enumerate(paragraphs):
         for primitive in primitives:
             original = index_of_primitive.get(primitive.primitive_id)
             if original is not None:
@@ -640,7 +680,7 @@ def build_page_ir2(
     nodes: list[NodeIR2] = []
     for order, (kind, payload) in enumerate(items):
         if kind == "text":
-            text, primitives, runs = payload  # type: ignore[misc]
+            text, primitives, runs, is_list_item = payload  # type: ignore[misc]
             first = primitives[0]
             # L'identita' viene dal PRIMO PRIMITIVO, non dalla riga. Una riga di
             # sorgente puo' comparire piu' volte nell'ordine di lettura quando
@@ -655,7 +695,9 @@ def build_page_ir2(
                 NodeIR2(
                     node_id=f"{page_id}:{suffix}",
                     order=order,
-                    kind=KIND_TEXT_PARAGRAPH,
+                    kind=(
+                        KIND_TEXT_LIST_ITEM if is_list_item else KIND_TEXT_PARAGRAPH
+                    ),
                     primitive_ids=_with_redraws(
                         tuple(item.primitive_id for item in primitives), redraw_ids
                     ),

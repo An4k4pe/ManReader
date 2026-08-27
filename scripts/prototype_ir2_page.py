@@ -58,6 +58,8 @@ from document_furniture_policy import (  # noqa: E402
     furniture_node_ids,
     furniture_slots,
 )
+from document_line_start_measurements import measure_document_line_starts  # noqa: E402
+from document_list_policy import list_markers  # noqa: E402
 from document_text_recurrence_measurements import (  # noqa: E402
     measure_document_text_recurrence,
 )
@@ -84,10 +86,25 @@ def _fail(message: str, code: int) -> None:
     raise SystemExit(code)
 
 
-def _normalised_sequence(text: str) -> str:
-    """Non-space characters, after the dehyphenation amendment, order preserved."""
+def _normalised_sequence(text: str, list_markers: frozenset[str] = frozenset()) -> str:
+    """Non-space characters, after the dehyphenation amendment, order preserved.
 
-    return "".join(_HYPHENATED_WORD_RE.sub("", text).split())
+    `list_markers` porta il **secondo** emendamento al confronto E-B,
+    `Criterio_Elenchi_v1.md` §5.E: i marcatori dichiarati per quel documento
+    escono da **entrambi i lati**. Senza, il confronto fallirebbe per
+    costruzione, perche' la resa a elenco sostituisce il marcatore con `- `.
+
+    E' la stessa forma dell'emendamento gia' a verbale per la deidratazione:
+    un trattino e' un carattere non-spazio e riunire una parola lo cambia
+    legittimamente. Togliere da entrambi i lati e' cio' che tiene onesto il
+    confronto -- se lo si togliesse da uno solo, il confronto misurerebbe
+    l'emendamento invece dell'ordine.
+    """
+
+    text = _HYPHENATED_WORD_RE.sub("", text)
+    if list_markers:
+        text = "".join(character for character in text if character not in list_markers)
+    return "".join(text.split())
 
 
 def _anchor_index(primitive: object, ordered: list) -> int:
@@ -144,8 +161,13 @@ def document_furniture_slots(document: fitz.Document, *, sample: int):
         pages.append(
             (normalize_backend_page_capture(capture), (page.get_label() or "").strip())
         )
-    measured = measure_document_text_recurrence([primitive for primitive, _ in pages])
+    captured = [primitive for primitive, _ in pages]
+    measured = measure_document_text_recurrence(captured)
     slots = furniture_slots(pages, measured)
+    # I marcatori d'elenco escono dalla STESSA scansione: sono un fatto
+    # document-level come l'arredo, e ricatturare le pagine due volte
+    # raddoppierebbe il costo del giro per niente.
+    markers = list_markers(measure_document_line_starts(captured))
 
     # I numeri **dedotti** per indice di pagina, dove il documento non dichiara
     # niente. Servono alla provenienza, non alla rimozione: la rimozione la fa
@@ -159,7 +181,7 @@ def document_furniture_slots(document: fitz.Document, *, sample: int):
             for position, value in found.by_page_position.items()
             if position < len(indices)
         }
-    return slots, deduced
+    return slots, deduced, markers
 
 
 def review_lines_for(
@@ -230,6 +252,7 @@ def run(
     interrupt_corridor: str = "",
     enable_tables: bool = False,
     remove_furniture: bool = False,
+    render_lists: bool = False,
     furniture_sample: int = 60,
 ) -> None:
     page_index = page_number - 1
@@ -382,12 +405,27 @@ def run(
         # numero stampato arriva da li', e il contratto vuole saperlo alla
         # costruzione. La rimozione invece potrebbe restare dopo -- sono due usi
         # separati dello stesso fatto, come dice `Criterio_NumeroDedotto_v1.md`.
+        # La scansione e' una sola e serve a due cose: arredo ed elenchi sono
+        # entrambi fatti document-level, e ricatturare le pagine due volte
+        # raddoppierebbe il costo per niente.
         furniture_slots_found = None
         deduced_labels: dict[int, str] = {}
-        if remove_furniture:
-            furniture_slots_found, deduced_labels = document_furniture_slots(
+        markers: frozenset[str] = frozenset()
+        if remove_furniture or render_lists:
+            found_slots, deduced_labels, found_markers = document_furniture_slots(
                 document, sample=furniture_sample
             )
+            if remove_furniture:
+                furniture_slots_found = found_slots
+            else:
+                deduced_labels = {}
+            if render_lists:
+                markers = found_markers
+                print(
+                    "elenchi: marcatori "
+                    + (", ".join(f"{m!r} U+{ord(m):04X}" for m in sorted(markers)) or "nessuno"),
+                    file=sys.stderr,
+                )
 
         page_label = (page.get_label() or "").strip() or None
         page_label_deduced = False
@@ -402,6 +440,7 @@ def run(
             table_regions=table_regions if enable_tables else (),
             page_label=page_label,
             page_label_deduced=page_label_deduced,
+            list_markers=markers,
         )
         validate_page_ir2_against_primitive_page(ir2_page, primitive_page)
 
@@ -446,7 +485,9 @@ def run(
                 file=sys.stderr,
             )
 
-        markdown = render_page_markdown(ir2_page, excluded_node_ids=excluded_node_ids)
+        markdown = render_page_markdown(
+            ir2_page, excluded_node_ids=excluded_node_ids, list_markers=markers
+        )
         (output_dir / "page_ir2.md").write_text(markdown, encoding="utf-8")
 
         # --- Canale review: cio' che NON entra nel corpo, e perche' ---
@@ -506,9 +547,9 @@ def run(
             if not base_path.is_file():
                 _fail(f"base non trovata: {base_path}", 3)
             base_sequence = _normalised_sequence(
-                _strip_asset_markers(base_path.read_text(encoding="utf-8"))
+                _strip_asset_markers(base_path.read_text(encoding="utf-8")), markers
             )
-            new_sequence = _normalised_sequence(_strip_ir2_notes(markdown))
+            new_sequence = _normalised_sequence(_strip_ir2_notes(markdown), markers)
             if base_sequence == new_sequence:
                 print(f"E-B: ordine IDENTICO alla base ({len(base_sequence)} caratteri)",
                       file=sys.stderr)
@@ -560,6 +601,16 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--elenchi",
+        action="store_true",
+        help=(
+            "riconosce gli elenchi col marcatore desunto dal manuale "
+            "(Criterio_Elenchi_v1.md). Spento di default come --arredo e per la "
+            "stessa ragione: il segnale e' document-level e le pagine si "
+            "ricatturano. La scansione e' condivisa con --arredo."
+        ),
+    )
+    parser.add_argument(
         "--arredo-pagine",
         type=int,
         default=60,
@@ -579,6 +630,7 @@ def main() -> None:
         args.base,
         interrupt_corridor=args.interrupt_corridor,
         remove_furniture=args.arredo,
+        render_lists=args.elenchi,
         furniture_sample=args.arredo_pagine,
         enable_tables=args.tables,
     )

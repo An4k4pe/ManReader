@@ -56,6 +56,10 @@ _KIND_PATTERN = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
 # validare: sta qui perche' un lettore sappia cosa il progetto intende emettere,
 # e quali kind sono gia' stati decisi ma non hanno ancora chi li riempie.
 KIND_TEXT_PARAGRAPH = "text.paragraph"
+# Una voce d'elenco. E' un kind suo e non un paragrafo con un flag perche' la
+# resa e' diversa e il vocabolario di IR 2 dichiara i generi, non li deduce.
+# `Criterio_Elenchi_v1.md`.
+KIND_TEXT_LIST_ITEM = "text.list_item"
 KIND_ASSET_NOTE = "asset.note"
 KIND_TABLE = "layout.table"
 # Nel vocabolario, NON in emissione in v0:

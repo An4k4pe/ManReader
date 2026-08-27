@@ -35,6 +35,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from document_line_start_measurements import (  # noqa: E402
+    measure_document_line_starts,
+)
+from document_list_policy import list_markers  # noqa: E402
 from primitive_normalizer import normalize_backend_page_capture  # noqa: E402
 from pymupdf_capture import capture_pymupdf_page  # noqa: E402
 
@@ -88,11 +92,61 @@ def measure(pdf_path: Path, sample: int) -> tuple[collections.Counter, collectio
     return initial, total, seen
 
 
+def _report_markers(args, names: list[str]) -> None:
+    """I marcatori decisi per manuale, o quelli che il modello nullo prenderebbe."""
+
+    label = "MODELLO NULLO" if args.nullo else "politica"
+    print(f"{label}: marcatori per manuale\n")
+    for name in names:
+        path = args.pdf_dir / f"{name}.pdf"
+        if not path.is_file():
+            continue
+        pages = []
+        with fitz.open(path) as document:
+            first = max(0, len(document) // 2 - args.pagine // 2)
+            for index in range(first, min(len(document), first + args.pagine)):
+                page = document[index]
+                if page.rotation != 0 or tuple(page.mediabox) != tuple(page.cropbox):
+                    continue
+                capture = capture_pymupdf_page(
+                    page,
+                    source_id="markers",
+                    page_id=f"page:{index:04d}",
+                    capture_id=f"markers:{index:04d}",
+                )
+                pages.append(normalize_backend_page_capture(capture))
+        measurements = measure_document_line_starts(pages)
+        # Il nullo: ogni carattere non alfanumerico che apre una riga, senza
+        # condizioni. Deve prendere le virgolette e le parentesi.
+        found = (
+            frozenset(measurements.opens_lines)
+            if args.nullo
+            else list_markers(measurements)
+        )
+        shown = ", ".join(
+            f"{character!r} U+{ord(character):04X}×{measurements.opens_lines[character]}"
+            for character in sorted(found, key=lambda c: -measurements.opens_lines[c])
+        )
+        print(f"{name:10} {len(found):>2} marcatori: {shown or 'nessuno'}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pdf-dir", type=Path, required=True)
     parser.add_argument("--pagine", type=int, default=20)
     parser.add_argument("--manuali", nargs="+")
+    parser.add_argument(
+        "--marcatori",
+        action="store_true",
+        help="applica la politica di `document_list_policy` e stampa i marcatori "
+             "decisi per manuale: e' il veto §5.C di Criterio_Elenchi_v1.md",
+    )
+    parser.add_argument(
+        "--nullo",
+        action="store_true",
+        help="modello nullo: ogni carattere non alfanumerico che apre una riga e' "
+             "un marcatore. Deve fallire il §5.C, o la barra e' finta.",
+    )
     parser.add_argument(
         "--min-righe",
         type=int,
@@ -103,6 +157,11 @@ def main() -> None:
     args = parser.parse_args()
 
     names = args.manuali or sorted(p.stem for p in args.pdf_dir.glob("*.pdf"))
+
+    if args.marcatori or args.nullo:
+        _report_markers(args, names)
+        return
+
     print(f"finestra {args.pagine} pagine contigue a meta' manuale\n")
     print(f"{'manuale':10} {'car':>6} {'unicode':<9} {'INIZ':>5} {'TOT':>6} {'quota':>6}")
     grand_lines = 0

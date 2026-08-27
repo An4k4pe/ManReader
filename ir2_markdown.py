@@ -28,15 +28,18 @@ would risk inventing it.
 
 from __future__ import annotations
 
+from document_list_policy import strip_marker
 from ir2_model import (
     KIND_ASSET_NOTE,
     KIND_TABLE,
+    KIND_TEXT_LIST_ITEM,
     KIND_TEXT_PARAGRAPH,
     AssetRefIR2,
     DocumentIR2,
     NodeIR2,
     PageIR2,
     TableIR2,
+    TextRunIR2,
 )
 
 # Politica di resa delle note d'asset, decisione dell'utente del 19 agosto 2026.
@@ -212,9 +215,60 @@ def render_runs(node: NodeIR2) -> str:
     return "".join(pieces)
 
 
-def render_node(node: NodeIR2) -> str:
+def render_list_item(node: NodeIR2, markers: frozenset[str]) -> str:
+    """Una voce d'elenco, col marcatore sostituito dalla sintassi Markdown.
+
+    **Il marcatore esce dalla resa, non dall'IR**: `node.text` lo conserva, e chi
+    consuma i dati ce l'ha. E' la stessa forma dell'arredo -- niente viene
+    distrutto, cambia cio' che si vede -- e la ragione e' la stessa: nessuno a
+    valle puo' rifiutare questa esclusione, quindi il controllo sta nel criterio.
+
+    Tenerlo darebbe `- *\t Fumante, sudata, calda.`, che oltre a essere
+    illeggibile e' **ambiguo per Markdown**: un `-` seguito da `*` e una
+    tabulazione si legge come elenco annidato. Un marcatore tenuto non e' neutro.
+    """
+
+    body = strip_marker(node.text or "", markers)
+    if not body.strip():
+        # Il marcatore e' rimasto orfano del suo testo: succede quando l'ordine
+        # di lettura interlaccia due colonne di elenchi e i glifi arrivano prima
+        # delle voci (limite gia' a verbale nel builder per DB p.53). Una voce
+        # vuota e' peggio di nessuna voce, e il testo esce come paragrafo suo.
+        return ""
+    if not node.runs:
+        return f"- {body}"
+
+    # Il marcatore si toglie **dai run**, non dalla stringa gia' resa: se e' in
+    # grassetto -- e su FW lo e' -- `render_runs` lo avvolge in asterischi, e
+    # cercarlo in testa alla stringa resa lo mancava, lasciando `- • Afflizione`.
+    dropped = len(node.text or "") - len(strip_marker(node.text or "", markers))
+    trimmed: list[TextRunIR2] = []
+    for run in node.runs:
+        if dropped <= 0:
+            trimmed.append(run)
+            continue
+        if len(run.text) <= dropped:
+            dropped -= len(run.text)
+            continue
+        trimmed.append(TextRunIR2(text=run.text[dropped:], traits=run.traits))
+        dropped = 0
+    stripped_node = NodeIR2(
+        node_id=node.node_id,
+        order=node.order,
+        kind=node.kind,
+        primitive_ids=node.primitive_ids,
+        page_ids=node.page_ids,
+        text="".join(run.text for run in trimmed),
+        runs=tuple(trimmed),
+    )
+    return f"- {render_runs(stripped_node)}"
+
+
+def render_node(node: NodeIR2, markers: frozenset[str] = frozenset()) -> str:
     """Render one node. Unknown kinds are not guessed at."""
 
+    if node.kind == KIND_TEXT_LIST_ITEM:
+        return render_list_item(node, markers)
     if node.kind == KIND_TEXT_PARAGRAPH:
         return render_runs(node)
     if node.kind == KIND_ASSET_NOTE:
@@ -270,6 +324,7 @@ def render_page_markdown(
     render_unresolved_assets: bool = RENDER_UNRESOLVED_ASSET_NOTES,
     excluded_node_ids: frozenset[str] = frozenset(),
     render_page_label: bool = False,
+    list_markers: frozenset[str] = frozenset(),
 ) -> str:
     """Render one page. Nodes are emitted in ``order``, which is reading order.
 
@@ -299,20 +354,44 @@ def render_page_markdown(
     blocks: list[str] = []
     if render_page_label and page.page_label:
         blocks.append(f"> **[pagina {page.page_label}]**")
-    blocks += [
-        rendered
-        for rendered in (
-            render_node(node)
-            for node in sorted(page.nodes, key=lambda n: n.order)
-            if is_rendered_in_body(
-                node,
-                render_unresolved=render_unresolved_assets,
-                excluded_node_ids=excluded_node_ids,
-            )
+    rendered_nodes = [
+        (node, render_node(node, list_markers))
+        for node in sorted(page.nodes, key=lambda n: n.order)
+        if is_rendered_in_body(
+            node,
+            render_unresolved=render_unresolved_assets,
+            excluded_node_ids=excluded_node_ids,
         )
-        if rendered
     ]
-    return "\n\n".join(blocks) + "\n" if blocks else ""
+
+    # Le voci consecutive di un elenco si uniscono con **una** riga a capo, non
+    # due: in Markdown una riga vuota fra le voci produce una lista «larga», con
+    # un paragrafo dentro ogni voce, e si legge spaziata come se fossero blocchi
+    # separati. Fra un elenco e cio' che lo circonda la riga vuota ci vuole,
+    # altrimenti il paragrafo precedente si attacca alla prima voce.
+    def marker_of(node: NodeIR2) -> str | None:
+        """Il marcatore con cui la voce si apre nella sorgente, che il nodo tiene."""
+
+        stripped = (node.text or "").lstrip()
+        return stripped[0] if stripped and stripped[0] in list_markers else None
+
+    parts: list[str] = list(blocks)
+    previous_marker: str | None = None
+    for node, rendered in rendered_nodes:
+        if not rendered:
+            continue
+        marker = marker_of(node) if node.kind == KIND_TEXT_LIST_ITEM else None
+        # **Un marcatore diverso e' un elenco diverso.** Su FWK `•` apre le voci
+        # che ne introducono altre e `*` le voci vere: unirle tutte darebbe un
+        # elenco solo di otto voci dove il manuale ne ha tre. L'annidamento resta
+        # fuori -- le voci restano allo stesso livello, come il criterio dichiara
+        # -- ma almeno gli elenchi restano distinti.
+        if marker is not None and marker == previous_marker and parts:
+            parts[-1] = f"{parts[-1]}\n{rendered}"
+        else:
+            parts.append(rendered)
+        previous_marker = marker
+    return "\n\n".join(parts) + "\n" if parts else ""
 
 
 def render_document_markdown(
