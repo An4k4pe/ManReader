@@ -164,6 +164,68 @@ def group_source_lines(ordered: Sequence[TextPrimitive]) -> list[_SourceLine]:
     return lines
 
 
+def bind_marker_glyphs(
+    lines: list[_SourceLine], markers: frozenset[str]
+) -> list[_SourceLine]:
+    """Riattacca un glifo d'elenco al testo della sua voce.
+
+    **Il legame e' un fatto della sorgente, non della geometria.** Misurato su FW
+    p.168: il glifo `•` sta a x=57,7 e il suo testo `Afflizione` a x=72,7, alla
+    **stessa y** e nello **stesso blocco** ``b0011`` -- il backend li spezza in due
+    *righe*, ``l0000`` e ``l0001``. Il glifo della colonna accanto sta a x=213,6,
+    stessa y, blocco ``b0012``.
+
+    L'ordinamento a bande, che decide per posizione, puo' quindi mettere il glifo
+    di una colonna prima del testo dell'altra: succedeva, e il testo della seconda
+    colonna restava orfano mentre il glifo si prendeva quello della prima.
+
+    Il blocco lo dice senza ambiguita', e per la stessa ragione per cui lo dice
+    per i paragrafi (`Criterio_ParagrafoDaBlocco_v1.md`): e' gia' nella sorgente e
+    nessuno lo stava usando. La riparazione si applica **qui**, sulle righe
+    sorgente, dove nessun ordinamento la puo' disfare -- non sull'ordine, che la
+    rifarebbe a ogni giro.
+
+    Cerca **in avanti**, non solo la riga adiacente: fra il glifo e il suo testo
+    l'ordine di lettura puo' aver infilato righe di un altro blocco.
+
+    Un glifo che non trova il suo testo resta com'e': inventargli un compagno
+    sarebbe la fusione di righe distinte che questo builder ha gia' corretto tre
+    volte.
+    """
+
+    if not markers:
+        return lines
+
+    remaining = list(lines)
+    result: list[_SourceLine] = []
+    while remaining:
+        line = remaining.pop(0)
+        if line.text.strip() not in markers:
+            result.append(line)
+            continue
+        partner = next(
+            (
+                other
+                for other in remaining
+                if other.block == line.block and other.text.strip()
+            ),
+            None,
+        )
+        if partner is None:
+            result.append(line)
+            continue
+        remaining.remove(partner)
+        result.append(
+            _SourceLine(
+                block=line.block,
+                line=line.line,
+                text=line.text + partner.text,
+                primitives=line.primitives + partner.primitives,
+            )
+        )
+    return result
+
+
 def _with_redraws(ids: tuple[str, ...], redraw_ids: dict[str, tuple[str, ...]]) -> tuple[str, ...]:
     """Gli id del nodo piu' quelli dei ridisegni dei suoi gemelli."""
 
@@ -596,7 +658,7 @@ def build_page_ir2(
     # le celle di una tabella non deve poter cambiare quale font e' il corpo.
     page_body_font = body_font(ordered_text_primitives)
 
-    for source_line in group_source_lines(remaining):
+    for source_line in bind_marker_glyphs(group_source_lines(remaining), list_markers):
         if previous_line is None:
             pending_text = source_line.text
             pending_primitives = list(source_line.primitives)

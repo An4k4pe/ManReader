@@ -15,6 +15,7 @@ from document_line_start_measurements import (
 )
 from document_list_policy import list_markers, strip_marker
 from geometry_model import PageGeometry
+from ir2_builder import _SourceLine, bind_marker_glyphs
 from primitive_model import NormalizedPrimitivePage, TextPrimitive
 
 GEOMETRY = PageGeometry(
@@ -108,6 +109,45 @@ class MeasurementContractTest(unittest.TestCase):
     def test_keys_must_be_single_characters(self) -> None:
         with self.assertRaises(ValueError):
             LineStartMeasurements({"••": 1}, {}, {}, {}, 0)
+
+
+class BindMarkerGlyphsTest(unittest.TestCase):
+    """Il glifo d'elenco riattaccato al testo della sua voce."""
+
+    def _line(self, block: str, line: str, text: str) -> _SourceLine:
+        return _SourceLine(block=block, line=line, text=text, primitives=())
+
+    def test_a_lone_glyph_takes_the_next_line_of_its_own_block(self) -> None:
+        lines = [
+            self._line("b0011", "l0000", "•\t"),
+            self._line("b0011", "l0001", "Afflizione"),
+        ]
+        bound = bind_marker_glyphs(lines, frozenset("•"))
+        self.assertEqual([line.text for line in bound], ["•\tAfflizione"])
+
+    def test_it_crosses_lines_of_another_block_to_find_its_partner(self) -> None:
+        # FW p.168: due colonne d'elenco affiancate. L'ordine di lettura mette il
+        # glifo della seconda colonna fra il glifo della prima e il suo testo, e
+        # senza il blocco il glifo di sinistra si prendeva il testo di destra.
+        lines = [
+            self._line("b0011", "l0000", "•\t"),
+            self._line("b0012", "l0000", "•\t"),
+            self._line("b0011", "l0001", "Afflizione"),
+            self._line("b0012", "l0001", "Bruti"),
+        ]
+        bound = bind_marker_glyphs(lines, frozenset("•"))
+        self.assertEqual([line.text for line in bound], ["•\tAfflizione", "•\tBruti"])
+
+    def test_a_glyph_without_a_partner_is_left_alone(self) -> None:
+        # Inventargli un compagno sarebbe la fusione di righe distinte che questo
+        # builder ha gia' corretto tre volte.
+        lines = [self._line("b0011", "l0000", "•"), self._line("b0022", "l0000", "Prosa")]
+        bound = bind_marker_glyphs(lines, frozenset("•"))
+        self.assertEqual([line.text for line in bound], ["•", "Prosa"])
+
+    def test_without_markers_nothing_moves(self) -> None:
+        lines = [self._line("b0011", "l0000", "•"), self._line("b0011", "l0001", "X")]
+        self.assertEqual(bind_marker_glyphs(lines, frozenset()), lines)
 
 
 if __name__ == "__main__":
