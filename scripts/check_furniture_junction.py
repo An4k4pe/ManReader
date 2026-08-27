@@ -72,7 +72,15 @@ def suspicious(before: str | None, after: str | None) -> bool:
     return not _CLOSES.search(before) and bool(_OPENS_LOWER.match(after))
 
 
-def render(pdf: Path, page_number: int, out: Path, *, arredo: bool, sample: int) -> str:
+def render(
+    pdf: Path,
+    page_number: int,
+    out: Path,
+    *,
+    arredo: bool,
+    sample: int,
+    elenchi: bool = False,
+) -> str:
     command = [
         sys.executable,
         str(PROJECT_ROOT / "scripts" / "prototype_ir2_page.py"),
@@ -82,6 +90,8 @@ def render(pdf: Path, page_number: int, out: Path, *, arredo: bool, sample: int)
     ]
     if arredo:
         command += ["--arredo", "--arredo-pagine", str(sample)]
+    if elenchi:
+        command += ["--elenchi", "--arredo-pagine", str(sample)]
     subprocess.run(command, capture_output=True, check=False, cwd=PROJECT_ROOT)
     rendered = out / "page_ir2.md"
     return rendered.read_text(encoding="utf-8") if rendered.is_file() else ""
@@ -99,16 +109,32 @@ def main() -> None:
         help="numeri POSIZIONALI, come li vuole il prototipo (idx + 1)",
     )
     parser.add_argument("--arredo-pagine", type=int, default=40)
+    parser.add_argument(
+        "--elenchi",
+        action="store_true",
+        help="giudica la giunzione degli ELENCHI invece che dell'arredo: la resa "
+             "modificata usa --elenchi, e cio' che 'sparisce' e' una riga che e' "
+             "diventata voce (Criterio_ScalaDiValori_v1.md §4.D)",
+    )
     args = parser.parse_args()
 
     flagged = removed_total = pages_with_removals = 0
     with tempfile.TemporaryDirectory() as workspace:
         root = Path(workspace)
         for number in range(args.pagine[0], args.pagine[1] + 1):
-            base = blocks_of(render(args.pdf, number, root / f"{number}_senza",
-                                    arredo=False, sample=args.arredo_pagine))
-            kept = blocks_of(render(args.pdf, number, root / f"{number}_con",
-                                    arredo=True, sample=args.arredo_pagine))
+            base = blocks_of(
+                render(
+                    args.pdf, number, root / f"{number}_senza",
+                    arredo=False, sample=args.arredo_pagine,
+                )
+            )
+            kept = blocks_of(
+                render(
+                    args.pdf, number, root / f"{number}_con",
+                    arredo=not args.elenchi, sample=args.arredo_pagine,
+                    elenchi=args.elenchi,
+                )
+            )
             if not base:
                 continue
             kept_set = set(kept)
