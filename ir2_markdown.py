@@ -269,7 +269,7 @@ def render_page_markdown(
     *,
     render_unresolved_assets: bool = RENDER_UNRESOLVED_ASSET_NOTES,
     excluded_node_ids: frozenset[str] = frozenset(),
-    render_page_label: bool = True,
+    render_page_label: bool = False,
 ) -> str:
     """Render one page. Nodes are emitted in ``order``, which is reading order.
 
@@ -279,6 +279,18 @@ def render_page_markdown(
 
     ``excluded_node_ids`` carries the furniture policy the caller computed; see
     ``is_rendered_in_body``.
+
+    **Il numero di pagina non si rende, ed e' spento di default.** Decisione
+    dell'utente del 27 agosto 2026: il riferimento serve **fra i blocchi dati del
+    programma**, non nel testo che si legge. Il fatto resta dove serve --
+    ``PageIR2.page_label``, serializzato -- e chi lo consuma ce l'ha; il lettore
+    non ha bisogno di vederselo scritto in mezzo al testo.
+
+    Una versione precedente lo rendeva come ``> **[pagina 368]**``: era una mia
+    lettura estensiva dell'indicazione «referenziare il numero serve a sapere che
+    pagina si sta trattando», che riguardava il dato e non la resa. Il parametro
+    resta perche' l'EPUB avra' bisogno di un marcatore di confine pagina
+    (``epub:type="pagebreak"``), che e' un'altra forma e un'altra decisione.
     """
 
     if not isinstance(page, PageIR2):
@@ -286,10 +298,6 @@ def render_page_markdown(
 
     blocks: list[str] = []
     if render_page_label and page.page_label:
-        # Il numero stampato che il PDF dichiara, non uno dedotto. Sta nella
-        # stessa forma delle note d'asset -- una riga breve che dice che cosa
-        # c'era -- perche' e' la stessa cosa: un elemento della pagina reso come
-        # riferimento invece che lasciato in mezzo al testo.
         blocks.append(f"> **[pagina {page.page_label}]**")
     blocks += [
         rendered
