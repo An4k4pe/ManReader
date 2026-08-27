@@ -115,36 +115,100 @@ def render_table(table: TableIR2) -> str:
 _MARKUP = (("bold", "**"), ("italic", "*"))
 
 
+def _traits_per_character(node: NodeIR2) -> list[tuple[str, frozenset[str]]]:
+    """Ogni carattere del nodo con i tratti che lo governano.
+
+    Lo spazio prende un tratto **solo se ce l'hanno entrambi i vicini**. Senza
+    questa regola un run marcato che finisce con uno spazio produrrebbe
+    ``**parola **``, che Markdown non chiude; con questa regola ``**due parole**``
+    resta intero perche' lo spazio interno e' grassetto da entrambi i lati.
+    """
+
+    characters: list[tuple[str, frozenset[str]]] = []
+    for run in node.runs:
+        traits = frozenset(trait for trait, _ in _MARKUP if trait in run.traits)
+        characters.extend((character, traits) for character in run.text)
+
+    for position, (character, _traits) in enumerate(characters):
+        if not character.isspace():
+            continue
+        before = next(
+            (t for c, t in reversed(characters[:position]) if not c.isspace()), None
+        )
+        after = next(
+            (t for c, t in characters[position + 1 :] if not c.isspace()), None
+        )
+        shared = frozenset() if before is None or after is None else before & after
+        characters[position] = (character, shared)
+    return characters
+
+
 def render_runs(node: NodeIR2) -> str:
     """Il testo del nodo con grassetto e corsivo, dai run.
 
     Senza run -- o con un solo run senza tratti -- torna esattamente il testo di
     prima: il campo e' additivo e un nodo che non lo porta rende come sempre.
 
-    Il markup si chiude e riapre a ogni run invece di cercare l'estensione
-    massima: la seconda cosa richiederebbe di riordinare i delimitatori attorno
-    agli spazi, ed e' il genere di furbizia che rompe su un caso che nessuno ha
-    guardato. Gli spazi di giunzione stanno **dentro** il run che li precede
-    (vedi `ir2_builder.join_runs`), quindi un `**parola **` non si forma perche'
-    lo spazio non e' mai in testa a un run marcato.
+    **I delimitatori si aprono e si chiudono come parentesi**, non a ogni run.
+    Chiudere e riaprire era piu' semplice e produceva Markdown rotto quando due
+    run marcati sono adiacenti: su FWK un run grassetto seguito da uno
+    grassetto-corsivo dava ``**Richiamare Armatura +*****Audace***`` -- cinque
+    asterischi, che nessun parser interpreta come inteso. Ora il grassetto resta
+    aperto attraverso i due run e il corsivo si annida dentro:
+    ``**Richiamare Armatura +*Audace***``.
+
+    Il testo non cambia mai: si inseriscono delimitatori, non si toglie e non si
+    aggiunge nemmeno uno spazio.
+
+    **Un caso resta e va dichiarato**: due tratti **disgiunti** e adiacenti senza
+    spazio in mezzo -- corsivo attaccato a grassetto -- danno ``*a***b**``, che
+    con i delimitatori ad asterisco non si puo' evitare, perche' la chiusura di
+    uno e l'apertura dell'altro sono lo stesso carattere. Si eviterebbe usando
+    ``_`` per il corsivo, che pero' CommonMark non riconosce dentro parola. Sul
+    materiale reso finora l'unica collisione misurata era quella dei tratti
+    sovrapposti, che questo codice risolve; questa non e' comparsa.
     """
 
     text = node.text or ""
     if not node.runs:
         return text
 
+    order = [trait for trait, _ in _MARKUP]
+    delimiter_of = dict(_MARKUP)
     pieces: list[str] = []
-    for run in node.runs:
-        piece = run.text
-        stripped = piece.strip()
-        if stripped:
-            leading = piece[: len(piece) - len(piece.lstrip())]
-            trailing = piece[len(piece.rstrip()) :]
-            for trait, delimiter in _MARKUP:
-                if trait in run.traits:
-                    stripped = f"{delimiter}{stripped}{delimiter}"
-            piece = f"{leading}{stripped}{trailing}"
-        pieces.append(piece)
+    open_traits: list[str] = []
+
+    def close_until(wanted: frozenset[str]) -> None:
+        # Si svuota finche' TUTTO cio' che resta aperto e' voluto, non finche' lo
+        # e' la cima: un tratto da chiudere puo' stare sotto uno da tenere, e
+        # guardare solo la cima lo lasciava aperto fino in fondo al paragrafo.
+        # Cio' che si e' chiuso di troppo lo riapre il ciclo qui sotto.
+        while open_traits and any(trait not in wanted for trait in open_traits):
+            pieces.append(delimiter_of[open_traits.pop()])
+
+    per_character = _traits_per_character(node)
+
+    def extent(trait: str, start: int) -> int:
+        """Per quanti caratteri il tratto resta acceso senza interruzioni."""
+
+        length = 0
+        while start + length < len(per_character) and trait in per_character[start + length][1]:
+            length += 1
+        return length
+
+    for position, (character, traits) in enumerate(per_character):
+        if traits != frozenset(open_traits):
+            close_until(traits)
+            # Si apre per **durata decrescente**: il tratto che dura di piu' sta
+            # fuori. Aprendo in ordine fisso, un grassetto-corsivo seguito da
+            # solo corsivo chiudeva entrambi e riapriva il corsivo -- `***a****b*`,
+            # cioe' un'altra collisione. Con il corsivo fuori resta `***a**b*`.
+            opening = [t for t in order if t in traits and t not in open_traits]
+            for trait in sorted(opening, key=lambda t: -extent(t, position)):
+                open_traits.append(trait)
+                pieces.append(delimiter_of[trait])
+        pieces.append(character)
+    close_until(frozenset())
     return "".join(pieces)
 
 

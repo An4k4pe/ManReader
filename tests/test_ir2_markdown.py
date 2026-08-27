@@ -246,3 +246,44 @@ class RenderRunsTest(unittest.TestCase):
     def test_the_junction_space_stays_outside_the_markup(self) -> None:
         node = self._node([TextRunIR2("forte ", ("bold",)), TextRunIR2("piano", ())])
         self.assertEqual(render_node(node), "**forte** piano")
+
+    def test_adjacent_marked_runs_do_not_collide(self) -> None:
+        # Misurato su FWK: un run grassetto seguito da uno grassetto-corsivo
+        # dava `**Richiamare Armatura +*****Audace***` -- cinque asterischi, che
+        # nessun parser interpreta come inteso. Il grassetto resta aperto
+        # attraverso i due run e il corsivo si annida dentro.
+        node = self._node(
+            [
+                TextRunIR2("Richiamare Armatura +", ("bold",)),
+                TextRunIR2("Audace", ("bold", "italic")),
+            ]
+        )
+        self.assertEqual(render_node(node), "**Richiamare Armatura +*Audace***")
+
+    def test_the_longer_trait_wraps_the_shorter_one(self) -> None:
+        # Il corsivo copre entrambi i run, il grassetto solo il primo: aprendo
+        # in ordine fisso si chiudevano entrambi e si riapriva il corsivo,
+        # `***a****b*`, cioe' un'altra collisione di delimitatori.
+        node = self._node(
+            [
+                TextRunIR2("a", ("bold", "italic")),
+                TextRunIR2("b", ("italic",)),
+            ]
+        )
+        self.assertEqual(render_node(node), "***a**b*")
+
+    def test_the_text_is_never_altered_only_delimiters_are_added(self) -> None:
+        runs = [
+            TextRunIR2("prima ", ("bold",)),
+            TextRunIR2("  in mezzo  ", ("italic",)),
+            TextRunIR2(" dopo", ()),
+        ]
+        node = self._node(runs)
+        rendered = render_node(node)
+        self.assertEqual(rendered.replace("*", ""), node.text)
+
+    def test_a_space_between_two_marked_words_stays_inside(self) -> None:
+        # Lo spazio prende il tratto solo se ce l'hanno entrambi i vicini:
+        # cosi' `**due parole**` resta intero e `**parola **` non si forma.
+        node = self._node([TextRunIR2("due parole", ("bold",))])
+        self.assertEqual(render_node(node), "**due parole**")

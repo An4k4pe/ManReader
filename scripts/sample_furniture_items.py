@@ -99,6 +99,8 @@ def collect(pdf_path: Path, sample: int) -> list[dict]:
                     "ramo": (
                         "etichetta"
                         if slot in slots.from_label
+                        else "sequenza"
+                        if slot in slots.from_sequence
                         else "ricorrenza"
                     ),
                     "testi": sorted(set(texts))[:6],
@@ -115,24 +117,37 @@ def main() -> None:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--seed", required=True)
     parser.add_argument("--pagine", type=int, default=40)
+    parser.add_argument(
+        "--manuali", nargs="+", default=list(UNUSED_MANUALS),
+        help="di default i dieci mai spesi per l'arredo",
+    )
+    parser.add_argument(
+        "--solo-ramo", choices=("etichetta", "ricorrenza", "sequenza"),
+        help="giudica solo le voci di un ramo: serve quando un ramo nuovo va "
+             "provato da solo, senza che le voci dei rami gia' spediti lo diluiscano",
+    )
+    parser.add_argument("--voci", type=int, default=SAMPLE_PER_STRATUM)
     args = parser.parse_args()
 
     args.out.mkdir(parents=True, exist_ok=True)
     tutte: list[dict] = []
-    for name in UNUSED_MANUALS:
+    for name in args.manuali:
         path = args.pdf_dir / f"{name}.pdf"
         if not path.is_file():
             print(f"MANCANTE: {path}", file=sys.stderr)
             continue
         found = collect(path, args.pagine)
+        if args.solo_ramo:
+            found = [item for item in found if item["ramo"] == args.solo_ramo]
         print(f"{name}: {len(found)} voci", file=sys.stderr)
         tutte.extend(found)
 
     basse = [i for i in tutte if LOW_BAND[0] <= i["quota"] < LOW_BAND[1]]
     alte = [i for i in tutte if i["quota"] >= LOW_BAND[1]]
     rng = random.Random(args.seed)
-    scelte = rng.sample(basse, min(SAMPLE_PER_STRATUM, len(basse))) + rng.sample(
-        alte, min(SAMPLE_PER_STRATUM, len(alte))
+    per_strato = max(1, args.voci // 2)
+    scelte = rng.sample(basse, min(per_strato, len(basse))) + rng.sample(
+        alte, min(per_strato, len(alte))
     )
     rng.shuffle(scelte)
 
