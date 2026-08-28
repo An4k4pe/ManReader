@@ -29,8 +29,15 @@ SIZE_EPSILON = 0.4
 # Un titolo e' un blocco suo, al piu' con un a capo.
 MAX_LINES_IN_A_HEADING_BLOCK = 2
 
-# Quanti livelli Markdown ha.
-MAX_LEVEL = 6
+# Quanti livelli si usano. **Tre, non sei**, e non e' una limitazione tecnica:
+# Markdown ne ha sei, ma distinguere sei ranghi di dimensione non aggiunge
+# informazione utile a chi legge, e su un manuale con otto dimensioni che
+# intestano il rango diventa un dettaglio senza significato.
+#
+# Indicazione dell'utente: il font piu' grande e' `#`, il successivo `##`, e il
+# minore che non sia paragrafo `###`. Cio' che sta sotto il secondo rango
+# collassa sul terzo, che e' esattamente «un titolo, e non uno dei due sopra».
+MAX_LEVEL = 3
 
 # Una dimensione con pochissime righe non dice niente sulla lunghezza mediana
 # delle sue righe. Non e' una soglia della regola -- non decide se qualcosa e'

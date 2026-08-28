@@ -68,14 +68,19 @@ class HeadingLevelsTest(unittest.TestCase):
         levels = heading_levels(measured, frozenset({10.0}))
         self.assertEqual(levels, {34.0: 1, 20.0: 2, 12.0: 3})
 
-    def test_it_collapses_at_six_because_that_is_what_markdown_has(self) -> None:
+    def test_it_collapses_at_three_because_more_says_nothing(self) -> None:
         sizes = {float(20 + i): 5 for i in range(8)}
         measured = FontSizeMeasurements(
             line_count={10.0: 500, **sizes},
             median_length={10.0: 50.0, **{s: 9.0 for s in sizes}},
         )
+        # Il piu' grande e' `#`, il successivo `##`, tutto il resto `###`.
+        # Distinguere sei ranghi di dimensione non aggiunge informazione a chi
+        # legge, e su un manuale con otto dimensioni che intestano diventa un
+        # dettaglio senza significato.
         levels = heading_levels(measured, frozenset({10.0}))
-        self.assertEqual(max(levels.values()), 6)
+        self.assertEqual(max(levels.values()), 3)
+        self.assertEqual(sorted(levels.values()), [1, 2, 3, 3, 3, 3, 3, 3])
 
 
 class HeadingLinesTest(unittest.TestCase):
