@@ -32,6 +32,7 @@ from document_list_policy import split_number, strip_marker
 from ir2_model import (
     KIND_ASSET_NOTE,
     KIND_TABLE,
+    KIND_TEXT_HEADING,
     KIND_TEXT_LIST_ITEM,
     KIND_TEXT_LIST_ITEM_ORDERED,
     KIND_TEXT_PARAGRAPH,
@@ -284,6 +285,10 @@ def render_ordered_item(node: NodeIR2) -> str:
 def render_node(node: NodeIR2, markers: frozenset[str] = frozenset()) -> str:
     """Render one node. Unknown kinds are not guessed at."""
 
+    if node.kind == KIND_TEXT_HEADING:
+        if node.heading_level is None:
+            raise ValueError("a heading node must carry a heading_level")
+        return f"{'#' * node.heading_level} {render_runs(node)}"
     if node.kind == KIND_TEXT_LIST_ITEM_ORDERED:
         return render_ordered_item(node)
     if node.kind == KIND_TEXT_LIST_ITEM:

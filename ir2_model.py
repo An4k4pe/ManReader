@@ -56,6 +56,10 @@ _KIND_PATTERN = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
 # validare: sta qui perche' un lettore sappia cosa il progetto intende emettere,
 # e quali kind sono gia' stati decisi ma non hanno ancora chi li riempie.
 KIND_TEXT_PARAGRAPH = "text.paragraph"
+# Un titolo. Il livello sta su `NodeIR2.heading_level`, non nel kind: sei kind
+# per sei livelli direbbero che sono generi diversi, e non lo sono.
+# `Criterio_Titoli_v2.md`.
+KIND_TEXT_HEADING = "text.heading"
 # Una voce d'elenco. E' un kind suo e non un paragrafo con un flag perche' la
 # resa e' diversa e il vocabolario di IR 2 dichiara i generi, non li deduce.
 # `Criterio_Elenchi_v1.md`.
@@ -240,6 +244,7 @@ class NodeIR2:
     runs: tuple[TextRunIR2, ...] = ()
     candidate_ids: tuple[str, ...] = ()
     resolution: str | None = None
+    heading_level: int | None = None
 
     def __post_init__(self) -> None:
         _validate_non_empty_string(self.node_id, "node_id")
@@ -251,6 +256,18 @@ class NodeIR2:
         _validate_unique_non_empty_ids(self.page_ids, "page_ids")
         if not self.page_ids:
             raise ValueError("page_ids must not be empty")
+        if self.heading_level is not None:
+            if not isinstance(self.heading_level, int) or isinstance(self.heading_level, bool):
+                raise ValueError("heading_level must be an int")
+            if not 1 <= self.heading_level <= 6:
+                raise ValueError("heading_level must be between 1 and 6")
+            if self.kind != KIND_TEXT_HEADING:
+                raise ValueError("heading_level belongs to a heading node")
+        elif self.kind == KIND_TEXT_HEADING:
+            # Un titolo senza livello non si puo' rendere, e lasciarlo passare
+            # renderebbe rappresentabile uno stato che non significa niente --
+            # la stessa ragione per cui `page_label_deduced` esige un'etichetta.
+            raise ValueError("a heading node must carry a heading_level")
         _validate_unique_non_empty_ids(self.candidate_ids, "candidate_ids")
 
         carried = [self.text, self.asset, self.structure]

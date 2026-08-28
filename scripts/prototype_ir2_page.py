@@ -28,6 +28,7 @@ import argparse
 import json
 import sys
 from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
 
 import fitz
@@ -58,6 +59,8 @@ from document_furniture_policy import (  # noqa: E402
     furniture_node_ids,
     furniture_slots,
 )
+from document_heading_measurements import measure_font_sizes  # noqa: E402
+from document_heading_policy import heading_levels, prose_sizes  # noqa: E402
 from document_line_start_measurements import (  # noqa: E402
     count_block_signatures,
     measure_document_line_starts,
@@ -136,7 +139,29 @@ def _strip_ir2_notes(markdown: str) -> str:
     )
 
 
-def document_furniture_slots(document: fitz.Document, *, sample: int):
+@dataclass(frozen=True, slots=True)
+class DocumentScan:
+    """Cio' che una scansione del documento produce, tutto insieme.
+
+    Sono quattro fatti document-level -- arredo, numero dedotto, marcatori
+    d'elenco, scale di valori -- piu' le dimensioni di prosa e i livelli di
+    titolo. Stanno in un tipo e non in una tupla perche' sono sei e crescono: una
+    tupla di sei elementi si sbaglia a leggere, e questo modulo si legge molto.
+
+    **Una scansione sola.** Ricatturare le pagine una volta per meccanismo
+    moltiplicherebbe il costo del giro per niente: sono tutti fatti sulle stesse
+    pagine.
+    """
+
+    furniture: object
+    deduced_labels: dict[int, str]
+    list_markers: frozenset[str]
+    scale_signatures: frozenset[tuple[str, ...]]
+    prose_sizes: frozenset[float]
+    heading_levels: dict[float, int]
+
+
+def document_furniture_slots(document: fitz.Document, *, sample: int) -> DocumentScan:
     """Gli slot d'arredo del documento e i numeri dedotti, ricatturandone le pagine.
 
     `sample` limita quante pagine si guardano, centrate sul documento: un
@@ -188,7 +213,18 @@ def document_furniture_slots(document: fitz.Document, *, sample: int):
             for position, value in found.by_page_position.items()
             if position < len(indices)
         }
-    return slots, deduced, markers, scales
+    # I titoli vengono dalle stesse pagine: quali dimensioni siano prosa lo si
+    # puo' dire solo avendone viste tante, `Criterio_Titoli_v2.md` §1.
+    sizes = measure_font_sizes(captured)
+    prose = prose_sizes(sizes)
+    return DocumentScan(
+        furniture=slots,
+        deduced_labels=deduced,
+        list_markers=markers,
+        scale_signatures=scales,
+        prose_sizes=prose,
+        heading_levels=heading_levels(sizes, prose),
+    )
 
 
 def review_lines_for(
@@ -419,22 +455,31 @@ def run(
         deduced_labels: dict[int, str] = {}
         markers: frozenset[str] = frozenset()
         scales: frozenset[tuple[str, ...]] = frozenset()
+        prose: frozenset[float] = frozenset()
+        levels: dict[float, int] = {}
         if remove_furniture or render_lists:
-            found_slots, deduced_labels, found_markers, found_scales = (
-                document_furniture_slots(document, sample=furniture_sample)
-            )
+            scan = document_furniture_slots(document, sample=furniture_sample)
+            deduced_labels = scan.deduced_labels
+            prose = scan.prose_sizes
+            levels = scan.heading_levels
             if remove_furniture:
-                furniture_slots_found = found_slots
+                furniture_slots_found = scan.furniture
             else:
                 deduced_labels = {}
             if render_lists:
-                markers = found_markers
-                scales = found_scales
+                markers = scan.list_markers
+                scales = scan.scale_signatures
                 print(
                     "elenchi: marcatori "
                     + (", ".join(f"{m!r} U+{ord(m):04X}" for m in sorted(markers)) or "nessuno")
                     + " — scale di valori: "
                     + (", ".join(repr("".join(f)) for f in sorted(scales)) or "nessuna"),
+                    file=sys.stderr,
+                )
+                print(
+                    f"titoli: prosa a {sorted(prose)}, livelli "
+                    + (", ".join(f"{s}→h{n}" for s, n in sorted(levels.items(), reverse=True))
+                       or "nessuno"),
                     file=sys.stderr,
                 )
 
@@ -452,6 +497,9 @@ def run(
             page_label=page_label,
             page_label_deduced=page_label_deduced,
             list_markers=markers,
+            scale_signatures=scales,
+            prose_sizes=prose,
+            heading_levels=levels,
         )
         validate_page_ir2_against_primitive_page(ir2_page, primitive_page)
 

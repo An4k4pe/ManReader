@@ -1,15 +1,17 @@
-"""Le dimensioni del carattere di un manuale, e i candidati titolo. Misura, non decide.
+"""Le dimensioni di prosa di un manuale, e i candidati titolo. Misura, non decide.
 
-`Criterio_Titoli_v1.md` §0 e §3, committato **con** il criterio.
+`Criterio_Titoli_v2.md`, aggiornato alla regola di quel criterio nello stesso
+commit che la implementa.
 
-Riporta per ogni manuale la dimensione del **corpo** -- la piu' frequente pesata
-per **caratteri**, come `ir2_builder.body_font`, perche' un font di titolo ha
-poche primitive lunghe -- e quante righe la regola del §1 promuoverebbe.
+Riporta per ogni manuale **quali dimensioni sono prosa** -- quelle le cui righe
+sono lunghe, separate dal salto piu' grande fra le mediane -- e quante righe
+starebbero sopra tutte.
 
-**Il numero che conta non e' la media ma la dispersione**, ed e' il motivo per cui
-questo script stampa per manuale e non un totale: su Apo e Vil i candidati sono 3,
-su Kul 88. La differenza non e' la regola, sono le schede mostro, dentro le quali
-la dimensione piu' frequente non e' la prosa ma il testo di scheda.
+**La v1 di questo script diceva un'altra cosa, ed era sbagliata**: assumeva UNA
+dimensione di corpo, la piu' frequente, e attribuiva la sovrapproduzione alle
+schede mostro. Misurato: su Kul 8,0 e 10,0 sono entrambe prosa, e i 67 candidati
+a 10,0 erano prosa scambiata per titolo. Con la prosa presa per intero i candidati
+passano da 88 a 21 e sugli altri tredici manuali non cambia niente.
 
 Uso::
 
@@ -21,7 +23,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-from collections import Counter, defaultdict
+from collections import defaultdict
 from pathlib import Path
 
 import fitz
@@ -30,6 +32,13 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from document_heading_measurements import measure_font_sizes, sized_lines  # noqa: E402
+from document_heading_policy import (  # noqa: E402
+    MAX_LINES_IN_A_HEADING_BLOCK,
+    SIZE_EPSILON,
+    heading_levels,
+    prose_sizes,
+)
 from primitive_normalizer import normalize_backend_page_capture  # noqa: E402
 from pymupdf_capture import capture_pymupdf_page  # noqa: E402
 
@@ -38,38 +47,11 @@ MANUALS = (
     "Apo", "BiD", "BoB", "DB", "DIE", "Dag", "DrM", "DrW",
     "FW", "FWK", "Fab", "Kul", "Lan", "SV", "Vil", "Wil",
 )
-# Quanto una dimensione deve superare il corpo per contare come diversa. Non e'
-# una soglia della regola: e' la tolleranza con cui si leggono due float che il
-# backend riporta con l'arrotondamento del PDF.
-_EPSILON = 0.4
-MAX_LINES_IN_A_HEADING_BLOCK = 2
 
 
-def blocks_of(page) -> dict[str, list[tuple[str, float]]]:
-    """Per blocco, le sue righe come (testo, dimensione massima)."""
 
-    grouped: dict[str, dict[str, list]] = defaultdict(lambda: defaultdict(list))
-    for primitive in page.text_primitives:
-        match = _OBSERVATION.match(primitive.source_observation_id or "")
-        if match:
-            grouped[match.group(1)][match.group(2)].append(primitive)
-
-    result: dict[str, list[tuple[str, float]]] = {}
-    for block, lines in grouped.items():
-        entries: list[tuple[str, float]] = []
-        for line in sorted(lines):
-            text = "".join(p.text for p in lines[line]).strip()
-            sizes = [p.font_size for p in lines[line] if p.font_size]
-            if text and sizes:
-                entries.append((text, round(max(sizes), 1)))
-        if entries:
-            result[block] = entries
-    return result
-
-
-def scan(pdf_path: Path, window: int) -> tuple[float, list[tuple[str, float]]]:
-    characters: Counter[float] = Counter()
-    pages: list[dict[str, list[tuple[str, float]]]] = []
+def scan(pdf_path: Path, window: int) -> tuple[frozenset[float], list[tuple[str, int]]]:
+    pages = []
     with fitz.open(pdf_path) as document:
         first = max(0, len(document) // 2 - window // 2)
         for index in range(first, min(len(document), first + window)):
@@ -82,28 +64,34 @@ def scan(pdf_path: Path, window: int) -> tuple[float, list[tuple[str, float]]]:
                 page_id=f"page:{index:04d}",
                 capture_id=f"headings:{index:04d}",
             )
-            normalized = normalize_backend_page_capture(capture)
-            for primitive in normalized.text_primitives:
-                if primitive.font_size:
-                    characters[round(primitive.font_size, 1)] += len(primitive.text.strip())
-            pages.append(blocks_of(normalized))
-    if not characters:
-        return (0.0, [])
+            pages.append(normalize_backend_page_capture(capture))
+    if not pages:
+        return (frozenset(), [])
 
-    body = characters.most_common(1)[0][0]
-    found: list[tuple[str, float]] = []
-    for blocks in pages:
-        for entries in blocks.values():
-            if len(entries) > MAX_LINES_IN_A_HEADING_BLOCK:
+    measurements = measure_font_sizes(pages)
+    prose = prose_sizes(measurements)
+    levels = heading_levels(measurements, prose)
+    if not prose:
+        return (prose, [])
+    limit = max(prose)
+
+    found: list[tuple[str, int]] = []
+    for page in pages:
+        by_block: dict[str, list] = defaultdict(list)
+        for line in sized_lines(page):
+            by_block[line.block].append(line)
+        for block_lines in by_block.values():
+            if len(block_lines) > MAX_LINES_IN_A_HEADING_BLOCK:
                 continue
-            if any(abs(size - body) < 0.5 for _text, size in entries):
+            if any(line.size in prose for line in block_lines):
                 continue
             found.extend(
-                (text, size)
-                for text, size in entries
-                if size > body + _EPSILON and len(text) > 1
+                (line.text, levels[line.size])
+                for line in block_lines
+                if line.size > limit + SIZE_EPSILON and len(line.text) > 1
+                and line.size in levels
             )
-    return (body, found)
+    return (prose, found)
 
 
 def main() -> None:
@@ -114,19 +102,19 @@ def main() -> None:
     args = parser.parse_args()
 
     print(f"finestra {args.pagine} pagine contigue a meta' manuale")
-    print("NOTA: l'arredo non e' ancora escluso, quindi i numeri di pagina compaiono.\n")
-    print(f"{'manuale':8} {'corpo':>6} {'candidati':>10}  esempi")
+    print("NOTA: l'arredo non e' escluso, quindi i numeri di pagina compaiono.\n")
+    print(f"{'manuale':8} {'prosa':>22} {'candidati':>10}  esempi")
     for name in MANUALS:
         path = args.pdf_dir / f"{name}.pdf"
         if not path.is_file():
             continue
-        body, found = scan(path, args.pagine)
-        if not body:
+        prose, found = scan(path, args.pagine)
+        if not prose:
             continue
-        shown = "; ".join(text for text, _size in found[:3])[:56] if args.esempi else ""
-        print(f"{name:8} {body:>6} {len(found):>10}  {shown}")
-    print("\nLa dispersione e' il numero che conta: dove il corpo misurato e' il")
-    print("testo di scheda e non la prosa, la regola promuove la prosa a titolo.")
+        shown = "; ".join(f"h{level} {text}" for text, level in found[:2])[:44] if args.esempi else ""
+        print(f"{name:8} {str(sorted(prose))[:21]:>22} {len(found):>10}  {shown}")
+    print("\nLa dispersione per manuale e' un obbligo di riporto del §4.B:")
+    print("una media nasconderebbe un manuale che ne produce dieci volte un altro.")
 
 
 if __name__ == "__main__":

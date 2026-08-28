@@ -8,6 +8,7 @@ from ir2_markdown import (
     render_page_markdown,
 )
 from ir2_model import (
+    KIND_TEXT_HEADING,
     KIND_TEXT_PARAGRAPH,
     AssetRefIR2,
     DocumentIR2,
@@ -87,10 +88,13 @@ class RenderNodeTest(unittest.TestCase):
         self.assertEqual(render_node(_paragraph(0, "testo")), "testo")
 
     def test_refuses_a_kind_it_cannot_render(self) -> None:
+        # `text.heading` era l'esempio qui finche' non si rendeva; ora si rende
+        # (`Criterio_Titoli_v2.md`), e serve un genere del vocabolario che
+        # ancora non ha una resa.
         node = NodeIR2(
             node_id="n",
             order=0,
-            kind="text.heading",
+            kind="text.callout",
             primitive_ids=("p",),
             page_ids=(PAGE,),
             text="SCHELETRO",
@@ -196,6 +200,48 @@ class RenderDocumentTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RenderHeadingTest(unittest.TestCase):
+    """`Criterio_Titoli_v2.md`: il livello e' un rango, e sta sul nodo."""
+
+    def _heading(self, level: int, text: str = "SCUOLE DI MAGIA") -> NodeIR2:
+        return NodeIR2(
+            node_id="n",
+            order=0,
+            kind=KIND_TEXT_HEADING,
+            primitive_ids=("p",),
+            page_ids=(PAGE,),
+            text=text,
+            heading_level=level,
+        )
+
+    def test_the_level_becomes_that_many_hashes(self) -> None:
+        self.assertEqual(render_node(self._heading(1)), "# SCUOLE DI MAGIA")
+        self.assertEqual(render_node(self._heading(3)), "### SCUOLE DI MAGIA")
+
+    def test_a_heading_without_a_level_is_refused_by_the_contract(self) -> None:
+        with self.assertRaises(ValueError):
+            NodeIR2(
+                node_id="n",
+                order=0,
+                kind=KIND_TEXT_HEADING,
+                primitive_ids=("p",),
+                page_ids=(PAGE,),
+                text="x",
+            )
+
+    def test_a_level_on_something_that_is_not_a_heading_is_refused(self) -> None:
+        with self.assertRaises(ValueError):
+            NodeIR2(
+                node_id="n",
+                order=0,
+                kind=KIND_TEXT_PARAGRAPH,
+                primitive_ids=("p",),
+                page_ids=(PAGE,),
+                text="x",
+                heading_level=2,
+            )
 
 
 class RenderRunsTest(unittest.TestCase):

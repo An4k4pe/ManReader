@@ -39,6 +39,8 @@ from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from document_heading_measurements import SizedLine  # noqa: I001
+from document_heading_policy import heading_lines  # noqa: I001
 from document_list_policy import (  # noqa: I001
     list_item_flags,
     numbered_item_flags,
@@ -48,6 +50,7 @@ from geometry_model import BBox
 from ir2_model import (
     KIND_ASSET_NOTE,
     KIND_TABLE,
+    KIND_TEXT_HEADING,
     KIND_TEXT_LIST_ITEM,
     KIND_TEXT_LIST_ITEM_ORDERED,
     KIND_TEXT_PARAGRAPH,
@@ -640,6 +643,8 @@ def build_page_ir2(
     page_label_deduced: bool = False,
     list_markers: frozenset[str] = frozenset(),
     scale_signatures: frozenset[tuple[str, ...]] = frozenset(),
+    prose_sizes: frozenset[float] = frozenset(),
+    heading_levels: dict[float, int] | None = None,
 ) -> PageIR2:
     """Build one IR 2 page. Reading order is the caller's; this only groups."""
 
@@ -688,7 +693,14 @@ def build_page_ir2(
 
     remaining = [p for p in ordered_text_primitives if p.primitive_id not in consumed_ids]
     paragraphs: list[
-        tuple[str, tuple[TextPrimitive, ...], tuple[TextRunIR2, ...], bool, bool]
+        tuple[
+            str,
+            tuple[TextPrimitive, ...],
+            tuple[TextRunIR2, ...],
+            bool,
+            bool,
+            int | None,
+        ]
     ] = []
     pending_text = ""
     pending_primitives: list[TextPrimitive] = []
@@ -701,11 +713,26 @@ def build_page_ir2(
     bound_lines = bind_marker_glyphs(group_source_lines(remaining), list_markers)
     keyed = [(line.block, line.text) for line in bound_lines]
     item_flags = list_item_flags(keyed, list_markers, scale_signatures)
+    # I titoli si decidono sulle stesse righe, con la dimensione del carattere:
+    # `Criterio_Titoli_v2.md`. La riga porta la dimensione MASSIMA delle sue
+    # primitive, perche' e' quella che governa la riga in tipografia.
+    sized = [
+        SizedLine(
+            block=line.block,
+            text=line.text.strip(),
+            size=round(max((p.font_size or 0.0) for p in line.primitives), 1)
+            if line.primitives
+            else 0.0,
+        )
+        for line in bound_lines
+    ]
+    heading_flags = heading_lines(sized, prose_sizes, heading_levels or {})
     # Le voci numerate hanno un segnale proprio -- gli interi consecutivi -- e non
     # passano dai marcatori, che sono caratteri non alfanumerici.
     ordered_flags = numbered_item_flags(keyed)
     pending_is_item = False
     pending_is_ordered = False
+    pending_heading: int | None = None
 
     for position, source_line in enumerate(bound_lines):
         if previous_line is None:
@@ -714,9 +741,13 @@ def build_page_ir2(
             pending_runs = runs_for_line(source_line)
             pending_is_item = item_flags[position]
             pending_is_ordered = ordered_flags[position]
+            pending_heading = heading_flags.get(position)
             previous_line = source_line
             continue
-        if breaks_paragraph(
+        # Un titolo rompe il paragrafo PRIMA e DOPO di se': e' un nodo suo, e
+        # attaccarlo alla prosa che segue lo farebbe sparire dentro un paragrafo.
+        breaks_for_heading = position in heading_flags or (position - 1) in heading_flags
+        if breaks_for_heading or breaks_paragraph(
             previous_line,
             source_line,
             page_body_font,
@@ -730,10 +761,12 @@ def build_page_ir2(
                     _strip_runs(pending_runs),
                     pending_is_item,
                     pending_is_ordered,
+                    pending_heading,
                 )
             )
             pending_is_item = item_flags[position]
             pending_is_ordered = ordered_flags[position]
+            pending_heading = heading_flags.get(position)
             pending_text = source_line.text
             pending_primitives = list(source_line.primitives)
             pending_runs = runs_for_line(source_line)
@@ -750,6 +783,7 @@ def build_page_ir2(
                 _strip_runs(pending_runs),
                 pending_is_item,
                 pending_is_ordered,
+                pending_heading,
             )
         )
 
@@ -769,7 +803,7 @@ def build_page_ir2(
         for index, primitive in enumerate(ordered_text_primitives)
     }
     paragraph_of_original_index: dict[int, int] = {}
-    for paragraph_index, (_text, primitives, _runs, _item, _ord) in enumerate(paragraphs):
+    for paragraph_index, (_text, primitives, _runs, _i, _o, _h) in enumerate(paragraphs):
         for primitive in primitives:
             original = index_of_primitive.get(primitive.primitive_id)
             if original is not None:
@@ -803,7 +837,7 @@ def build_page_ir2(
     nodes: list[NodeIR2] = []
     for order, (kind, payload) in enumerate(items):
         if kind == "text":
-            text, primitives, runs, is_list_item, is_ordered = payload  # type: ignore[misc]
+            text, primitives, runs, is_list_item, is_ordered, level = payload  # type: ignore[misc]
             first = primitives[0]
             # L'identita' viene dal PRIMO PRIMITIVO, non dalla riga. Una riga di
             # sorgente puo' comparire piu' volte nell'ordine di lettura quando
@@ -819,7 +853,9 @@ def build_page_ir2(
                     node_id=f"{page_id}:{suffix}",
                     order=order,
                     kind=(
-                        KIND_TEXT_LIST_ITEM_ORDERED
+                        KIND_TEXT_HEADING
+                        if level is not None
+                        else KIND_TEXT_LIST_ITEM_ORDERED
                         if is_ordered
                         else KIND_TEXT_LIST_ITEM
                         if is_list_item
@@ -831,6 +867,7 @@ def build_page_ir2(
                     page_ids=(page_id,),
                     text=text,
                     runs=runs,
+                    heading_level=level,
                 )
             )
             continue
