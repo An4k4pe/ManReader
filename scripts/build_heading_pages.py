@@ -5,6 +5,17 @@ cinque righe di contorno attorno a ogni riga campionata, e non basta: se una rig
 sia un'intestazione lo si vede da **cosa le sta sotto** e da come e' composta la
 pagina, non da due righe. Rilievo dell'utente.
 
+**E niente troncamento.** La prima versione di questo script tagliava ogni riga a
+160 caratteri, e su BiD idx 164 la resa e' fatta di 15 righe, una delle quali e'
+un paragrafo da **1500 caratteri** che contiene `ridurre il sospetto` verso la
+fine. Troncando, la riga da giudicare spariva e il resto sembrava una collezione
+di estratti -- due dei tre rilievi dell'utente avevano quella sola causa.
+
+**Ogni occorrenza, non la prima.** Il materiale precedente cercava la stringa
+nella resa e mostrava la **prima** occorrenza nel documento, che spesso non era
+la riga estratta: rilievo dell'etichettatore, verificato su tre righe. Qui si
+stampano **tutte** le occorrenze col loro contorno.
+
 Per ogni pagina che contiene almeno una riga campionata stampa la resa completa
 del prototipo -- con arredo tolto, elenchi e titoli -- e l'elenco delle righe da
 giudicare su quella pagina. **La classe che la regola ha assegnato non compare**:
@@ -47,6 +58,49 @@ def render_page(pdf: Path, index: int, workspace: Path) -> str:
     )
     rendered = out / "page_ir2.md"
     return rendered.read_text(encoding="utf-8") if rendered.is_file() else "(resa non prodotta)"
+
+
+def _bare(text: str) -> str:
+    """Solo lettere e cifre, minuscole: cio' che sopravvive alla resa.
+
+    La resa inserisce il grassetto e toglie i marcatori d'elenco, quindi un
+    confronto letterale fra sorgente e uscita fallisce.
+    """
+
+    return "".join(character for character in text if character.isalnum()).lower()
+
+
+def occurrences(rendered: str, needle: str, window: int = 110) -> list[str]:
+    """Tutte le occorrenze della riga nella resa, col loro contorno.
+
+    Il confronto normalizza i due lati -- la resa inserisce il grassetto e toglie
+    i marcatori -- e restituisce **ogni** occorrenza: mostrare solo la prima era
+    il difetto che ha fatto giudicare tre righe sul contorno sbagliato.
+    """
+
+    target = _bare(needle)
+    if not target:
+        return []
+    plain = rendered
+    bare_map: list[int] = []
+    bare_text: list[str] = []
+    for position, character in enumerate(plain):
+        if character.isalnum():
+            bare_text.append(character.lower())
+            bare_map.append(position)
+    joined = "".join(bare_text)
+
+    found: list[str] = []
+    start = 0
+    while True:
+        at = joined.find(target, start)
+        if at < 0:
+            break
+        left = bare_map[max(0, at - window)]
+        right = bare_map[min(len(bare_map) - 1, at + len(target) + window)]
+        found.append(plain[left : right + 1].replace("\n", " "))
+        start = at + 1
+    return found
 
 
 def main() -> None:
@@ -98,11 +152,26 @@ def main() -> None:
                 lines.append(f"- Riga **{number}**: `{testi[number][:96]}`")
                 lines.append("  - Giudizio: ")
             lines.append("")
-            lines.append("**La pagina come esce oggi:**")
+            rendered = render_page(args.pdf_dir / f"{manual}.pdf", index, root)
+
+            lines.append("**Dove stanno, nella resa:**")
+            lines.append("")
+            for number in numbers:
+                needle = testi[number]
+                found = occurrences(rendered, needle)
+                lines.append(f"- Riga **{number}** — {len(found)} occorrenze nella resa:")
+                for excerpt in found:
+                    lines.append("")
+                    lines.append("  ```markdown")
+                    lines.append(f"  …{excerpt}…")
+                    lines.append("  ```")
+                if not found:
+                    lines.append("  - **non compare nella resa** (tolta come arredo, o persa)")
+            lines.append("")
+            lines.append("**La pagina intera come esce oggi**, senza tagli:")
             lines.append("")
             lines.append("```markdown")
-            rendered = render_page(args.pdf_dir / f"{manual}.pdf", index, root)
-            lines.extend(entry[:160] for entry in rendered.splitlines())
+            lines.extend(rendered.splitlines())
             lines.append("```")
             lines.append("")
             lines.append("---")
