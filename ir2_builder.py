@@ -40,7 +40,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from document_heading_measurements import SizedLine  # noqa: I001
-from document_heading_policy import heading_lines  # noqa: I001
+from document_heading_policy import heading_lines, merge_wrapped  # noqa: I001
 from document_list_policy import (  # noqa: I001
     list_item_flags,
     numbered_item_flags,
@@ -726,7 +726,16 @@ def build_page_ir2(
         )
         for line in bound_lines
     ]
-    heading_flags = heading_lines(sized, prose_sizes, heading_levels or {})
+    # Le righe che vanno a capo si uniscono **prima** di decidere: la condizione
+    # «sola alla sua dimensione nel blocco» conterebbe due volte un titolo
+    # spezzato, e non sarebbe piu' un titolo. `Criterio_Titoli_v3.md` §2.
+    merged_lines, group_of = merge_wrapped(sized)
+    merged_levels = heading_lines(merged_lines, prose_sizes, heading_levels or {})
+    heading_flags = {
+        position: merged_levels[group]
+        for position, group in enumerate(group_of)
+        if group in merged_levels
+    }
     # Le voci numerate hanno un segnale proprio -- gli interi consecutivi -- e non
     # passano dai marcatori, che sono caratteri non alfanumerici.
     ordered_flags = numbered_item_flags(keyed)
@@ -746,7 +755,11 @@ def build_page_ir2(
             continue
         # Un titolo rompe il paragrafo PRIMA e DOPO di se': e' un nodo suo, e
         # attaccarlo alla prosa che segue lo farebbe sparire dentro un paragrafo.
-        breaks_for_heading = position in heading_flags or (position - 1) in heading_flags
+        # Si rompe dove il GRUPPO cambia, non a ogni riga di titolo: due righe
+        # dello stesso titolo che va a capo restano un nodo solo.
+        breaks_for_heading = group_of[position] != group_of[position - 1] and (
+            position in heading_flags or (position - 1) in heading_flags
+        )
         if breaks_for_heading or breaks_paragraph(
             previous_line,
             source_line,

@@ -10,7 +10,13 @@ from __future__ import annotations
 import unittest
 
 from document_heading_measurements import FontSizeMeasurements, SizedLine
-from document_heading_policy import heading_levels, heading_lines, prose_sizes
+from document_heading_policy import (
+    heading_levels,
+    heading_lines,
+    merge_wrapped,
+    prose_sizes,
+    sizes_that_carry_headings,
+)
 
 
 def _measure(**per_size: tuple[int, float]) -> FontSizeMeasurements:
@@ -82,12 +88,35 @@ class HeadingLinesTest(unittest.TestCase):
             heading_lines(lines, frozenset({10.0}), {34.0: 1}), {0: 1}
         )
 
-    def test_a_block_that_carries_prose_is_not_a_heading_block(self) -> None:
+    def test_a_title_inside_the_block_of_its_own_prose_is_still_a_title(self) -> None:
+        # `Criterio_Titoli_v3.md`: il backend mette il titolo nello stesso blocco
+        # della prosa che introduce. La v2 lo scartava, e costava cinque titoli
+        # veri -- su BiD `ridurre il sospetto`, su Dag `QUANDO IL DISASTRO...`.
         lines = [
             self._line("b0005", "TITOLO", 34.0),
             self._line("b0005", "e poi del testo di prosa lungo abbastanza", 10.0),
         ]
-        self.assertEqual(heading_lines(lines, frozenset({10.0}), {34.0: 1}), {})
+        self.assertEqual(heading_lines(lines, frozenset({10.0}), {34.0: 1}), {0: 1})
+
+    def test_siblings_at_the_same_size_are_not_titles(self) -> None:
+        # E' cio' che il blocco non separava: una cella di scheda o una riga di
+        # tabella ha sorelle alla stessa dimensione, un titolo e' solo.
+        lines = [
+            self._line("b0004", "12", 14.0),
+            self._line("b0004", "18", 14.0),
+            self._line("b0004", "24", 14.0),
+            self._line("b0004", "del testo di prosa lungo abbastanza", 10.0),
+        ]
+        self.assertEqual(heading_lines(lines, frozenset({10.0}), {14.0: 1}), {})
+
+    def test_a_long_block_no_longer_blocks_a_title(self) -> None:
+        # Su BiD `recuperare` sta in un blocco di 24 righe: il limite di due
+        # righe della v2 lo perdeva.
+        lines = [self._line("b0001", f"prosa numero {i}", 9.5) for i in range(20)]
+        lines.insert(7, self._line("b0001", "recuperare", 14.0))
+        self.assertEqual(
+            heading_lines(lines, frozenset({9.5}), {14.0: 2}), {7: 2}
+        )
 
     def test_a_smaller_running_head_beside_the_title_does_not_block_it(self) -> None:
         # Apo: il blocco del titolo contiene anche la testatina, che sta SOTTO
@@ -100,10 +129,6 @@ class HeadingLinesTest(unittest.TestCase):
             heading_lines(lines, frozenset({11.6}), {46.4: 1}), {1: 1}
         )
 
-    def test_a_long_block_is_not_a_heading(self) -> None:
-        lines = [self._line("b0002", f"riga {i}", 20.0) for i in range(3)]
-        self.assertEqual(heading_lines(lines, frozenset({10.0}), {20.0: 1}), {})
-
     def test_a_single_character_is_a_drop_cap_and_not_a_heading(self) -> None:
         # Fab: `3`, `n`, `W` a corpo 30 sono la prima lettera ingrandita.
         lines = [self._line("b0000", "W", 30.2)]
@@ -115,6 +140,67 @@ class HeadingLinesTest(unittest.TestCase):
         self.assertEqual(
             heading_lines(lines, frozenset({9.5}), {14.0: 1}, frozenset({"152"})), {}
         )
+
+
+class MergeWrappedTest(unittest.TestCase):
+    """`Criterio_Titoli_v3.md` §2: un titolo che va a capo e' UN titolo."""
+
+    def _line(self, block: str, text: str, size: float) -> SizedLine:
+        return SizedLine(block=block, text=text, size=size)
+
+    def test_two_lines_of_one_block_at_one_size_become_one(self) -> None:
+        # Dag: `FAR SALIRE DI LIVELLO IL` + `GRUPPO` uscivano come due titoli.
+        lines = [
+            self._line("b0006", "FAR SALIRE DI LIVELLO IL", 12.0),
+            self._line("b0006", "GRUPPO", 12.0),
+        ]
+        merged, groups = merge_wrapped(lines)
+        self.assertEqual([line.text for line in merged], ["FAR SALIRE DI LIVELLO IL GRUPPO"])
+        self.assertEqual(groups, [0, 0])
+
+    def test_siblings_in_different_blocks_stay_apart(self) -> None:
+        # DB: `ANIMISMO`, `ELEMENTALISMO`, `MENTALISMO` sono adiacenti e della
+        # stessa dimensione, ma ognuno nel suo blocco: restano tre titoli.
+        lines = [
+            self._line("b0001", "ANIMISMO", 11.5),
+            self._line("b0002", "ELEMENTALISMO", 11.5),
+            self._line("b0003", "MENTALISMO", 11.5),
+        ]
+        merged, _groups = merge_wrapped(lines)
+        self.assertEqual(len(merged), 3)
+
+    def test_a_wrapped_title_survives_the_alone_at_its_size_test(self) -> None:
+        # E' la ragione per cui l'unione va fatta PRIMA di contare: spezzato,
+        # avrebbe due righe alla sua dimensione e non sarebbe piu' un titolo.
+        lines = [
+            self._line("b0006", "FAR SALIRE DI LIVELLO IL", 12.0),
+            self._line("b0006", "GRUPPO", 12.0),
+            self._line("b0006", "prosa lunga abbastanza da contare", 9.0),
+        ]
+        self.assertEqual(heading_lines(lines, frozenset({9.0}), {12.0: 1}), {})
+        merged, _groups = merge_wrapped(lines)
+        self.assertEqual(heading_lines(merged, frozenset({9.0}), {12.0: 1}), {0: 1})
+
+
+class SizesThatCarryHeadingsTest(unittest.TestCase):
+    def test_a_size_that_heads_nothing_does_not_consume_a_level(self) -> None:
+        # Lan: `80.0` si prendeva `h1` senza produrre un solo titolo, e le
+        # dimensioni che i titoli li producono finivano schiacciate in fondo.
+        measured = FontSizeMeasurements(
+            line_count={10.0: 500, 80.0: 5, 16.0: 16, 12.0: 28},
+            median_length={10.0: 50.0, 80.0: 9.0, 16.0: 11.0, 12.0: 10.0},
+        )
+        prose = frozenset({10.0})
+        pages = [
+            [
+                SizedLine(block="b0001", text="NEXUS MOD", size=16.0),
+                SizedLine(block="b0002", text="DRONE TEMPESTA", size=12.0),
+                SizedLine(block="b0003", text="prosa lunga abbastanza", size=10.0),
+            ]
+        ]
+        carried = sizes_that_carry_headings(pages, measured, prose)
+        self.assertEqual(carried, frozenset({16.0, 12.0}))
+        self.assertEqual(heading_levels(measured, prose, carried), {16.0: 1, 12.0: 2})
 
 
 if __name__ == "__main__":

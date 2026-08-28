@@ -59,8 +59,15 @@ from document_furniture_policy import (  # noqa: E402
     furniture_node_ids,
     furniture_slots,
 )
-from document_heading_measurements import measure_font_sizes  # noqa: E402
-from document_heading_policy import heading_levels, prose_sizes  # noqa: E402
+from document_heading_measurements import (  # noqa: E402
+    measure_font_sizes,
+    sized_lines,
+)
+from document_heading_policy import (  # noqa: E402
+    heading_levels,
+    prose_sizes,
+    sizes_that_carry_headings,
+)
 from document_line_start_measurements import (  # noqa: E402
     count_block_signatures,
     measure_document_line_starts,
@@ -217,13 +224,16 @@ def document_furniture_slots(document: fitz.Document, *, sample: int) -> Documen
     # puo' dire solo avendone viste tante, `Criterio_Titoli_v2.md` §1.
     sizes = measure_font_sizes(captured)
     prose = prose_sizes(sizes)
+    # Due passate: prima si vede quali dimensioni intestano davvero qualcosa, poi
+    # si assegnano i ranghi solo a quelle. `Criterio_Titoli_v3.md`.
+    carried = sizes_that_carry_headings([sized_lines(page) for page in captured], sizes, prose)
     return DocumentScan(
         furniture=slots,
         deduced_labels=deduced,
         list_markers=markers,
         scale_signatures=scales,
         prose_sizes=prose,
-        heading_levels=heading_levels(sizes, prose),
+        heading_levels=heading_levels(sizes, prose, carried),
     )
 
 
