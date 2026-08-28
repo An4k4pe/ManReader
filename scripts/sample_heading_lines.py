@@ -48,10 +48,19 @@ from document_text_recurrence_measurements import (  # noqa: E402
 from primitive_normalizer import normalize_backend_page_capture  # noqa: E402
 from pymupdf_capture import capture_pymupdf_page  # noqa: E402
 
+# **DrM e DrW escono dalla popolazione**, e `Criterio_Titoli_v3.md` §3 lo
+# dichiara **prima** del sorteggio. Nel giro precedente DrM da solo dava 13 righe
+# su 32 e 11 delle 11 «non titolo»: un manuale decideva un terzo del giudizio, su
+# una categoria -- le schede mostro -- che il progetto sa di non gestire.
+#
+# Dichiararlo prima e' cio' che lo distingue dallo scartare i casi scomodi dopo,
+# che e' quello che `AGENTS.MD` §15 vieta. Il prezzo si paga per intero: cio' che
+# la regola fa su di loro si riporta separatamente nell'esito.
 MANUALS = (
-    "Apo", "BiD", "BoB", "DB", "DIE", "Dag", "DrM", "DrW",
+    "Apo", "BiD", "BoB", "DB", "DIE", "Dag",
     "FW", "FWK", "Fab", "Kul", "Lan", "SV", "Vil", "Wil",
 )
+EXCLUDED_STAT_BLOCK_MANUALS = ("DrM", "DrW")
 PER_HALF = 16
 RENDER_DPI = 150
 

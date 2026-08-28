@@ -96,8 +96,15 @@ def collect(pdf_path: Path, sample: int) -> list[dict]:
                     "manuale": pdf_path.stem,
                     "slot": slot,
                     "quota": share_of.get(slot, 0.0),
+                    # L'ordine conta: uno slot puo' stare in piu' rami, e il
+                    # verbale deve dire quale lo ha deciso. I due nuovi si
+                    # nominano per primi perche' sono quelli in giudizio.
                     "ramo": (
-                        "etichetta"
+                        "verticale"
+                        if slot in slots.from_vertical
+                        else "testo-ripetuto"
+                        if slot in slots.from_repeated_text
+                        else "etichetta"
                         if slot in slots.from_label
                         else "sequenza"
                         if slot in slots.from_sequence
@@ -122,7 +129,8 @@ def main() -> None:
         help="di default i dieci mai spesi per l'arredo",
     )
     parser.add_argument(
-        "--solo-ramo", choices=("etichetta", "ricorrenza", "sequenza"),
+        "--solo-ramo",
+        choices=("etichetta", "ricorrenza", "sequenza", "testo-ripetuto", "verticale"),
         help="giudica solo le voci di un ramo: serve quando un ramo nuovo va "
              "provato da solo, senza che le voci dei rami gia' spediti lo diluiscano",
     )
