@@ -38,6 +38,7 @@ from document_line_start_measurements import (  # noqa: E402
     source_lines,
 )
 from document_list_policy import list_markers, strip_marker  # noqa: E402
+from ir2_builder import body_font  # noqa: E402
 from primitive_normalizer import normalize_backend_page_capture  # noqa: E402
 from pymupdf_capture import capture_pymupdf_page  # noqa: E402
 
@@ -84,7 +85,10 @@ def lists_of(pdf_path: Path, window: int, first_page: int | None = None) -> list
         if not pages:
             return found
 
-        markers = list_markers(measure_document_line_starts(pages))
+        # Il font del corpo apre la seconda via dei marcatori:
+        # `Criterio_MarcatoreDaFont_v1.md`, senza cui Fab non ne ha nessuno.
+        body = body_font([p for page in pages for p in page.text_primitives])
+        markers = list_markers(measure_document_line_starts(pages, body))
         if not markers:
             return found
 
