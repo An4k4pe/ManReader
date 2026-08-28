@@ -45,6 +45,24 @@ solo la fascia bassa) arrivano, e stavano allo 0%.
 
 Il ramo 3 **tace dove il documento dichiara**: li' il ramo 1 ha un fatto, e una
 deduzione che gli si sovrapponesse sarebbe una congettura al posto di un dato.
+
+**Ramo 4 -- il testo che si ripete, e il testo verticale**,
+`Criterio_ArredoPerTesto_v1.md`. Generalizza il ramo 1 da «il numero di pagina» a
+«qualunque testo che si ripete»: uno slot ricorrente e' arredo **ovunque stia**
+se almeno un testo a quello slot compare su due o piu' pagine. Niente fascia.
+
+E' cio' che separa una testatina da un titolo che capita in cima: la testatina
+ripete lo **stesso** testo, il titolo no. Misurato sulla fascia alta, dove il ramo
+2 non arriva: FWK `Capitolo 5` 3 testi distinti su 11 pagine, FW `Il Mondo` 2 su
+20, contro BiD 10 testi distinti su 10 pagine e DrM 9 su 9, che sono titoli veri
+e restano.
+
+La seconda clausola e' la **direzione**: una primitiva non orizzontale e' arredo.
+Misurato, il testo verticale esiste su 6 manuali su 16 e ogni occorrenza e' un
+nome di capitolo o il titolo del manuale -- `Draw Steel`, `Tactician`,
+`Arcanista`, `ATTIVITA' DI DOWNTIME`. Sta in una clausola sua perche' una
+testatina verticale cambia slot fra recto e verso e col capitolo, quindi la
+ricorrenza dello slot non la coglie sempre; la direzione si'.
 """
 
 from __future__ import annotations
@@ -100,10 +118,18 @@ class FurnitureSlots:
     from_label: frozenset[Slot]
     from_recurrence: frozenset[Slot]
     from_sequence: frozenset[Slot] = frozenset()
+    from_repeated_text: frozenset[Slot] = frozenset()
+    from_vertical: frozenset[Slot] = frozenset()
 
     @property
     def all_slots(self) -> frozenset[Slot]:
-        return self.from_label | self.from_recurrence | self.from_sequence
+        return (
+            self.from_label
+            | self.from_recurrence
+            | self.from_sequence
+            | self.from_repeated_text
+            | self.from_vertical
+        )
 
 
 def label_slots(
@@ -223,7 +249,7 @@ def furniture_slots(
     band: float = EDGE_BAND,
     deduce: bool = True,
 ) -> FurnitureSlots:
-    """I tre rami insieme, tenuti distinti.
+    """I quattro rami insieme, tenuti distinti.
 
     Il ramo 3 scatta **solo** se nessuna pagina porta un'etichetta dichiarata.
     `deduce=False` lo spegne, e serve a misurare che cosa aggiunge.
@@ -236,10 +262,13 @@ def furniture_slots(
             [page for page, _ in declared], share=share
         ).slots
 
+    captured = [page for page, _label in declared]
     return FurnitureSlots(
         from_label=label_slots(pages, share=share),
         from_recurrence=recurrent_edge_slots(measurements, share=share, band=band),
         from_sequence=from_sequence,
+        from_repeated_text=repeated_text_slots(captured, share=share),
+        from_vertical=vertical_slots(captured),
     )
 
 
@@ -267,3 +296,70 @@ def furniture_node_ids(
         if carrying and all(slot_of(p, page) in slots for p in carrying):
             excluded.add(node_id)
     return frozenset(excluded)
+
+
+def repeated_text_slots(
+    pages: Sequence[NormalizedPrimitivePage],
+    *,
+    share: float = RECURRENCE_SHARE,
+) -> frozenset[Slot]:
+    """Ramo 4A. Uno slot ricorrente che ripete **lo stesso testo**, ovunque stia.
+
+    `Criterio_ArredoPerTesto_v1.md` §1.A. Generalizza il ramo 1 da «il numero di
+    pagina» a «qualunque testo che si ripete», e come quello **non ha vincolo di
+    posizione**: riconosce che cosa togliere, non dove.
+
+    La condizione che separa e' che **almeno un testo a quello slot compaia su due
+    o piu' pagine**. Misurato sulla fascia alta, dove il ramo 2 non arriva: FWK
+    `Capitolo 5` ha 3 testi distinti su 11 pagine e FW `Il Mondo` 2 su 20 -- si
+    ripetono; BiD ha 10 testi distinti su 10 pagine e DrM 9 su 9 -- sono titoli
+    veri e restano.
+    """
+
+    per_slot: dict[Slot, list[str]] = {}
+    for page in pages:
+        seen: dict[Slot, str] = {}
+        for primitive in page.text_primitives:
+            text = normalize_text(primitive.text)
+            if text:
+                seen.setdefault(slot_of(primitive, page), text)
+        for slot, text in seen.items():
+            per_slot.setdefault(slot, []).append(text)
+
+    minimum = len(pages) * share
+    found: set[Slot] = set()
+    for slot, texts in per_slot.items():
+        if len(texts) < minimum:
+            continue
+        counts: dict[str, int] = {}
+        for text in texts:
+            counts[text] = counts.get(text, 0) + 1
+        if any(count >= 2 for count in counts.values()):
+            found.add(slot)
+    return frozenset(found)
+
+
+def vertical_slots(pages: Sequence[NormalizedPrimitivePage]) -> frozenset[Slot]:
+    """Ramo 4B. Gli slot occupati da testo **non orizzontale**.
+
+    Misurato su 20 pagine per manuale: il testo verticale esiste su 6 manuali su
+    16, fra 9 e 36 primitive ciascuno, e **ogni** occorrenza e' un nome di
+    capitolo o il titolo del manuale. Su BiD `ATTIVITA' DI DOWNTIME` sta a
+    direzione ``(0,-1)`` sul bordo destro e `DOWNTIME` a ``(0,1)`` sul sinistro,
+    specchiati fra recto e verso; il titolo vero e' l'orizzontale a corpo 30, che
+    compare una volta sola a capo del capitolo.
+
+    Clausola sua e non un caso della A perche' una testatina verticale cambia slot
+    fra recto e verso e col capitolo: la ricorrenza dello slot non la coglie
+    sempre, la direzione si'.
+    """
+
+    found: set[Slot] = set()
+    for page in pages:
+        for primitive in page.text_primitives:
+            direction = primitive.direction
+            if direction is None or not normalize_text(primitive.text):
+                continue
+            if abs(direction[0]) <= abs(direction[1]):
+                found.add(slot_of(primitive, page))
+    return frozenset(found)

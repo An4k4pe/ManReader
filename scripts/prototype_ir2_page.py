@@ -549,6 +549,8 @@ def run(
                 f"arredo: {len(slots.from_label)} slot da etichetta, "
                 f"{len(slots.from_recurrence)} da ricorrenza, "
                 f"{len(slots.from_sequence)} da sequenza dedotta, "
+                f"{len(slots.from_repeated_text)} da testo ripetuto, "
+                f"{len(slots.from_vertical)} da verticale, "
                 f"{len(excluded_node_ids)} nodi fuori dal corpo"
                 + (f" — numero dedotto: {page_label}" if page_label_deduced else ""),
                 file=sys.stderr,
