@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import unittest
 
-from document_furniture_policy import repeated_text_slots, vertical_slots
+from document_furniture_policy import repeated_text_slots, vertical_primitive_ids
 from geometry_model import PageGeometry
 from primitive_model import NormalizedPrimitivePage, TextPrimitive
 
@@ -64,23 +64,30 @@ class RepeatedTextSlotsTest(unittest.TestCase):
         self.assertNotIn((44, 2), repeated_text_slots(pages))
 
 
-class VerticalSlotsTest(unittest.TestCase):
+class VerticalPrimitivesTest(unittest.TestCase):
+    """La verticalita' e' della PRIMITIVA, e di UNA pagina."""
+
     def test_non_horizontal_text_is_furniture(self) -> None:
-        # BiD: `ATTIVITÀ DI DOWNTIME` a direzione (0,-1) sul bordo destro e
-        # `DOWNTIME` a (0,1) sul sinistro, specchiati fra recto e verso.
-        pages = [
-            _page(0, ("ATTIVITÀ DI DOWNTIME", 96.0, 18.0, (0.0, -1.0))),
-            _page(1, ("DOWNTIME", 1.0, 23.0, (0.0, 1.0))),
-        ]
-        found = vertical_slots(pages)
-        self.assertIn((96, 18), found)
-        self.assertIn((1, 23), found)
+        page = _page(0, ("ATTIVITÀ DI DOWNTIME", 96.0, 18.0, (0.0, -1.0)))
+        self.assertEqual(len(vertical_primitive_ids(page)), 1)
 
     def test_horizontal_text_is_left_alone(self) -> None:
         # Il titolo vero di BiD e' l'orizzontale a corpo 30, e compare una volta
         # sola a capo del capitolo.
-        pages = [_page(0, ("attività di downtime", 14.0, 7.0, (1.0, 0.0)))]
-        self.assertEqual(vertical_slots(pages), frozenset())
+        page = _page(0, ("attività di downtime", 14.0, 7.0, (1.0, 0.0)))
+        self.assertEqual(vertical_primitive_ids(page), frozenset())
+
+    def test_only_the_vertical_one_of_a_page_is_taken(self) -> None:
+        # Su Fab lo slot (14,57) porta `CONGEDO` in verticale su una pagina e
+        # prosa orizzontale su altre: marcare lo SLOT toglieva la prosa.
+        page = _page(
+            0,
+            ("CONGEDO", 14.0, 57.0, (0.0, -1.0)),
+            ("perfetti per viaggiare, e combatte con", 14.0, 57.0, (1.0, 0.0)),
+        )
+        found = vertical_primitive_ids(page)
+        self.assertEqual(len(found), 1)
+        self.assertIn("primitive:text:p0:s0", found)
 
     def test_a_primitive_without_a_direction_is_left_alone(self) -> None:
         page = NormalizedPrimitivePage(
@@ -100,7 +107,21 @@ class VerticalSlotsTest(unittest.TestCase):
                 ),
             ),
         )
-        self.assertEqual(vertical_slots([page]), frozenset())
+        self.assertEqual(vertical_primitive_ids(page), frozenset())
+
+
+class RepeatedTextWithdrawnTest(unittest.TestCase):
+    def test_it_is_computed_but_not_used(self) -> None:
+        # Ritirata dopo il giudizio: toglieva contenuto su 7 voci su 12.
+        # `all_slots` non la include piu'.
+        from document_furniture_policy import FurnitureSlots
+
+        slots = FurnitureSlots(
+            from_label=frozenset(),
+            from_recurrence=frozenset(),
+            from_repeated_text=frozenset({(44, 2)}),
+        )
+        self.assertNotIn((44, 2), slots.all_slots)
 
 
 if __name__ == "__main__":

@@ -123,13 +123,17 @@ class FurnitureSlots:
 
     @property
     def all_slots(self) -> frozenset[Slot]:
-        return (
-            self.from_label
-            | self.from_recurrence
-            | self.from_sequence
-            | self.from_repeated_text
-            | self.from_vertical
-        )
+        # `from_repeated_text` **non entra**: la clausola e' stata RITIRATA dopo
+        # il giudizio, che l'ha trovata a togliere contenuto su 7 voci su 12.
+        # Resta calcolata perche' l'esito la cita e perche' la misura serve a chi
+        # riaprira' il fascicolo, ma non tocca cio' che esce dal corpo.
+        # `Esito_ArredoPerTesto_v1.md`.
+        #
+        # `from_vertical` non entra piu' per un'altra ragione: la verticalita' e'
+        # una proprieta' della PRIMITIVA e non dello slot, e marcare lo slot
+        # toglieva la prosa orizzontale che ci passa su altre pagine. Ora si
+        # escludono le primitive, con `vertical_primitive_ids`.
+        return self.from_label | self.from_recurrence | self.from_sequence
 
 
 def label_slots(
@@ -276,6 +280,7 @@ def furniture_node_ids(
     page: NormalizedPrimitivePage,
     node_primitive_ids: Sequence[tuple[str, Sequence[str]]],
     slots: frozenset[Slot],
+    excluded_primitives: frozenset[str] = frozenset(),
 ) -> frozenset[str]:
     """I nodi da tenere fuori dal corpo: quelli **interamente** in slot d'arredo.
 
@@ -293,7 +298,13 @@ def furniture_node_ids(
             for pid in primitive_ids
             if pid in by_id and normalize_text(by_id[pid].text)
         ]
-        if carrying and all(slot_of(p, page) in slots for p in carrying):
+        # Una primitiva puo' essere arredo **per se stessa** e non per dove sta:
+        # il testo verticale e' il caso, e marcarne lo slot toglieva la prosa
+        # orizzontale che ci passa su altre pagine.
+        if carrying and all(
+            slot_of(p, page) in slots or p.primitive_id in excluded_primitives
+            for p in carrying
+        ):
             excluded.add(node_id)
     return frozenset(excluded)
 
@@ -303,7 +314,16 @@ def repeated_text_slots(
     *,
     share: float = RECURRENCE_SHARE,
 ) -> frozenset[Slot]:
-    """Ramo 4A. Uno slot ricorrente che ripete **lo stesso testo**, ovunque stia.
+    """**RITIRATA.** Uno slot ricorrente che ripete lo stesso testo, ovunque stia.
+
+    Il giudizio cieco l'ha trovata a togliere **contenuto** su 7 voci su 12: le
+    etichette dei campi di scheda di Draw Steel (`Stamina` sopra il suo valore),
+    le parole chiave delle abilita' di DrW, righe di corpo di DB. Ricorrono
+    perche' ricorre la **struttura**, non perche' siano arredo, e la condizione
+    «almeno un testo si ripete a quello slot» non le distingue.
+
+    Resta calcolata e **non usata**: `all_slots` non la include. La misura serve a
+    chi riaprira' il fascicolo. `Esito_ArredoPerTesto_v1.md`.
 
     `Criterio_ArredoPerTesto_v1.md` §1.A. Generalizza il ramo 1 da «il numero di
     pagina» a «qualunque testo che si ripete», e come quello **non ha vincolo di
@@ -339,8 +359,47 @@ def repeated_text_slots(
     return frozenset(found)
 
 
+def vertical_primitive_ids(page: NormalizedPrimitivePage) -> frozenset[str]:
+    """Ramo 4B. Gli **id delle primitive** con testo non orizzontale, di UNA pagina.
+
+    **Id di primitiva e non slot**, ed e' la correzione che il giudizio ha
+    imposto: `Criterio_ArredoPerTesto_v1.md` §1.B dice «una primitiva la cui
+    direzione non e' orizzontale», e l'avevo implementata marcando il suo SLOT.
+    Su Fab lo slot (14,57) porta `CONGEDO` in verticale su una pagina e prosa
+    orizzontale su quattro altre -- `perfetti per viaggiare, e combatte con` --
+    e quella prosa usciva dal corpo.
+
+    **E di una pagina sola, non del documento.** Gli id di primitiva **non sono
+    unici fra pagine**: `primitive:text:text:b0000:l0000:s0000` esiste su ogni
+    pagina, e su BiD 70 id su 203 sono ripetuti. Raccoglierli su tutto il
+    documento marcava primitive omonime di altre pagine -- il titolo `attivita' di
+    downtime` a corpo 30 finiva in review perche' un'altra pagina aveva una
+    primitiva verticale con lo stesso id.
+
+    Non serve la scansione del documento: la verticalita' e' un fatto della
+    primitiva, e la primitiva sta su una pagina.
+
+    Misurato su 20 pagine per manuale: il testo verticale esiste su 6 manuali su
+    16 e **ogni** occorrenza e' un nome di capitolo o il titolo del manuale --
+    `Draw Steel`, `Tactician`, `Arcanista`, `ATTIVITA' DI DOWNTIME`.
+    """
+
+    found: set[str] = set()
+    for primitive in page.text_primitives:
+        direction = primitive.direction
+        if direction is None or not normalize_text(primitive.text):
+            continue
+        if abs(direction[0]) <= abs(direction[1]):
+            found.add(primitive.primitive_id)
+    return frozenset(found)
+
+
 def vertical_slots(pages: Sequence[NormalizedPrimitivePage]) -> frozenset[Slot]:
-    """Ramo 4B. Gli slot occupati da testo **non orizzontale**.
+    """**Ritirata.** Gli slot occupati da testo non orizzontale.
+
+    Tenuta perche' l'esito la cita, e **non usata**: marcare lo slot toglieva la
+    prosa orizzontale che ci passa su altre pagine. La forma giusta e'
+    `vertical_primitive_ids`.
 
     Misurato su 20 pagine per manuale: il testo verticale esiste su 6 manuali su
     16, fra 9 e 36 primitive ciascuno, e **ogni** occorrenza e' un nome di

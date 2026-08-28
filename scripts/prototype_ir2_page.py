@@ -58,6 +58,7 @@ from document_furniture_policy import (  # noqa: E402
     deduced_number_slots,
     furniture_node_ids,
     furniture_slots,
+    vertical_primitive_ids,
 )
 from document_heading_measurements import (  # noqa: E402
     measure_font_sizes,
@@ -552,13 +553,15 @@ def run(
                 primitive_page,
                 [(node.node_id, node.primitive_ids) for node in ir2_page.nodes],
                 slots.all_slots,
+                # Per pagina, non dal documento: gli id di primitiva non sono
+                # unici fra pagine, e la verticalita' e' un fatto della pagina.
+                vertical_primitive_ids(primitive_page),
             )
             print(
                 f"arredo: {len(slots.from_label)} slot da etichetta, "
                 f"{len(slots.from_recurrence)} da ricorrenza, "
                 f"{len(slots.from_sequence)} da sequenza dedotta, "
-                f"{len(slots.from_repeated_text)} da testo ripetuto, "
-                f"{len(slots.from_vertical)} da verticale, "
+                f"{len(vertical_primitive_ids(primitive_page))} primitive verticali, "
                 f"{len(excluded_node_ids)} nodi fuori dal corpo"
                 + (f" — numero dedotto: {page_label}" if page_label_deduced else ""),
                 file=sys.stderr,
