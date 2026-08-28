@@ -76,7 +76,12 @@ from document_list_policy import list_markers, value_scale_signatures  # noqa: E
 from document_text_recurrence_measurements import (  # noqa: E402
     measure_document_text_recurrence,
 )
-from ir2_builder import AssetNoteInput, TableRegionInput, build_page_ir2  # noqa: E402
+from ir2_builder import (  # noqa: E402
+    AssetNoteInput,
+    TableRegionInput,
+    body_font,
+    build_page_ir2,
+)
 from ir2_markdown import is_rendered_in_body, render_page_markdown  # noqa: E402
 from ir2_model import DocumentIR2, IR2Provenance, NodeIR2  # noqa: E402
 from ir2_serialization import document_ir2_from_dict, document_ir2_to_dict  # noqa: E402
@@ -202,7 +207,10 @@ def document_furniture_slots(document: fitz.Document, *, sample: int) -> Documen
     # I marcatori d'elenco escono dalla STESSA scansione: sono un fatto
     # document-level come l'arredo, e ricatturare le pagine due volte
     # raddoppierebbe il costo del giro per niente.
-    markers = list_markers(measure_document_line_starts(captured))
+    # Il font del corpo apre la seconda via dei marcatori: su Fab il pallino e'
+    # la lettera `w` in Wingdings. `Criterio_MarcatoreDaFont_v1.md`.
+    body = body_font([p for page in captured for p in page.text_primitives])
+    markers = list_markers(measure_document_line_starts(captured, body))
     # Le firme di blocco escono dalla stessa scansione: dire quali sequenze
     # di glifi siano una scala di valori richiede di aver visto piu' blocchi,
     # ed e' un fatto document-level come l'arredo e i marcatori.

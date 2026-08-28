@@ -114,10 +114,55 @@ def source_lines(page: NormalizedPrimitivePage) -> list[tuple[str, str]]:
     return lines + loose
 
 
+def _is_a_glyph_marker(primitive, character: str, body_font_name: str | None) -> bool:
+    """La primitiva che apre la riga e' **il solo carattere**, in un font diverso.
+
+    `Criterio_MarcatoreDaFont_v1.md`: su Fab il pallino e' la lettera `w` in
+    `Wingdings-Regular`, e la condizione «non alfanumerico» non puo' vederlo.
+
+    **Due condizioni, e la seconda l'ha imposta una misura.** Una prima versione
+    cercava *una qualunque* primitiva con quel carattere sulla pagina: bastava un
+    `M` isolato da qualche parte perche' ogni riga che comincia per `M` diventasse
+    una voce, e FW passava da 57 voci a 92. Un pallino e' **una primitiva a se'**;
+    una maiuscola in un font da titolo e' il primo carattere di una parola.
+    """
+
+    if body_font_name is None or primitive is None:
+        return False
+    if primitive.text.strip() != character:
+        return False
+    return primitive.font_name is not None and primitive.font_name != body_font_name
+
+
+def _grouped_lines(page: NormalizedPrimitivePage) -> list[tuple[str, str, object]]:
+    """(blocco, testo, prima primitiva) per ogni riga sorgente, in ordine di x."""
+
+    grouped: dict[tuple[str, str], list] = defaultdict(list)
+    loose: list[tuple[str, str, object]] = []
+    for primitive in page.text_primitives:
+        match = _OBSERVATION.match(primitive.source_observation_id or "")
+        if match is None:
+            loose.append((f"?{primitive.primitive_id}", primitive.text, primitive))
+        else:
+            grouped[(match.group(1), match.group(2))].append(primitive)
+
+    lines: list[tuple[str, str, object]] = []
+    for (block, _line), primitives in grouped.items():
+        ordered = sorted(primitives, key=lambda z: z.bbox[0])
+        lines.append((block, "".join(p.text for p in ordered), ordered[0]))
+    return lines + loose
+
+
 def measure_document_line_starts(
     pages: Sequence[NormalizedPrimitivePage],
+    body_font_name: str | None = None,
 ) -> LineStartMeasurements:
-    """I quattro conteggi su tutte le pagine date."""
+    """I quattro conteggi su tutte le pagine date.
+
+    `body_font_name` apre la **seconda via** del `Criterio_MarcatoreDaFont_v1.md`:
+    un carattere alfanumerico conta come candidato se sta in un font diverso da
+    quello del corpo. Senza, la misura si comporta come prima.
+    """
 
     opens: Counter[str] = Counter()
     with_text: Counter[str] = Counter()
@@ -126,17 +171,48 @@ def measure_document_line_starts(
     seen = 0
 
     for index, page in enumerate(pages):
-        lines = [text for _block, text in source_lines(page)]
-        for position, text in enumerate(lines):
-            for character in text:
-                if not character.isalnum() and not character.isspace():
+        grouped = _grouped_lines(page)
+        lines = [text for _block, text, _first in grouped]
+        openers = [first for _block, _text, first in grouped]
+        # Il denominatore deve contare la **stessa cosa** del numeratore. Per un
+        # candidato alfanumerico la cosa e' «questo carattere **in quel font**»:
+        # contare tutte le `w` della prosa renderebbe la maggioranza
+        # irraggiungibile per costruzione, e contarne zero la renderebbe
+        # indefinita. `Criterio_MarcatoreDaFont_v1.md`.
+        for primitive in page.text_primitives:
+            other_font = (
+                body_font_name is not None
+                and primitive.font_name is not None
+                and primitive.font_name != body_font_name
+            )
+            for character in primitive.text:
+                if character.isspace():
+                    continue
+                if character.isalnum():
+                    if other_font:
+                        occurrences[character] += 1
+                else:
                     occurrences[character] += 1
+
+        for position, text in enumerate(lines):
             stripped = text.strip()
             if not stripped:
                 continue
             seen += 1
             head = stripped[0]
-            if head.isalnum() or head.isspace():
+            if head.isspace():
+                continue
+            # Per un candidato **alfanumerico** serve anche che uno spazio lo
+            # separi da cio' che segue. Misurato su FWK: `Bruinloa` ha la `B` in
+            # un font decorativo, primitiva a se', ed e' un CAPOLETTERA -- il
+            # manuale passava da 136 voci a 140. Un pallino e' seguito da spazio,
+            # la prima lettera di una parola no. Il vincolo vale solo per questa
+            # via: `✦Effetto Pieno:` di DB non ha spazio ed entra dall'altra.
+            if head.isalnum() and not (
+                _is_a_glyph_marker(openers[position], head, body_font_name)
+                and len(stripped) > 1
+                and stripped[1].isspace()
+            ):
                 continue
             opens[head] += 1
             on_pages[head].add(index)

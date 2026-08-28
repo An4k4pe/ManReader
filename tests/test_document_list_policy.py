@@ -236,5 +236,84 @@ class ListItemFlagsTest(unittest.TestCase):
         )
 
 
+class MarkerFromFontTest(unittest.TestCase):
+    """`Criterio_MarcatoreDaFont_v1.md`: il pallino puo' essere una lettera."""
+
+    def _page_with_font(self, index: int, *entries) -> NormalizedPrimitivePage:
+        primitives = []
+        for order, (text, font) in enumerate(entries):
+            primitives.append(
+                TextPrimitive(
+                    primitive_id=f"primitive:text:p{index}:s{order}",
+                    bbox=(float(order) * 10.0, 10.0, float(order) * 10.0 + 5.0, 15.0),
+                    text=text,
+                    # Gli `s` diversi con lo stesso `l` sono i pezzi della
+                    # STESSA riga: e' cosi' che il glifo e il testo della voce
+                    # stanno insieme, come nel PDF.
+                    source_observation_id=f"text:b0000:l0000:s{order:04d}",
+                    font_name=font,
+                )
+            )
+        return NormalizedPrimitivePage(
+            schema_version="1",
+            source_capture_id="c",
+            source_id="s",
+            page_id=f"page:{index:04d}",
+            page_index=index,
+            page_geometry=GEOMETRY,
+            capture_to_canonical_transform=(1.0, 0.0, 0.0, 1.0, 0.0, 0.0),
+            text_primitives=tuple(primitives),
+        )
+
+    def test_a_letter_in_a_symbol_font_is_a_marker(self) -> None:
+        # Fab: il pallino e' `w` in Wingdings, e la condizione «non alfanumerico»
+        # non puo' vederlo.
+        # Il glifo e' una primitiva a se': e' cio' che lo distingue dalla prima
+        # lettera di una parola in un font da titolo.
+        pages = [
+            self._page_with_font(
+                i,
+                ("w", "Wingdings-Regular"),
+                (" Aumenti i tuoi Punti Mente", "PTSans-Narrow"),
+            )
+            for i in range(3)
+        ]
+        found = list_markers(measure_document_line_starts(pages, "PTSans-Narrow"))
+        self.assertIn("w", found)
+
+    def test_without_the_body_font_the_second_route_is_shut(self) -> None:
+        pages = [
+            self._page_with_font(
+                i,
+                ("w", "Wingdings-Regular"),
+                (" Aumenti i tuoi Punti Mente", "PTSans-Narrow"),
+            )
+            for i in range(3)
+        ]
+        self.assertNotIn("w", list_markers(measure_document_line_starts(pages)))
+
+    def test_a_letter_in_the_body_font_is_not_a_marker(self) -> None:
+        pages = [
+            self._page_with_font(
+                i, ("w", "PTSans-Narrow"), (" una parola qualunque qui", "PTSans-Narrow")
+            )
+            for i in range(3)
+        ]
+        found = list_markers(measure_document_line_starts(pages, "PTSans-Narrow"))
+        self.assertNotIn("w", found)
+
+    def test_a_drop_cap_is_not_a_marker(self) -> None:
+        # FWK: `Bruinloa` ha la `B` in un font decorativo, primitiva a se'. Un
+        # pallino e' seguito da spazio, la prima lettera di una parola no.
+        pages = [
+            self._page_with_font(
+                i, ("B", "Antonio-Bold"), ("ruinloa e la sua storia", "PTSans-Narrow")
+            )
+            for i in range(3)
+        ]
+        found = list_markers(measure_document_line_starts(pages, "PTSans-Narrow"))
+        self.assertNotIn("B", found)
+
+
 if __name__ == "__main__":
     unittest.main()
