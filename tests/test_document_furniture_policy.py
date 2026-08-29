@@ -3,6 +3,8 @@ import unittest
 from document_furniture_policy import (
     furniture_node_ids,
     label_slots,
+    mirrored,
+    mirrored_centre,
     recurrent_edge_slots,
 )
 from document_text_recurrence_measurements import measure_document_text_recurrence
@@ -139,6 +141,47 @@ class NodeSelectionTest(unittest.TestCase):
         page = _page(0, ("  ", 90.0, 95.0))
         nodes = [("n:vuoto", ["primitive:text:p0:s0"])]
         self.assertEqual(furniture_node_ids(page, nodes, frozenset({(90, 95)})), frozenset())
+
+
+class MirroringTest(unittest.TestCase):
+    """Un arredo non centrato si specchia fra recto e verso."""
+
+    def test_the_two_sides_share_a_key(self) -> None:
+        self.assertEqual(mirrored((6, 95)), mirrored((94, 95)))
+
+    def test_the_height_is_not_mirrored(self) -> None:
+        self.assertNotEqual(mirrored((6, 95)), mirrored((6, 5)))
+
+    def test_the_centre_mirrors_where_the_left_edge_does_not(self) -> None:
+        # Kul: il numero sta a x=25 sul verso e x=72 sul recto, e `100-72` fa 28.
+        # Lo specchio del bordo sinistro di un elemento allineato a destra e' il
+        # suo bordo destro; il centro invece si riflette esatto.
+        verso = TextPrimitive(
+            primitive_id="p:verso",
+            bbox=(25.0, 4.0, 28.0, 8.0),
+            text="112",
+            source_observation_id="text:b0000:l0000:s0000",
+        )
+        recto = TextPrimitive(
+            primitive_id="p:recto",
+            bbox=(72.0, 4.0, 75.0, 8.0),
+            text="113",
+            source_observation_id="text:b0000:l0000:s0000",
+        )
+        page = _page(0)
+        self.assertNotEqual(mirrored((25, 4)), mirrored((72, 4)))
+        self.assertEqual(mirrored_centre(verso, page), mirrored_centre(recto, page))
+
+    def test_an_alternating_page_number_reaches_the_threshold(self) -> None:
+        # Contate separate, le due posizioni stanno a meta' e restano sotto il
+        # quarto; accoppiate arrivano sopra.
+        pages = []
+        for i in range(12):
+            x = 72.0 if i % 2 else 25.0
+            pages.append((_page(i, (str(100 + i), x, 4.0)), str(100 + i)))
+        found = label_slots(pages)
+        self.assertIn((25, 4), found)
+        self.assertIn((72, 4), found)
 
 
 if __name__ == "__main__":

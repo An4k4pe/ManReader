@@ -88,6 +88,50 @@ _NUMBER_STRIP = "[]() .-"
 Slot = tuple[int, int]
 
 
+def mirrored(slot: Slot) -> Slot:
+    """La chiave che accomuna uno slot e il suo specchio fra recto e verso.
+
+    **Un arredo non centrato si specchia**, e contarne le due posizioni separate
+    ne dimezza la ricorrenza. Indicazione dell'utente, e la misura la conferma:
+    accoppiando i due lati i numeri di pagina passano da ~25% a **45-50%** delle
+    pagine, cioe' da sotto a sopra la soglia del quarto. Su Kul e Lan lo slot del
+    folio portava l'etichetta su **4 pagine su 20** e restava sotto; accoppiato
+    arriva a otto.
+
+    La `y` non si tocca: e' il lato che si specchia, non l'altezza.
+
+    **Si specchia il CENTRO, non il bordo sinistro**, e la differenza non e'
+    teorica: su Kul il numero sta a `x=25` sul verso e `x=72` sul recto, e
+    `100-72` fa **28**, non 25. Lo slot porta il bordo sinistro, e lo specchio del
+    bordo sinistro di un elemento allineato a destra e' il suo bordo **destro**.
+    Il centro invece si riflette esatto. Chi ha solo lo slot -- il ramo 2, che
+    legge una misura gia' fatta -- usa il bordo e accetta l'imprecisione; chi ha
+    la primitiva usa `mirrored_centre`.
+    """
+
+    x, y = slot
+    return (min(x, POSITION_GRID - x), y)
+
+
+def mirrored_centre(primitive: TextPrimitive, page: NormalizedPrimitivePage) -> Slot:
+    """La chiave specchiata calcolata sul **centro** della primitiva."""
+
+    width = page.page_geometry.width
+    height = page.page_geometry.height
+    centre = (primitive.bbox[0] + primitive.bbox[2]) / 2.0 / width * POSITION_GRID
+    return (
+        round(min(centre, POSITION_GRID - centre)),
+        round(primitive.bbox[1] / height * POSITION_GRID),
+    )
+
+
+def mirror_pair(slot: Slot) -> tuple[Slot, Slot]:
+    """I due slot che condividono la chiave specchiata."""
+
+    x, y = slot
+    return ((x, y), (POSITION_GRID - x, y))
+
+
 def slot_of(primitive: TextPrimitive, page: NormalizedPrimitivePage) -> Slot:
     """La posizione quantizzata, come la calcola la misura."""
 
@@ -143,22 +187,33 @@ def label_slots(
 ) -> frozenset[Slot]:
     """Ramo 1. `pages` accoppia una pagina alla sua etichetta dichiarata."""
 
+    # Si conta per **chiave specchiata**, cosi' un numero che alterna i lati
+    # somma le sue due posizioni invece di dimezzarsi. Si restituiscono poi gli
+    # slot **reali** visti, perche' e' su quelli che si decide cosa esce.
     hits: dict[Slot, int] = {}
+    real: dict[Slot, set[Slot]] = {}
     with_label = 0
     for page, label in pages:
         label = label.strip()
         if not label:
             continue
         with_label += 1
-        seen: set[Slot] = set()
+        seen: set[tuple[Slot, Slot]] = set()
         for primitive in page.text_primitives:
             if _carries_label(primitive.text, label):
-                seen.add(slot_of(primitive, page))
-        for slot in seen:
-            hits[slot] = hits.get(slot, 0) + 1
+                seen.add((mirrored_centre(primitive, page), slot_of(primitive, page)))
+        for key in {k for k, _actual in seen}:
+            hits[key] = hits.get(key, 0) + 1
+        for key, actual in seen:
+            real.setdefault(key, set()).add(actual)
     if not with_label:
         return frozenset()
-    return frozenset(slot for slot, count in hits.items() if count >= with_label * share)
+    return frozenset(
+        actual
+        for key, count in hits.items()
+        if count >= with_label * share
+        for actual in real.get(key, ())
+    )
 
 
 def recurrent_edge_slots(
@@ -170,10 +225,22 @@ def recurrent_edge_slots(
     """Ramo 2, sulla misura gia' committata."""
 
     lower = POSITION_GRID * (1.0 - band)
+    # Anche qui si somma la coppia recto/verso: una filigrana o un piede non
+    # centrati si specchiano, e contarli separati li tiene sotto soglia.
+    by_key: dict[Slot, int] = {}
+    real: dict[Slot, set[Slot]] = {}
+    for slot in measurements.slots:
+        if slot.y < lower:
+            continue
+        key = mirrored((slot.x, slot.y))
+        by_key[key] = by_key.get(key, 0) + slot.page_count
+        real.setdefault(key, set()).add((slot.x, slot.y))
+    minimum = measurements.page_count * share
     return frozenset(
-        (slot.x, slot.y)
-        for slot in measurements.occupied_on_at_least(share)
-        if slot.y >= lower
+        actual
+        for key, count in by_key.items()
+        if count >= minimum
+        for actual in real.get(key, ())
     )
 
 
