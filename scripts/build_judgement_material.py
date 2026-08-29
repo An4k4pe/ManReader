@@ -19,6 +19,14 @@ una regola di questo modulo:
 > pipeline e legge `document_ir2.json`, dove il `kind` del nodo dice gia' che cosa
 > il meccanismo ha deciso, e `heading_level` dice il livello.
 
+5. **titoli, primo giro con questo strumento** — leggere l'IR non basta:
+   `document_ir2.json` contiene **tutti** i nodi, anche quelli che l'arredo toglie,
+   perche' l'esclusione e' una decisione di **resa** e il contratto dice «il nodo
+   resta, cambia la resa». Il materiale mostrava come marcati sei numeri di pagina
+   che nel corpo non compaiono, e il giudizio li ha giustamente chiamati non
+   titoli -- ma su cose che il lettore non vede. Ora i nodi esclusi si leggono da
+   `review_ir2.md` e **non entrano nel materiale**.
+
 **E una scelta di forma, che viene dallo stesso errore.** Il giudizio non ha piu'
 due meta' -- «promosse» e «scartate» -- perche' la meta' scartata richiedeva di
 ricostruire un insieme di candidati, ed e' li' che la classificazione divergeva.
@@ -38,6 +46,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -55,8 +64,8 @@ KIND_LABEL = {
 }
 
 
-def render(pdf: Path, index: int, out: Path, flags: list[str]) -> tuple[str, dict]:
-    """Fa girare la pipeline su una pagina e torna (markdown, documento IR 2)."""
+def render(pdf: Path, index: int, out: Path, flags: list[str]) -> tuple[str, dict, str]:
+    """Fa girare la pipeline e torna (markdown, documento IR 2, canale review)."""
 
     subprocess.run(
         [
@@ -73,19 +82,38 @@ def render(pdf: Path, index: int, out: Path, flags: list[str]) -> tuple[str, dic
     )
     markdown = out / "page_ir2.md"
     document = out / "document_ir2.json"
+    review = out / "review_ir2.md"
     return (
         markdown.read_text(encoding="utf-8") if markdown.is_file() else "",
         json.loads(document.read_text(encoding="utf-8")) if document.is_file() else {},
+        review.read_text(encoding="utf-8") if review.is_file() else "",
     )
 
 
-def nodes_of_kind(document: dict, kind: str) -> list[dict]:
-    """I nodi del genere richiesto, in ordine di lettura. **Letti, non dedotti.**"""
+_REVIEW_NODE = re.compile(r"^- `([^`]+)` kind=", re.M)
+
+
+def excluded_node_ids(review: str) -> set[str]:
+    """Gli id dei nodi che **non entrano nel corpo**, letti dal canale review.
+
+    Servono perche' `document_ir2.json` li contiene tutti: l'esclusione
+    dell'arredo e' una decisione di resa, non una proprieta' del nodo. Giudicare
+    un nodo che il lettore non vede e' chiedere un parere su niente.
+    """
+
+    return set(_REVIEW_NODE.findall(review))
+
+
+def nodes_of_kind(document: dict, kind: str, escluded: set[str]) -> list[dict]:
+    """I nodi del genere richiesto **che entrano nel corpo**, in ordine di lettura.
+
+    Letti, non dedotti: il `kind` viene dalla pipeline.
+    """
 
     found = []
     for page in document.get("pages", ()):
         for node in sorted(page.get("nodes", ()), key=lambda n: n.get("order", 0)):
-            if node.get("kind") == kind:
+            if node.get("kind") == kind and node.get("node_id") not in escluded:
                 found.append(node)
     return found
 
@@ -178,8 +206,10 @@ def main() -> None:
     workspace.mkdir(exist_ok=True)
     for numero, (name, index) in enumerate(scelte, start=1):
         pdf = args.pdf_dir / f"{name}.pdf"
-        rendered, document = render(pdf, index, workspace / f"{name}_{index}", args.flags)
-        marcati = nodes_of_kind(document, args.kind)
+        rendered, document, review = render(
+            pdf, index, workspace / f"{name}_{index}", args.flags
+        )
+        marcati = nodes_of_kind(document, args.kind, excluded_node_ids(review))
         stem = f"{name}_pagina{index + 1:04d}_idx{index:04d}"
 
         righe.append(f"## Pagina {numero:02d} — {name}, idx {index} — render `{stem}.png`")

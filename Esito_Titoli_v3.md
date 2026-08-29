@@ -1,9 +1,21 @@
-# Esito di `Criterio_Titoli_v3.md`, secondo giudizio — **precisione 76%, copertura 62%**
+# Esito di `Criterio_Titoli_v3.md`, secondo giudizio — **precisione ~89%, copertura 62%**
 
-**Stato in una riga**: 45 voci marcate, **34 titolo, 9 non titolo, 2 incerto**; e
-**21 titoli mancati** che il meccanismo non ha preso. Il veto §4.A cade in
-entrambe le direzioni. Ma per la prima volta **le due direzioni sono misurate
-sullo stesso materiale**, e i difetti si raggruppano in quattro schemi.
+**Stato in una riga**: **21 titoli mancati**, e fra le voci che il lettore vede
+davvero **3 non sono titoli**. Il veto §4.A cade in entrambe le direzioni. Ma per
+la prima volta le due direzioni sono misurate sullo stesso materiale, e i difetti
+si raggruppano in quattro schemi.
+
+> **Correzione a questo stesso verbale, prima che venisse usato.** La prima
+> versione diceva «45 voci marcate, 34 titolo, 9 non titolo» e ne ricavava una
+> precisione del **76%**. Era falso: **sei delle nove «non titolo» sono numeri di
+> pagina che la pipeline TOGLIE** — stanno in `review_ir2.md`, non nel corpo. Il
+> materiale me li mostrava lo stesso, perche' leggevo `document_ir2.json`, che
+> contiene **tutti** i nodi: l'esclusione dell'arredo e' una decisione di resa, e
+> il contratto dice «il nodo resta, cambia la resa».
+>
+> Il giudizio su quelle sei era corretto — numeri di pagina non sono titoli — ma
+> era su cose **che il lettore non vede**. Lo strumento ora legge gli id esclusi
+> dal canale review e non li mette nel materiale: le voci passano da 45 a 38.
 
 ---
 
@@ -25,13 +37,20 @@ renderle.
 
 | | |
 | --- | ---: |
-| voci marcate | 45 |
+| voci giudicate | 45 |
+| di cui **mai rese nel corpo** | **7** |
+| voci che il lettore vede | **38** |
 | titolo | **34** |
-| non titolo | **9** |
+| non titolo, nel corpo | **3** |
 | incerto | 2 |
 | **titoli mancati** | **21** |
 
-**Precisione 34/45 = 76%. Copertura 34/55 = 62%.**
+**Precisione ≈ 34/38 = 89%** sulle voci rese — **94%** se le due `incerto` non si
+contano contro. **Copertura 34/55 = 62%.**
+
+I tre falsi positivi veri: `Fortuna & Sciagura 115` su Kul (testatina più folio),
+`[218]` su Lan (numero di pagina), `STILE NOME EFFETTO` su Wil (etichette di
+colonna concatenate).
 
 ## 2. I quattro schemi, che valgono più dei numeri
 
@@ -63,19 +82,26 @@ mancato:   LICENZA III: GENERATORE DI FULMINI, IMPULSO EMP
 Il risultato è una gerarchia **senza contenitori**: i figli restano orfani del
 loro livello.
 
-### C — Il numero di pagina entra come titolo (8 dei 9 falsi positivi)
+### C — Il numero di pagina, e la correzione che ridimensiona questo schema
 
-`223`, `151`, `[208]`, `[211]`, `[218]`, `155`, `166`, e la testatina più folio
-`Fortuna & Sciagura 115`. **Otto dei nove falsi positivi sono arredo di pagina**,
-e su Lan il folio finisce a `###` in mezzo al testo.
+Il giudizio ha trovato nove voci che titoli non sono, e otto erano arredo di
+pagina: `223`, `151`, `[208]`, `[211]`, `[218]`, `155`, `166`, e la testatina più
+folio `Fortuna & Sciagura 115`.
 
-> **Non è un difetto dei titoli.** La condizione 4 del §1 — «non è già escluso
-> come arredo» — c'è ed è rispettata: è l'arredo che non li prende. E
-> `Esito_ArredoPerTesto_v1.md` ha appena **ritirato** la clausola che avrebbe
-> dovuto farlo.
+**Ma sei di quelle otto la pipeline le toglie davvero.** Verificato una per una
+sulla resa: stanno in `review_ir2.md`. Erano nel materiale per il difetto
+descritto in testa a questo verbale.
 
-Con l'arredo a posto, la precisione passerebbe da **76% a 96%** senza toccare una
-riga del meccanismo dei titoli.
+**Restano due**, e sono veri: `Fortuna & Sciagura 115` su Kul e `[218]` su Lan —
+dove il folio finisce a `###` in mezzo al testo. Su Lan lo slot porta l'etichetta
+della propria pagina solo su **4 pagine su 20**, sotto la soglia di un quarto del
+ramo 1; su Kul lo stesso, 4 su 20.
+
+> **Non è un difetto dei titoli**: la condizione 4 del §1 — «non è già escluso
+> come arredo» — c'è ed è rispettata. È l'arredo che su quei due manuali non
+> arriva alla soglia.
+
+Con quei due tolti la precisione passerebbe dall'89% al **95%**.
 
 ### D — Targhette identiche trattate in modo diverso
 
@@ -129,14 +155,16 @@ proporzione:
 
 | difetto | quanto pesa | dove sta il fascicolo |
 | --- | --- | --- |
-| arredo non tolto | **8 dei 9** falsi positivi | **l'arredo**, non i titoli |
-| titoli in linea | **11 dei 21** mancati | i titoli |
+| **titoli in linea** | **11 dei 21** mancati | **i titoli** |
 | il padre perso | 3 dei 21 | i titoli, e serve la gerarchia |
+| targhette non prese | 4 dei 21 | i titoli |
+| arredo sotto soglia | 2 dei 3 falsi positivi | l'arredo |
+| etichette di colonna | 1 dei 3 | i titoli |
 | instabilità fra pagine | non quantificata | i titoli |
 
-> **Il primo non è nostro da risolvere qui**, e da solo porta la precisione dal
-> 76% al 96%. Il secondo è il pezzo di lavoro più grosso e più utile che resta sui
-> titoli.
+> **Il difetto dominante è la copertura, non la precisione**, ed è l'opposto di
+> quello che la prima versione di questo verbale diceva. I titoli in linea da soli
+> valgono metà dei mancati.
 
 Non si ritocca niente in questo giro: il §4 lo vieta, e i due difetti maggiori
 stanno in due fascicoli diversi.
