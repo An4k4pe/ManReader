@@ -8,7 +8,11 @@ from __future__ import annotations
 
 import unittest
 
-from document_furniture_policy import repeated_text_slots, vertical_primitive_ids
+from document_furniture_policy import (
+    repeated_text_slots,
+    running_head_slots,
+    vertical_primitive_ids,
+)
 from geometry_model import PageGeometry
 from primitive_model import NormalizedPrimitivePage, TextPrimitive
 
@@ -122,6 +126,45 @@ class RepeatedTextWithdrawnTest(unittest.TestCase):
             from_repeated_text=frozenset({(44, 2)}),
         )
         self.assertNotIn((44, 2), slots.all_slots)
+
+
+class RunningHeadTest(unittest.TestCase):
+    """`Criterio_TestatinaCorrente_v1.md`: parte dal TESTO, non dallo slot."""
+
+    def test_a_text_always_in_one_place_is_a_running_head(self) -> None:
+        # `Capitolo 6` di FWK, `PREMI START` di Fab: qualunque posizione.
+        pages = [_page(i, ("Capitolo 6", 44.0, 2.0)) for i in range(8)]
+        self.assertIn((44, 2), running_head_slots(pages))
+
+    def test_position_is_not_constrained(self) -> None:
+        # Su Fab la testatina sta al LATO, y=43.
+        pages = [_page(i, ("PREMI START", 93.0, 43.0)) for i in range(8)]
+        self.assertIn((93, 43), running_head_slots(pages))
+
+    def test_a_text_that_moves_around_is_not_a_running_head(self) -> None:
+        # E' la distinzione che la clausola A non faceva: `Stamina` di Draw Steel
+        # compare su 16 pagine sparsa su 31 slot, perche' la scheda si sposta col
+        # contenuto. Una testatina no.
+        pages = [_page(i, ("Stamina", 12.0, 20.0 + i * 4.0)) for i in range(8)]
+        self.assertEqual(running_head_slots(pages), frozenset())
+
+    def test_the_two_mirrored_sides_are_counted_together(self) -> None:
+        # Lo specchio si calcola sul CENTRO: con una larghezza di 5, il gemello
+        # di `x=6` sta a `x=89`, non a `x=91`. E' la stessa correzione che su Kul
+        # distingue `x=25` da `100-72`.
+        pages = []
+        for i in range(10):
+            x = 89.0 if i % 2 else 6.0
+            pages.append(_page(i, ("Il Mondo", x, 2.0)))
+        found = running_head_slots(pages)
+        self.assertIn((6, 2), found)
+        self.assertIn((89, 2), found)
+
+    def test_a_text_seen_too_rarely_is_not_a_running_head(self) -> None:
+        pages = [_page(i, (f"prosa della pagina {i}", 10.0, 50.0)) for i in range(12)]
+        pages[0] = _page(0, ("Capitolo 6", 44.0, 2.0))
+        pages[1] = _page(1, ("Capitolo 6", 44.0, 2.0))
+        self.assertEqual(running_head_slots(pages), frozenset())
 
 
 if __name__ == "__main__":

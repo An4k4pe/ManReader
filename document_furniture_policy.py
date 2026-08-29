@@ -164,6 +164,7 @@ class FurnitureSlots:
     from_sequence: frozenset[Slot] = frozenset()
     from_repeated_text: frozenset[Slot] = frozenset()
     from_vertical: frozenset[Slot] = frozenset()
+    from_running_head: frozenset[Slot] = frozenset()
 
     @property
     def all_slots(self) -> frozenset[Slot]:
@@ -177,7 +178,12 @@ class FurnitureSlots:
         # una proprieta' della PRIMITIVA e non dello slot, e marcare lo slot
         # toglieva la prosa orizzontale che ci passa su altre pagine. Ora si
         # escludono le primitive, con `vertical_primitive_ids`.
-        return self.from_label | self.from_recurrence | self.from_sequence
+        return (
+            self.from_label
+            | self.from_recurrence
+            | self.from_sequence
+            | self.from_running_head
+        )
 
 
 def label_slots(
@@ -340,6 +346,7 @@ def furniture_slots(
         from_sequence=from_sequence,
         from_repeated_text=repeated_text_slots(captured, share=share),
         from_vertical=vertical_slots(captured),
+        from_running_head=running_head_slots(captured, share=share),
     )
 
 
@@ -488,4 +495,61 @@ def vertical_slots(pages: Sequence[NormalizedPrimitivePage]) -> frozenset[Slot]:
                 continue
             if abs(direction[0]) <= abs(direction[1]):
                 found.add(slot_of(primitive, page))
+    return frozenset(found)
+
+
+def running_head_slots(
+    pages: Sequence[NormalizedPrimitivePage],
+    *,
+    share: float = RECURRENCE_SHARE,
+    majority: float = 0.5,
+) -> frozenset[Slot]:
+    """Ramo 5. La **testatina corrente**, a qualunque posizione.
+
+    `Criterio_TestatinaCorrente_v1.md`. Indicazione dell'utente: «le testatine
+    devono funzionare in qualsiasi posizione, alto basso laterale e verso e
+    recto».
+
+    **Parte dal testo, non dallo slot**, ed e' li' che la clausola A sbagliava.
+    Quella chiedeva «a questo slot si ripete qualche testo?», e un campo di scheda
+    ripete il suo: `Stamina` di Draw Steel usciva dal corpo. Questa chiede «questo
+    testo sta sempre nello stesso posto?», e la misura dice che e' la domanda
+    giusta -- `Stamina` compare su 16 pagine sparsa su **31 slot diversi**,
+    `Psionic` di DrW su **71**, mentre `Vileborn` di Apo sta a **uno solo**.
+
+    Una scheda si sposta col contenuto della pagina; una testatina no.
+
+    Lo slot e' **specchiato sul centro**: un arredo non centrato si riflette fra
+    recto e verso, e contarne le due posizioni separate lo dimezza.
+    """
+
+    per_text: dict[str, dict[Slot, int]] = {}
+    pages_of_text: dict[str, set[int]] = {}
+    pages_of_slot: dict[Slot, set[int]] = {}
+    real: dict[Slot, set[Slot]] = {}
+
+    for index, page in enumerate(pages):
+        for primitive in page.text_primitives:
+            text = normalize_text(primitive.text)
+            if len(text) < 2:
+                continue
+            key = mirrored_centre(primitive, page)
+            per_text.setdefault(text, {})[key] = per_text.setdefault(text, {}).get(key, 0) + 1
+            pages_of_text.setdefault(text, set()).add(index)
+            pages_of_slot.setdefault(key, set()).add(index)
+            real.setdefault(key, set()).add(slot_of(primitive, page))
+
+    minimum = len(pages) * share
+    found: set[Slot] = set()
+    for text, slots in per_text.items():
+        if len(pages_of_text[text]) < minimum:
+            continue
+        key, count = max(slots.items(), key=lambda item: item[1])
+        # La **maggioranza** delle occorrenze a uno slot solo: e' il punto in cui
+        # un testo smette di stare in giro e comincia a stare in un posto.
+        if count <= sum(slots.values()) * majority:
+            continue
+        if len(pages_of_slot[key]) < minimum:
+            continue
+        found |= real.get(key, set())
     return frozenset(found)
