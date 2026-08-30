@@ -141,9 +141,7 @@ def _normalised_sequence(text: str) -> str:
     return "".join(_HYPHENATED_WORD_RE.sub("", text).split())
 
 
-def _emitted_content(
-    page: PageIR2, excluded_node_ids: frozenset[str]
-) -> tuple[str, list[tuple[str, str]]]:
+def _emitted_content(page: PageIR2) -> tuple[str, list[tuple[str, str]]]:
     """Il contenuto emesso, **senza la sintassi che l'emettitore aggiunge**.
 
     Torna la sequenza da confrontare con la base, e l'elenco dei nodi in cui la
@@ -173,16 +171,24 @@ def _emitted_content(
     Un nodo **senza testo** -- tabelle, note d'asset -- non ha con che allinearsi
     e passa com'e': stanno gia' fuori dal giudizio per il §3 del criterio
     d'uscita.
+
+    **E l'arredo rientra**, `Criterio_ConfrontoEB_v4.md`. Toglierlo dal corpo e'
+    una decisione di **resa** -- non si scrive nell'IR, e il nodo resta -- quindi
+    sta accanto ai `#` e agli `*`, non accanto a un contenuto perso. E-B chiede
+    se IR 2 emette le stesse cose nello stesso ordine, e quella domanda si fa
+    sull'ordine intero: la base non deduplica e non toglie testatine, e
+    confrontarci una resa gia' potata misurerebbe la politica d'arredo invece
+    dell'ordine.
+
+    **Il prezzo, dichiarato**: cosi' E-B non puo' piu' vedere un arredo che
+    toglie troppo. Non era il suo mestiere -- lo guarda il canale review, e i
+    giudizi ciechi che hanno gia' fatto cadere due clausole -- ma va scritto.
     """
 
     parts: list[str] = []
     losses: list[tuple[str, str]] = []
     for node in sorted(page.nodes, key=lambda n: n.order):
-        if not is_rendered_in_body(
-            node,
-            render_unresolved=RENDER_UNRESOLVED_ASSET_NOTES,
-            excluded_node_ids=excluded_node_ids,
-        ):
+        if not is_rendered_in_body(node, render_unresolved=RENDER_UNRESOLVED_ASSET_NOTES):
             continue
         if node.kind == KIND_ASSET_NOTE:
             # Le note d'asset non stanno nella base: sono la sostituzione che
@@ -736,7 +742,7 @@ def run(
             base_sequence = _normalised_sequence(
                 _strip_asset_markers(base_path.read_text(encoding="utf-8"))
             )
-            emitted, losses = _emitted_content(ir2_page, excluded_node_ids)
+            emitted, losses = _emitted_content(ir2_page)
             for node_id, lost in losses:
                 print(
                     f"E-B: la resa ha PERSO caratteri di {node_id}: {lost!r}",
