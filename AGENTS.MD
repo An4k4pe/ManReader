@@ -271,6 +271,32 @@ Per ogni task:
     superato il cap di lettura degli strumenti di fetch, e una sessione ha ragionato per un
     giro intero su una fonte mutilata credendola integra, convinta da tre mirror che
     troncavano allo stesso punto perché passavano dallo stesso strumento.
+20. **Un veto che cade apre la diagnosi, non la chiude.** Il §15 sigilla il campione e
+    vieta di ritoccare il criterio per far passare un risultato: quello resta, ed è la
+    protezione che ha prodotto le ritrattazioni migliori di questo progetto. Ma una
+    caduta è l'**inizio** della diagnosi, non la fine della linea di lavoro. Prima di
+    ritirare un meccanismo va stabilito **che cosa** è caduto: un veto scritto nella
+    moneta sbagliata, o su una popolazione tracciata sull'asse sbagliato, cade su se
+    stesso e non dice niente sul meccanismo. In quel caso il criterio si emenda,
+    l'emendamento si dichiara, il giudizio si rifà, e a verbale si scrive che è stato
+    emendato e perché — mai in silenzio, mai dopo aver guardato l'esito per decidere
+    come emendarlo.
+
+    **La prova che separa l'emendamento lecito dal salvataggio**: deve reggere *senza
+    sapere* se il meccanismo poi passa. Se l'unica ragione per cambiarlo è che
+    altrimenti il risultato non passerebbe, è un salvataggio ed è il §15 a vietarlo.
+
+    Sta al §16 come l'esito sta alla progettazione: il §16 dice che progettare non
+    richiede un criterio, il §20 dice che un criterio caduto non chiude da solo una
+    linea di lavoro. Lezione del 30 agosto 2026, due cadute nello stesso giro e
+    nessuna delle due diceva ciò che l'esito ha scritto che diceva:
+    `Criterio_TitoloSopraIlParagrafo_v1` §3 tracciava la popolazione **per manuale**
+    — fuori DrM e DrW — quando il confondente è **per pagina**, e le schede stanno
+    dentro i manuali contati; `Criterio_MarcatoreDaFont_v2` §3.A vietava sui
+    **caratteri** quando la v1 che emendava era stata scaricata sulle **voci
+    prodotte**, e ammetteva già caratteri non-pallino perché producevano zero voci.
+    Rilievo dell'utente: «non è la prima volta che fa cadere le cose prima ancora di
+    vedere perché cadono».
 
 Verifiche minime per un commit di codice:
 
