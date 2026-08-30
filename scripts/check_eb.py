@@ -23,6 +23,20 @@ cambiamento alla fetta verticale perche' il confronto misuri un riferimento che
 si e' spostato, senza dirlo. Verificato il 30 agosto 2026 che le due basi
 coincidono su tutte e dieci -- ma coincidevano per fortuna, non per costruzione.
 
+**Che cosa «identico» NON dice.** Questa barra e' un controllo di
+**non-regressione sull'ordine e sull'inclusione**, e nient'altro. Il giudizio
+umano che la fonda copriva **il solo ordine di lettura**, tabelle escluse, su una
+pipeline che non aveva paragrafi, elenchi, titoli, enfasi ne' arredo -- e il
+confronto toglie di mezzo tutti quei meccanismi per costruzione. Dieci pagine
+identiche non dicono che l'uscita sia buona: dicono che IR 2 non ha riordinato ne'
+perso niente rispetto alla fetta verticale.
+
+**E dove IR 2 e' MIGLIORE della base, qui risulta una differenza.** Fab idx 126 e'
+il primo caso: la deduplicazione dei ridisegni gemelli e' un miglioramento e il
+confronto la segnala. Man mano che i miglioramenti atterrano l'elenco delle
+differenze da spiegare cresce, e la base resta ancorata a un'uscita piu' vecchia.
+E' il limite strutturale di questa barra, non un difetto da correggere qui.
+
 **Non decide se una differenza e' accettabile.** Il §2 del criterio dice che ogni
 differenza va **spiegata**, e se sia spiegata lo sa il verbale, non uno script:
 qui una differenza fa fallire, e chi la legge va a vedere se e' gia' a verbale.
@@ -183,6 +197,9 @@ def main() -> None:
 
     elapsed = time.monotonic() - started
     print(f"\nidentiche {identical} su {len(pages)}   ({elapsed:.0f} s)")
+    print("«identico» = IR 2 non ha riordinato ne' perso niente rispetto alla base.")
+    print("NON dice che l'uscita sia buona: il giudizio che fonda questa barra")
+    print("copriva il solo ordine di lettura, prima che IR 2 esistesse.")
     if lost:
         print(f"\n**La resa ha perso contenuto in {len(lost)} nodi.** Non e' una")
         print("differenza da spiegare: e' un difetto dell'emettitore.")

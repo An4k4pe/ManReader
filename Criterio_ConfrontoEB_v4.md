@@ -67,6 +67,28 @@ v3               9 su 10 — ma solo con l'arredo SPENTO
 v4               9 su 10 con tutto acceso
 ```
 
+## 3-bis. Che cosa «identico» non dice, e va scritto accanto ai numeri
+
+Quei numeri sono una **non-regressione sull'ordine e sull'inclusione**. Non sono
+una misura di qualità, e la tabella sopra invita a leggerli come se lo fossero.
+
+Il giudizio umano che fonda E-B copriva **il solo ordine di lettura**, tabelle
+escluse esplicitamente, dato il 17 agosto 2026 su una pipeline che non aveva
+paragrafi, elenchi, titoli, enfasi né arredo. Da allora `ir2_builder.py`,
+`ir2_markdown.py` e `ir2_model.py` hanno preso **26 commit**, e questo confronto
+toglie di mezzo *per costruzione* tutto ciò che hanno aggiunto.
+
+> **Nessuno ha mai giudicato l'uscita di IR 2 su queste dieci pagine.** Ciò che è
+> stato giudicato è l'uscita della **fetta verticale**, e quel giudizio è ancora
+> valido — la base è byte per byte quella di allora, verificato rigenerandola al
+> commit dichiarato e confrontandola su tutte e dieci.
+
+E c'è un limite strutturale che va detto ora e non quando morderà: **dove IR 2 è
+migliore della base, E-B segnala una differenza.** Fab idx 126 è il primo caso —
+la deduplicazione dei gemelli è un miglioramento, e risulta una divergenza. Man
+mano che i miglioramenti atterrano, l'elenco delle differenze da spiegare cresce e
+la base resta ancorata a un'uscita più vecchia.
+
 ## 4. Pass/fail
 
 ### A. La resa non cambia
