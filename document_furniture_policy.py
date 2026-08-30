@@ -628,8 +628,14 @@ def _has_a_free_side(
     conta e' quella della **lettura**: «in mezzo a un testo» vuol dire con del
     testo sopra e sotto.
 
-    Misurato sui sedici manuali: tiene **32 testatine su 33**, e
-    `punti di riferimento`, con 11 primitive sopra e 34 sotto, resta nel corpo.
+    **E si guarda la colonna della primitiva**, non la pagina intera:
+    `Criterio_TestatinaCorrente_v4.md`. Una linguetta di margine ha il corpo del
+    testo **accanto**, non sopra, e guardando tutta la pagina risultava in mezzo
+    a un testo che sta in un'altra colonna.
+
+    Misurato sui sedici manuali: tiene **33 testatine su 33**, e
+    `punti di riferimento` -- che nella sua colonna ha testo sopra e sotto --
+    resta nel corpo.
 
     `ignore` sono le primitive che gli altri rami hanno gia' dichiarato arredo:
     non contano come testo che circonda, perche' non sono contenuto. Su DB sotto
@@ -641,15 +647,21 @@ def _has_a_free_side(
     che e' un fatto della primitiva e non della sua posizione.
     """
 
-    _x0, y0, _x1, y1 = primitive.bbox
-    others = [
+    x0, y0, x1, y1 = primitive.bbox
+    # **Nella sua colonna**, non su tutta la pagina: una linguetta di margine ha
+    # il corpo del testo accanto, non sopra. Su Fab `CAPITOLO` ha otto primitive
+    # sopra di se' sulla pagina e **zero** nella sua striscia -- e l'utente
+    # l'aveva segnalata da togliere.
+    column = [
         other
         for other in page.text_primitives
         if other is not primitive
         and other.text.strip()
         and other.primitive_id not in ignore
+        and other.bbox[0] < x1
+        and other.bbox[2] > x0
     ]
     return not (
-        any(other.bbox[3] <= y0 for other in others)
-        and any(other.bbox[1] >= y1 for other in others)
+        any(other.bbox[3] <= y0 for other in column)
+        and any(other.bbox[1] >= y1 for other in column)
     )
