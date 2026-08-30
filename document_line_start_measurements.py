@@ -168,10 +168,6 @@ def measure_document_line_starts(
     with_text: Counter[str] = Counter()
     occurrences: Counter[str] = Counter()
     on_pages: dict[str, set[int]] = defaultdict(set)
-    # Per la via del font, numeratore e denominatore vanno tenuti **per font**:
-    # e' l'unico modo perche' contino la stessa cosa. §1b del criterio.
-    by_font: Counter[tuple[str, str | None]] = Counter()
-    opens_by_font: Counter[tuple[str, str | None]] = Counter()
     seen = 0
 
     for index, page in enumerate(pages):
@@ -189,19 +185,12 @@ def measure_document_line_starts(
                 and primitive.font_name is not None
                 and primitive.font_name != body_font_name
             )
-            # **Il font sta nella chiave, non fuori.** `Criterio_MarcatoreDaFont_v2.md`
-            # §1b. Il commento della v1 diceva gia' che il denominatore deve
-            # contare «questo carattere IN QUEL FONT», ma l'implementazione
-            # contava il carattere in un font qualunque diverso dal corpo.
-            # Misurato su Vil: il pallino `h` in `NelsonOrnaments` apre 37 righe
-            # su 82 occorrenze -- 45%, sotto la maggioranza -- e le altre 45 sono
-            # `h` dentro parole in `ArnoPro-Bold`, che col pallino non c'entrano.
             for character in primitive.text:
                 if character.isspace():
                     continue
                 if character.isalnum():
                     if other_font:
-                        by_font[(character, primitive.font_name)] += 1
+                        occurrences[character] += 1
                 else:
                     occurrences[character] += 1
 
@@ -213,30 +202,20 @@ def measure_document_line_starts(
             head = stripped[0]
             if head.isspace():
                 continue
-            # Per un candidato **alfanumerico** serve anche che il glifo sia
-            # separato da cio' che segue. Misurato su FWK: `Bruinloa` ha la `B`
-            # in un font decorativo, primitiva a se', ed e' una MAIUSCOLETTA
-            # attaccata alla parola -- il manuale passava da 136 voci a 140.
-            # Il vincolo vale solo per questa via: `✦Effetto Pieno:` di DB non ha
-            # spazio ed entra dall'altra.
-            #
-            # **Separato vuol dire due cose, non una** -- `Criterio_MarcatoreDaFont_v2.md`.
-            # O uno spazio lo separa, **oppure il glifo e' tutta la riga**: su Vil
-            # il pallino e' `h` in `NelsonOrnaments` su una riga sua, e il testo
-            # della voce e' la riga accanto. Una riga di un carattere e' separata
-            # da cio' che segue piu' di quanto lo sia un glifo con lo spazio, e il
-            # meccanismo sa gia' trattarla: e' da li' che entra `•` di FW.
-            # Su FWK le 30 maiuscolette sono tutte ATTACCATE, zero da sole.
+            # Per un candidato **alfanumerico** serve anche che uno spazio lo
+            # separi da cio' che segue. Misurato su FWK: `Bruinloa` ha la `B` in
+            # un font decorativo, primitiva a se', ed e' un CAPOLETTERA -- il
+            # manuale passava da 136 voci a 140. Un pallino e' seguito da spazio,
+            # la prima lettera di una parola no. Il vincolo vale solo per questa
+            # via: `✦Effetto Pieno:` di DB non ha spazio ed entra dall'altra.
             if head.isalnum() and not (
                 _is_a_glyph_marker(openers[position], head, body_font_name)
-                and (len(stripped) == 1 or stripped[1].isspace())
+                and len(stripped) > 1
+                and stripped[1].isspace()
             ):
                 continue
             opens[head] += 1
             on_pages[head].add(index)
-            if head.isalnum():
-                opener = openers[position]
-                opens_by_font[(head, getattr(opener, "font_name", None))] += 1
 
             if len(stripped) > 1:
                 with_text[head] += 1
@@ -250,14 +229,6 @@ def measure_document_line_starts(
             )
             if following and following[0] != head:
                 with_text[head] += 1
-
-    # Il denominatore di un candidato alfanumerico e' quante volte quel carattere
-    # compare **nel font con cui apre le righe**: se apre in piu' font si prende
-    # quello che apre di piu', perche' e' quello di cui si sta dicendo che e' un
-    # marcatore.
-    for (character, font), _count in opens_by_font.most_common():
-        if character not in occurrences:
-            occurrences[character] = by_font.get((character, font), 0)
 
     return LineStartMeasurements(
         opens_lines=dict(opens),
