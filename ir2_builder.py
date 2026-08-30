@@ -39,7 +39,7 @@ from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from document_heading_measurements import SizedLine  # noqa: I001
+from document_heading_measurements import SizedLine, governing_font  # noqa: I001
 from document_heading_policy import heading_lines, merge_wrapped  # noqa: I001
 from document_list_policy import (  # noqa: I001
     list_item_flags,
@@ -723,19 +723,31 @@ def build_page_ir2(
             size=round(max((p.font_size or 0.0) for p in line.primitives), 1)
             if line.primitives
             else 0.0,
+            x0=min((p.bbox[0] for p in line.primitives), default=0.0),
+            x1=max((p.bbox[2] for p in line.primitives), default=0.0),
+            font=governing_font(line.primitives),
         )
         for line in bound_lines
     ]
+    # **Il secondo ramo dei titoli e' RITIRATO**, e resta qui a verbale.
+    # `Esito_TitoloSopraIlParagrafo_v1.md`: la regola prende i quattro casi per
+    # cui e' scritta -- su Apo e Vil il titolo composto piu' piccolo del corpo --
+    # e ne promuove altri 238, di cui 90 sono celle di scheda, righe di tabella e
+    # code di paragrafo. E' il **quarto** meccanismo che cade sulle schede.
+    # La funzione resta importata e misurabile con
+    # `scripts/measure_headings_above_paragraphs.py`; il costruttore non la usa.
+    forced_breaks: frozenset[int] = frozenset()
     # Le righe che vanno a capo si uniscono **prima** di decidere: la condizione
     # «sola alla sua dimensione nel blocco» conterebbe due volte un titolo
     # spezzato, e non sarebbe piu' un titolo. `Criterio_Titoli_v3.md` §2.
-    merged_lines, group_of = merge_wrapped(sized)
+    merged_lines, group_of = merge_wrapped(sized, forced_breaks)
     merged_levels = heading_lines(merged_lines, prose_sizes, heading_levels or {})
     heading_flags = {
         position: merged_levels[group]
         for position, group in enumerate(group_of)
         if group in merged_levels
     }
+
     # Le voci numerate hanno un segnale proprio -- gli interi consecutivi -- e non
     # passano dai marcatori, che sono caratteri non alfanumerici.
     ordered_flags = numbered_item_flags(keyed)

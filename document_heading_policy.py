@@ -186,7 +186,9 @@ def heading_lines(
     return found
 
 
-def merge_wrapped(lines: Sequence[SizedLine]) -> tuple[list[SizedLine], list[int]]:
+def merge_wrapped(
+    lines: Sequence[SizedLine], breaks: frozenset[int] = frozenset()
+) -> tuple[list[SizedLine], list[int]]:
     """Unisce le righe consecutive dello **stesso blocco** e **pari dimensione**.
 
     `Criterio_Titoli_v3.md` §2. Un titolo che va a capo e' **un** titolo: su Dag
@@ -201,15 +203,23 @@ def merge_wrapped(lines: Sequence[SizedLine]) -> tuple[list[SizedLine], list[int
     fratelli: su DB `ANIMISMO`, `ELEMENTALISMO` e `MENTALISMO` sono adiacenti e
     della stessa dimensione, ma ognuno nel suo blocco, e restano tre.
 
+    `breaks` sono posizioni che **devono** cominciare un gruppo nuovo: le impone
+    il `Criterio_TitoloSopraIlParagrafo_v1.md`, i cui titoli stanno alla stessa
+    dimensione della prosa che intestano. Su Vil `DONI` e le quattro righe che lo
+    seguono sono **tutte** a 11,6 nello stesso blocco, e senza questo l'unione se
+    lo mangiava: e' la ragione per cui usciva `**DONI I doni sono aspetti…**` in
+    un grassetto solo.
+
     Torna la lista unita e, per ogni riga originale, l'indice del gruppo a cui
     appartiene -- serve al chiamante per sapere dove NON rompere il paragrafo.
     """
 
     merged: list[SizedLine] = []
     group_of: list[int] = []
-    for line in lines:
+    for position, line in enumerate(lines):
         if (
-            merged
+            position not in breaks
+            and merged
             and merged[-1].block == line.block
             and abs(merged[-1].size - line.size) < 0.05
         ):
@@ -217,8 +227,94 @@ def merge_wrapped(lines: Sequence[SizedLine]) -> tuple[list[SizedLine], list[int
                 block=line.block,
                 text=f"{merged[-1].text} {line.text}".strip(),
                 size=line.size,
+                x0=min(merged[-1].x0, line.x0),
+                x1=max(merged[-1].x1, line.x1),
+                font=merged[-1].font,
             )
         else:
             merged.append(line)
         group_of.append(len(merged) - 1)
     return merged, group_of
+
+
+def headings_above_a_paragraph(
+    lines: Sequence[SizedLine],
+    levels: dict[float, int],
+    excluded: frozenset[str] = frozenset(),
+) -> dict[int, int]:
+    """I titoli che la dimensione non puo' vedere. `Criterio_TitoloSopraIlParagrafo_v1.md`.
+
+    **Perche' la dimensione non basta.** Su Apo `LA DONNA DI CENDRES` sta a 10,6
+    in `Calluna-Semibold` e il corpo accanto a 11,6 in `ArnoPro-Regular`: il
+    titolo e' *nominalmente piu' piccolo* del testo che intesta, ed e' composto
+    tutto in maiuscolo. Il punto tipografico misura il corpo del carattere, non
+    l'inchiostro, e la scala dei ranghi qui misura la cosa sbagliata.
+
+    Quattro condizioni, e nessuna e' un numero tarato -- margine, raggedness e
+    font sono fatti **del blocco che si sta guardando**:
+
+    1. il font che governa la riga e' diverso da quello che governa il blocco;
+    2. nel blocco **la segue** almeno una riga governata dal font del blocco;
+    3. finisce prima del margine destro del blocco, e di piu' di quanto le righe
+       **interne** del blocco si concedano da sole;
+    4. non e' gia' un titolo per dimensione, non e' arredo, non e' un carattere.
+
+    **La 1 da sola non basta, ed e' misurato.** Su Vil idx 131 la seconda riga di
+    `b0001` e' interamente in `ArnoPro-Bold` mentre il blocco e' governato da
+    `ArnoPro-Regular`: la condizione sul font la promuoverebbe. Ma finisce a
+    391,2 su un margine di 391,2 -- **riempie la misura** -- ed e' prosa che va a
+    capo con un'enfasi dentro. `DONI`, sopra di lei, si ferma a 88,5.
+
+    Il livello e' quello **subito sotto** il piu' profondo assegnato per
+    dimensione, col tetto di `MAX_LEVEL`. E' una collocazione dichiarata e non
+    misurata: un titolo che il documento compone piu' piccolo del corpo non e' un
+    capitolo.
+    """
+
+    by_block: dict[str, list[int]] = {}
+    for position, line in enumerate(lines):
+        by_block.setdefault(line.block, []).append(position)
+
+    level = min(max(levels.values(), default=0) + 1, MAX_LEVEL)
+    found: dict[int, int] = {}
+    for positions in by_block.values():
+        if len(positions) < 2:
+            continue
+        block_font = _governing_font_of([lines[p] for p in positions])
+        if block_font is None:
+            continue
+        margin = max(lines[p].x1 for p in positions)
+        # Le righe **interne**: la prima puo' essere il titolo, l'ultima e' corta
+        # per costruzione perche' e' dove il paragrafo finisce. Cio' che resta
+        # dice quanto questo blocco lascia ragged il suo margine.
+        inner = positions[1:-1]
+        raggedness = max((margin - lines[p].x1 for p in inner), default=0.0)
+        for order, position in enumerate(positions):
+            line = lines[position]
+            if len(line.text) <= 1 or line.text in excluded:
+                continue
+            if levels.get(line.size) is not None:
+                continue
+            if line.font is None or line.font == block_font:
+                continue
+            follows = any(
+                lines[other].font == block_font for other in positions[order + 1 :]
+            )
+            if not follows:
+                continue
+            if margin - line.x1 <= raggedness:
+                continue
+            found[position] = level
+    return found
+
+
+def _governing_font_of(lines: Sequence[SizedLine]) -> str | None:
+    """Il font della maggioranza dei caratteri di queste righe."""
+
+    weight: dict[str, int] = {}
+    for line in lines:
+        if line.font:
+            weight[line.font] = weight.get(line.font, 0) + len(line.text)
+    if not weight:
+        return None
+    return max(weight.items(), key=lambda item: (item[1], item[0]))[0]

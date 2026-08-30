@@ -34,11 +34,20 @@ _OBSERVATION = re.compile(r"^text:(b\d+):(l\d+):s\d+$")
 
 @dataclass(frozen=True, slots=True)
 class SizedLine:
-    """Una riga sorgente col blocco a cui appartiene e la sua dimensione."""
+    """Una riga sorgente col blocco a cui appartiene, la dimensione e l'estensione.
+
+    `x0`, `x1` e `font` servono al `Criterio_TitoloSopraIlParagrafo_v1.md`, che
+    riconosce un titolo **non** dalla dimensione ma dal font che lo governa e da
+    dove finisce rispetto al margine del suo blocco. Hanno un valore neutro perche'
+    chi misura solo le dimensioni non deve costruirli.
+    """
 
     block: str
     text: str
     size: float
+    x0: float = 0.0
+    x1: float = 0.0
+    font: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,8 +88,35 @@ def sized_lines(page: NormalizedPrimitivePage) -> list[SizedLine]:
         text = "".join(p.text for p in sorted(primitives, key=lambda z: z.bbox[0])).strip()
         sizes = [p.font_size for p in primitives if p.font_size]
         if text and sizes:
-            lines.append(SizedLine(block=block, text=text, size=round(max(sizes), 1)))
+            lines.append(
+                SizedLine(
+                    block=block,
+                    text=text,
+                    size=round(max(sizes), 1),
+                    x0=min(p.bbox[0] for p in primitives),
+                    x1=max(p.bbox[2] for p in primitives),
+                    font=governing_font(primitives),
+                )
+            )
     return lines
+
+
+def governing_font(primitives: Sequence) -> str | None:
+    """Il font della **maggioranza dei caratteri**, non della prima primitiva.
+
+    Un paragrafo che comincia con una parola in grassetto e' governato dal font
+    del resto -- misurato su Apo idx 79, dove `b0002 l0000` ha un inciso in
+    `ArnoPro-Bold` dentro una riga di `ArnoPro-Regular` -- mentre un titolo e'
+    scritto tutto nel suo. Prendere la prima primitiva confonderebbe i due.
+    """
+
+    weight: dict[str, int] = defaultdict(int)
+    for primitive in primitives:
+        if primitive.font_name:
+            weight[primitive.font_name] += len(primitive.text)
+    if not weight:
+        return None
+    return max(weight.items(), key=lambda item: (item[1], item[0]))[0]
 
 
 def measure_font_sizes(
