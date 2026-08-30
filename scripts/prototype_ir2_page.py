@@ -694,16 +694,38 @@ def run(
         excluded_node_ids: frozenset[str] = frozenset()
         if furniture_slots_found is not None:
             slots = furniture_slots_found
+            # Per pagina, non dal documento: gli id di primitiva non sono unici
+            # fra pagine, e la verticalita' e' un fatto della pagina. Le
+            # testatine si confrontano per (testo, slot) insieme, cosi' un titolo
+            # di sezione che passa per lo stesso punto non esce.
+            #
+            # **Due passate, e la seconda vede la prima.** Il vincolo del lato
+            # libero chiede che oltre la testatina non ci sia CONTENUTO, e
+            # dell'altro arredo non e' contenuto -- su DB sotto
+            # `CAPITOLO 5 - MAGIA` c'e' solo il folio `57`.
+            # Cio' che conta come «gia' arredo» sono le primitive dei **nodi che
+            # escono davvero**, non tutte quelle che stanno in uno slot d'arredo:
+            # marcare gli slot e' piu' largo, e su BiD liberava un lato di
+            # `punti di riferimento` togliendogli la protezione.
+            carried = [(node.node_id, node.primitive_ids) for node in ir2_page.nodes]
+            vertical = vertical_primitive_ids(primitive_page)
+            first_pass = furniture_node_ids(
+                primitive_page, carried, slots.all_slots, vertical
+            )
+            already = frozenset(
+                primitive_id
+                for node in ir2_page.nodes
+                if node.node_id in first_pass
+                for primitive_id in node.primitive_ids
+            )
             excluded_node_ids = furniture_node_ids(
                 primitive_page,
-                [(node.node_id, node.primitive_ids) for node in ir2_page.nodes],
+                carried,
                 slots.all_slots,
-                # Per pagina, non dal documento: gli id di primitiva non sono
-                # unici fra pagine, e la verticalita' e' un fatto della pagina.
-                # Le testatine si confrontano per (testo, slot) insieme, cosi' un
-                # titolo di sezione che passa per lo stesso punto non esce.
-                vertical_primitive_ids(primitive_page)
-                | running_head_primitive_ids(primitive_page, slots.running_heads),
+                vertical
+                | running_head_primitive_ids(
+                    primitive_page, slots.running_heads, already
+                ),
             )
             print(
                 f"arredo: {len(slots.from_label)} slot da etichetta, "

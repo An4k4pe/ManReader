@@ -559,8 +559,22 @@ def running_heads(
     return frozenset(found)
 
 
+def furniture_primitive_ids(
+    page: NormalizedPrimitivePage, slots: frozenset[Slot]
+) -> frozenset[str]:
+    """Le primitive che stanno in uno slot d'arredo. Non e' un ramo: e' una lettura."""
+
+    return frozenset(
+        primitive.primitive_id
+        for primitive in page.text_primitives
+        if normalize_text(primitive.text) and slot_of(primitive, page) in slots
+    )
+
+
 def running_head_primitive_ids(
-    page: NormalizedPrimitivePage, heads: frozenset[tuple[str, Slot]]
+    page: NormalizedPrimitivePage,
+    heads: frozenset[tuple[str, Slot]],
+    already_furniture: frozenset[str] = frozenset(),
 ) -> frozenset[str]:
     """Gli id delle primitive di **questa** pagina che sono una testatina.
 
@@ -585,31 +599,57 @@ def running_head_primitive_ids(
     sui sedici manuali: **32 testatine su 33 hanno un lato libero**, e
     `punti di riferimento` e' circondata da tutt'e quattro i lati.
 
-    **Il costo, dichiarato**: `CAPITOLO 5 - MAGIA` su DB, gia' giudicata arredo,
-    e' circondata -- sta in fondo alla pagina ma con il folio sotto di se' -- e
-    resta nel corpo. Una persa per una salvata.
+    **`already_furniture` recupera il costo che la v2 aveva dichiarato.**
+    Indicazione dell'utente: «DB si recupera se quando controlli per la testatina
+    hai gia' rimosso sfondi ed estetica». Misurato su DB idx 58: sotto
+    `CAPITOLO 5 - MAGIA` c'e' **una cosa sola**, il folio `57`, che e' arredo pure
+    lui. Un lato e' libero quando oltre di esso non c'e' **contenuto**, e
+    dell'altro arredo non e' contenuto: gli altri rami hanno gia' detto quali
+    primitive sono loro, e questa clausola gira dopo.
     """
 
     return frozenset(
         primitive.primitive_id
         for primitive in page.text_primitives
         if (normalize_text(primitive.text), slot_of(primitive, page)) in heads
-        and _has_a_free_side(primitive, page)
+        and _has_a_free_side(primitive, page, already_furniture)
     )
 
 
-def _has_a_free_side(primitive, page: NormalizedPrimitivePage) -> bool:
-    """Oltre questa primitiva, in almeno una direzione, non c'e' altro testo."""
+def _has_a_free_side(
+    primitive, page: NormalizedPrimitivePage, ignore: frozenset[str] = frozenset()
+) -> bool:
+    """Sopra **o** sotto questa primitiva non c'e' altro **contenuto**.
 
-    x0, y0, x1, y1 = primitive.bbox
+    **Sopra o sotto, non uno qualunque dei quattro lati**, ed e' una misura a
+    imporlo. Con tutti e quattro, su BiD bastava che l'unica cosa a sinistra di
+    `punti di riferimento` fosse il folio `280` -- tolto come arredo -- perche' il
+    lato sinistro risultasse libero e la protezione cadesse. La direzione che
+    conta e' quella della **lettura**: «in mezzo a un testo» vuol dire con del
+    testo sopra e sotto.
+
+    Misurato sui sedici manuali: tiene **32 testatine su 33**, e
+    `punti di riferimento`, con 11 primitive sopra e 34 sotto, resta nel corpo.
+
+    `ignore` sono le primitive che gli altri rami hanno gia' dichiarato arredo:
+    non contano come testo che circonda, perche' non sono contenuto. Su DB sotto
+    `CAPITOLO 5 - MAGIA` c'e' **solo** il folio `57`, e senza questo la testatina
+    restava nel corpo -- rilievo dell'utente: «DB si recupera se quando controlli
+    per la testatina hai gia' rimosso sfondi ed estetica».
+
+    Le linguette **verticali** non passano di qui: le prende `vertical_primitive_ids`,
+    che e' un fatto della primitiva e non della sua posizione.
+    """
+
+    _x0, y0, _x1, y1 = primitive.bbox
     others = [
         other
         for other in page.text_primitives
-        if other is not primitive and other.text.strip()
+        if other is not primitive
+        and other.text.strip()
+        and other.primitive_id not in ignore
     ]
     return not (
         any(other.bbox[3] <= y0 for other in others)
         and any(other.bbox[1] >= y1 for other in others)
-        and any(other.bbox[2] <= x0 for other in others)
-        and any(other.bbox[0] >= x1 for other in others)
     )
