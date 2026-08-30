@@ -246,10 +246,30 @@ def bind_marker_glyphs(
             ),
             None,
         )
+        behind: int | None = None
         if partner is None:
-            result.append(line)
-            continue
-        remaining.remove(partner)
+            # **E all'indietro**, `Criterio_MarcatoreDaFont_v2.md` §2. Su Vil il
+            # testo della voce comincia 2,6 punti piu' in alto del glifo, quindi
+            # l'ordine di lettura lo mette PRIMA: cercando solo in avanti il
+            # glifo non trovava nessuno e finiva in coda al paragrafo.
+            # Il vincolo verticale vale identico nelle due direzioni, ed e' lui a
+            # impedire che il glifo si prenda la continuazione della voce sopra.
+            behind = next(
+                (
+                    position
+                    for position in range(len(result) - 1, -1, -1)
+                    if result[position].block == line.block
+                    and result[position].text.strip()
+                    and _shares_a_visual_line(line, result[position])
+                ),
+                None,
+            )
+            if behind is None:
+                result.append(line)
+                continue
+            partner = result.pop(behind)
+        else:
+            remaining.remove(partner)
         result.append(
             _SourceLine(
                 block=line.block,
