@@ -570,10 +570,46 @@ def running_head_primitive_ids(
 
     Per pagina, come per il verticale: gli id di primitiva **non sono unici fra
     pagine**.
+
+    **E una testatina non sta in mezzo a un testo.** `Criterio_TestatinaCorrente_v2.md`,
+    indicazione dell'utente: la ricorrenza nello stesso punto vale «sui bordi o
+    comunque non in mezzo ad un testo». Su BiD `punti di riferimento` ricorre su
+    sei pagine a coordinate **identiche al decimale** -- x 63,0-206,1, y
+    358,0-377,7 -- e non e' arredo: introduce l'elenco dei luoghi del quartiere,
+    e sta a meta' pagina con testo sopra e sotto.
+
+    Il vincolo non e' una fascia di bordo tarata, che avrebbe escluso testatine
+    vere: `G I O C A R E` di Vil sta a 11 dal bordo e `CAPITOLO` di Fab a 10. E'
+    la formulazione letterale dell'utente -- **almeno un lato libero**, cioe'
+    almeno una direzione in cui oltre la testatina non c'e' altro testo. Misurato
+    sui sedici manuali: **32 testatine su 33 hanno un lato libero**, e
+    `punti di riferimento` e' circondata da tutt'e quattro i lati.
+
+    **Il costo, dichiarato**: `CAPITOLO 5 - MAGIA` su DB, gia' giudicata arredo,
+    e' circondata -- sta in fondo alla pagina ma con il folio sotto di se' -- e
+    resta nel corpo. Una persa per una salvata.
     """
 
     return frozenset(
         primitive.primitive_id
         for primitive in page.text_primitives
         if (normalize_text(primitive.text), slot_of(primitive, page)) in heads
+        and _has_a_free_side(primitive, page)
+    )
+
+
+def _has_a_free_side(primitive, page: NormalizedPrimitivePage) -> bool:
+    """Oltre questa primitiva, in almeno una direzione, non c'e' altro testo."""
+
+    x0, y0, x1, y1 = primitive.bbox
+    others = [
+        other
+        for other in page.text_primitives
+        if other is not primitive and other.text.strip()
+    ]
+    return not (
+        any(other.bbox[3] <= y0 for other in others)
+        and any(other.bbox[1] >= y1 for other in others)
+        and any(other.bbox[2] <= x0 for other in others)
+        and any(other.bbox[0] >= x1 for other in others)
     )
