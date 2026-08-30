@@ -283,68 +283,104 @@ class DocumentScan:
     heading_levels: dict[float, int]
 
 
-def document_furniture_slots(document: fitz.Document, *, sample: int) -> DocumentScan:
-    """Gli slot d'arredo del documento e i numeri dedotti, ricatturandone le pagine.
+def document_scan(
+    document: fitz.Document, page_index: int, *, neighbourhood: int
+) -> DocumentScan:
+    """I sei fatti, ognuno misurato **nel suo ambito**. `Criterio_AmbitoDeiFatti_v1.md`.
 
-    `sample` limita quante pagine si guardano, centrate sul documento: un
-    manuale da 400 pagine ricatturato per intero costa minuti, e la ricorrenza
-    non ha bisogno di tutte per essere stabile. E' un parametro di costo e non
-    una soglia della regola -- ma va dichiarato, perche' un campione contiguo
-    corto sovrastima le intestazioni di capitolo, che su una finestra stretta
-    sono su tutte le pagine e su un manuale intero no.
+    **Il difetto che questa funzione aveva**, e va scritto perche' ha falsato
+    quasi tutto: i sei fatti si misuravano su venti pagine centrate **sul
+    documento**, e poi governavano la resa di una pagina che quasi mai era fra
+    quelle. Del campione dichiarato di dieci pagine ne stava dentro **una**; delle
+    pagine che avevo scelto io a mano, sei su sei -- perche' le prendevo vicino al
+    centro senza saperlo.
+
+    Costava titoli veri: `IL BANCHETTO` di Wil, **37 punti su un corpo di 10**,
+    non prendeva livello, perche' la scala dei ranghi era calcolata dove quel
+    titolo non c'era.
+
+    **Ma «scansionare tutto» e' giusto solo per meta' dei fatti**, e lo dice
+    `RECURRENCE_SHARE`: una linguetta di capitolo sta sul 100% di venti pagine
+    dentro quel capitolo e sul 5% di un libro da quattrocento. Scansionare tutto
+    la spegnerebbe.
+
+    Quindi:
+
+    - **ambito documento** -- prosa, livelli, marcatori, firme di scala: sono
+      proprieta' della tipografia del libro, e si misurano su **tutte** le pagine;
+    - **ambito vicinato** -- arredo, testatine, numeri dedotti: sono proprieta' del
+      dintorno, e si misurano su una finestra che **contiene** la pagina resa.
+
+    Un fatto document-level che cambia a seconda di quale pagina si rende non e' un
+    fatto document-level: e' la definizione che separa i due ambiti.
+
+    **Una cattura sola**: il vicinato e' una fetta di quella del documento.
     """
 
-    first = max(0, len(document) // 2 - sample // 2)
-    pages: list = []
+    # **La finestra e' UNA e contiene la pagina.** La v1 di questo criterio
+    # separava i due ambiti e misurava prosa, livelli e marcatori su TUTTE le
+    # pagine. Misurato, non regge: `prose_sizes` taglia al salto piu' grande fra
+    # le mediane, e quel taglio **non e' invariante di scala**. Su FWK le
+    # dimensioni di prosa passano da 6 a 14 e i livelli da 5 a 2 -- 15,0, 16,0,
+    # 20,0 e 30,0 diventano prosa; su Dag da 4 a 23, comprese 2,8 e 3,0. Le firme
+    # di scala guadagnano `('*','•')` su FWK e spengono le sue voci d'elenco.
+    #
+    # Dare a una statistica non invariante di scala una popolazione di taglia
+    # diversa e' sbagliato a prescindere da come va a finire. Finche' il taglio
+    # non e' invariante, l'ambito documento resta chiuso e si sposta soltanto la
+    # finestra: stessa taglia, centrata sulla pagina invece che sul libro.
+    # `Criterio_AmbitoDeiFatti_v2.md`.
+    first_page = max(0, min(page_index - neighbourhood // 2, len(document) - neighbourhood))
+    captured: list = []
+    labels: list[str] = []
     indices: list[int] = []
-    for index in range(first, min(len(document), first + sample)):
+    for index in range(max(0, first_page), min(len(document), max(0, first_page) + neighbourhood)):
         page = document[index]
         if page.rotation != 0 or tuple(page.mediabox) != tuple(page.cropbox):
             continue
         indices.append(index)
-        capture = capture_pymupdf_page(
-            page,
-            source_id="diagnostic-source",
-            page_id=f"page:{index:04d}",
-            capture_id=f"furniture:{index:04d}",
+        captured.append(
+            normalize_backend_page_capture(
+                capture_pymupdf_page(
+                    page,
+                    source_id="diagnostic-source",
+                    page_id=f"page:{index:04d}",
+                    capture_id=f"scan:{index:04d}",
+                )
+            )
         )
-        pages.append(
-            (normalize_backend_page_capture(capture), (page.get_label() or "").strip())
-        )
-    captured = [primitive for primitive, _ in pages]
-    measured = measure_document_text_recurrence(captured)
-    slots = furniture_slots(pages, measured)
-    # I marcatori d'elenco escono dalla STESSA scansione: sono un fatto
-    # document-level come l'arredo, e ricatturare le pagine due volte
-    # raddoppierebbe il costo del giro per niente.
+        labels.append((page.get_label() or "").strip())
+
+    # --- i fatti, tutti sulla finestra --------------------------------------
     # Il font del corpo apre la seconda via dei marcatori: su Fab il pallino e'
     # la lettera `w` in Wingdings. `Criterio_MarcatoreDaFont_v1.md`.
     body = body_font([p for page in captured for p in page.text_primitives])
     markers = list_markers(measure_document_line_starts(captured, body))
-    # Le firme di blocco escono dalla stessa scansione: dire quali sequenze
-    # di glifi siano una scala di valori richiede di aver visto piu' blocchi,
-    # ed e' un fatto document-level come l'arredo e i marcatori.
     scales = value_scale_signatures(count_block_signatures(captured, markers))
-
-    # I numeri **dedotti** per indice di pagina, dove il documento non dichiara
-    # niente. Servono alla provenienza, non alla rimozione: la rimozione la fa
-    # gia' `slots.from_sequence`. Sono due usi separati dello stesso fatto e il
-    # criterio li tiene separati perche' possono fallire separati.
-    deduced: dict[int, str] = {}
-    if not any(label for _, label in pages):
-        found = deduced_number_slots([primitive for primitive, _ in pages])
-        deduced = {
-            indices[position]: value
-            for position, value in found.by_page_position.items()
-            if position < len(indices)
-        }
-    # I titoli vengono dalle stesse pagine: quali dimensioni siano prosa lo si
-    # puo' dire solo avendone viste tante, `Criterio_Titoli_v2.md` §1.
     sizes = measure_font_sizes(captured)
     prose = prose_sizes(sizes)
     # Due passate: prima si vede quali dimensioni intestano davvero qualcosa, poi
     # si assegnano i ranghi solo a quelle. `Criterio_Titoli_v3.md`.
     carried = sizes_that_carry_headings([sized_lines(page) for page in captured], sizes, prose)
+
+    # --- arredo, testatine, numeri: la stessa finestra ----------------------
+    near, near_indices, near_labels = captured, indices, labels
+
+    measured = measure_document_text_recurrence(near)
+    slots = furniture_slots(list(zip(near, near_labels, strict=True)), measured)
+
+    # I numeri **dedotti**, dove il documento non dichiara niente. Che il
+    # documento dichiari o no e' una domanda d'ambito DOCUMENTO -- si guardano
+    # tutte le etichette -- ma la deduzione lavora sul vicinato, perche' e' una
+    # sequenza locale.
+    deduced: dict[int, str] = {}
+    if not any(labels):
+        found = deduced_number_slots(near)
+        deduced = {
+            near_indices[position]: value
+            for position, value in found.by_page_position.items()
+            if position < len(near_indices)
+        }
     return DocumentScan(
         furniture=slots,
         deduced_labels=deduced,
@@ -586,7 +622,7 @@ def run(
         prose: frozenset[float] = frozenset()
         levels: dict[float, int] = {}
         if remove_furniture or render_lists:
-            scan = document_furniture_slots(document, sample=furniture_sample)
+            scan = document_scan(document, page_index, neighbourhood=furniture_sample)
             deduced_labels = scan.deduced_labels
             prose = scan.prose_sizes
             levels = scan.heading_levels
@@ -823,7 +859,12 @@ def main() -> None:
         "--arredo-pagine",
         type=int,
         default=60,
-        help="quante pagine ricatturare per la misura di ricorrenza (default 60)",
+        help=(
+            "ampiezza della finestra di VICINATO per arredo, testatine e numeri "
+            "dedotti, centrata sulla pagina resa (default 60). I fatti d'ambito "
+            "documento -- prosa, livelli, marcatori -- si misurano su tutte le "
+            "pagine e non passano di qui. `Criterio_AmbitoDeiFatti_v1.md`."
+        ),
     )
     parser.add_argument(
         "--base",
