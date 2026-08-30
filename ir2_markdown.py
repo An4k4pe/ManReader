@@ -290,8 +290,14 @@ def render_ordered_item(node: NodeIR2) -> str:
     return f"{number}. {body}" if body.strip() else ""
 
 
-def render_node(node: NodeIR2, markers: frozenset[str] = frozenset()) -> str:
-    """Render one node. Unknown kinds are not guessed at."""
+def render_node(node: NodeIR2) -> str:
+    """Render one node. Unknown kinds are not guessed at.
+
+    **Non prende piu' l'insieme dei marcatori**, e nessuno qui dentro lo prende:
+    quale testa sia il marcatore lo dichiara il nodo, `NodeIR2.marker`, deciso
+    dal costruttore dove le primitive ci sono. Un renderer che indovina dai
+    caratteri e' il difetto che ha prodotto `- livia` su Fab.
+    """
 
     if node.kind == KIND_TEXT_HEADING:
         if node.heading_level is None:
@@ -356,7 +362,6 @@ def render_page_markdown(
     render_unresolved_assets: bool = RENDER_UNRESOLVED_ASSET_NOTES,
     excluded_node_ids: frozenset[str] = frozenset(),
     render_page_label: bool = False,
-    list_markers: frozenset[str] = frozenset(),
 ) -> str:
     """Render one page. Nodes are emitted in ``order``, which is reading order.
 
@@ -387,7 +392,7 @@ def render_page_markdown(
     if render_page_label and page.page_label:
         blocks.append(f"> **[pagina {page.page_label}]**")
     rendered_nodes = [
-        (node, render_node(node, list_markers))
+        (node, render_node(node))
         for node in sorted(page.nodes, key=lambda n: n.order)
         if is_rendered_in_body(
             node,
@@ -402,10 +407,14 @@ def render_page_markdown(
     # separati. Fra un elenco e cio' che lo circonda la riga vuota ci vuole,
     # altrimenti il paragrafo precedente si attacca alla prima voce.
     def marker_of(node: NodeIR2) -> str | None:
-        """Il marcatore con cui la voce si apre nella sorgente, che il nodo tiene."""
+        """Il marcatore che il **nodo dichiara**, non uno indovinato dal testo.
 
-        stripped = (node.text or "").lstrip()
-        return stripped[0] if stripped and stripped[0] in list_markers else None
+        Serviva a raggruppare le voci consecutive dello stesso elenco, e lo
+        cercava fra i caratteri: su Fab dava `O` per `Olivia`, che marcatore non
+        e'. `Criterio_MarcatorePerPrimitiva_v1.md`.
+        """
+
+        return (node.marker or "").strip() or None
 
     parts: list[str] = list(blocks)
     previous_marker: str | None = None

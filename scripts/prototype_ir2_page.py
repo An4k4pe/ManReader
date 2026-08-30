@@ -84,8 +84,13 @@ from ir2_builder import (  # noqa: E402
     body_font,
     build_page_ir2,
 )
-from ir2_markdown import is_rendered_in_body, render_page_markdown  # noqa: E402
-from ir2_model import DocumentIR2, IR2Provenance, NodeIR2  # noqa: E402
+from ir2_markdown import (  # noqa: E402
+    RENDER_UNRESOLVED_ASSET_NOTES,
+    is_rendered_in_body,
+    render_node,
+    render_page_markdown,
+)
+from ir2_model import DocumentIR2, IR2Provenance, NodeIR2, PageIR2  # noqa: E402
 from ir2_serialization import document_ir2_from_dict, document_ir2_to_dict  # noqa: E402
 from ir2_validate import validate_page_ir2_against_primitive_page  # noqa: E402
 from ir_builder import _HYPHENATED_WORD_RE  # noqa: E402
@@ -106,25 +111,79 @@ def _fail(message: str, code: int) -> None:
     raise SystemExit(code)
 
 
-def _normalised_sequence(text: str, list_markers: frozenset[str] = frozenset()) -> str:
+def _normalised_sequence(text: str) -> str:
     """Non-space characters, after the dehyphenation amendment, order preserved.
 
-    `list_markers` porta il **secondo** emendamento al confronto E-B,
-    `Criterio_Elenchi_v1.md` §5.E: i marcatori dichiarati per quel documento
-    escono da **entrambi i lati**. Senza, il confronto fallirebbe per
-    costruzione, perche' la resa a elenco sostituisce il marcatore con `- `.
+    **Non toglie piu' niente per carattere**, ed e' il ritiro del secondo
+    emendamento a E-B (`Criterio_Elenchi_v1.md` §5.E, sostituito da
+    `Criterio_ConfrontoEB_v2.md`). Quell'emendamento cancellava i marcatori
+    dichiarati **da entrambi i lati**, e faceva due danni opposti:
 
-    E' la stessa forma dell'emendamento gia' a verbale per la deidratazione:
-    un trattino e' un carattere non-spazio e riunire una parola lo cambia
-    legittimamente. Togliere da entrambi i lati e' cio' che tiene onesto il
-    confronto -- se lo si togliesse da uno solo, il confronto misurerebbe
-    l'emendamento invece dell'ordine.
+    - **cancellava troppo.** Il carattere spariva *ovunque comparisse nel
+      documento*, non solo in testa alle voci. Ammessa `O` come marcatore su Fab,
+      ogni `O` usciva da tutt'e due i lati e la resa `- livia` per `Olivia`
+      passava il confronto senza che niente se ne accorgesse. Misurato, i
+      caratteri ciechi sono lo 0,1% su Fab, lo 0,6% su DrM, lo 0,5% su DrW coi
+      marcatori spediti -- poco, ma la garanzia reggeva per l'alfabeto;
+    - **cancellava troppo poco.** Toglieva il marcatore ma non il `- ` che la
+      resa mette al suo posto, e il trattino e' un carattere non-spazio che
+      sopravvive. Il confronto restava asimmetrico e falliva per costruzione su
+      qualunque pagina con elenchi: misurato su FWK idx 119, base
+      `Muriecancelli…` contro nuovo `-Muriecancelli…`.
+
+    La sostituzione la fa `_with_source_markers`, che **rimette** il marcatore
+    dichiarato al posto del `- `. Cosi' non si cancella niente da nessuna parte, e
+    una lettera persa si vede.
+
+    Resta l'emendamento della deidratazione, che e' d'altra natura: un trattino
+    e' un carattere non-spazio e riunire una parola lo cambia legittimamente.
     """
 
-    text = _HYPHENATED_WORD_RE.sub("", text)
-    if list_markers:
-        text = "".join(character for character in text if character not in list_markers)
-    return "".join(text.split())
+    return "".join(_HYPHENATED_WORD_RE.sub("", text).split())
+
+
+def _with_source_markers(
+    markdown: str, page: PageIR2, excluded_node_ids: frozenset[str]
+) -> str:
+    """Rimette il marcatore che la resa ha tolto, per confrontare con la base.
+
+    La base emette il marcatore com'e' nella sorgente -- `* Muri e cancelli` --
+    mentre IR 2 lo sostituisce con la sintassi Markdown -- `- Muri e cancelli`.
+    Le due uscite dicono la stessa cosa e non si somigliano.
+
+    Qui la differenza si annulla **restituendo** cio' che e' stato tolto, invece
+    di cancellare da tutt'e due: ogni riga che la resa ha aperto con `- ` torna ad
+    aprirsi col `marker` che il suo nodo dichiara. Un nodo senza marcatore --
+    `Olivia` su Fab, dove la testa e' una lettera e non un glifo -- perde solo il
+    `- `, e il testo resta intero da entrambe le parti.
+
+    L'appaiamento e' **per ordine di emissione**, che e' l'ordine dei nodi, e si
+    guardano solo i nodi la cui resa comincia davvero per `- `: un nodo che si
+    rende vuoto -- il glifo orfano del suo testo -- non consuma un posto.
+
+    `render_node` viene chiamato una seconda volta, ed e' spreco che qui si
+    accetta: questo e' uno script diagnostico e la pagina e' una.
+    """
+
+    pending = [
+        node.marker or ""
+        for node in sorted(page.nodes, key=lambda n: n.order)
+        if is_rendered_in_body(
+            node,
+            render_unresolved=RENDER_UNRESOLVED_ASSET_NOTES,
+            excluded_node_ids=excluded_node_ids,
+        )
+        and render_node(node).startswith("- ")
+    ]
+    restored: list[str] = []
+    position = 0
+    for line in markdown.splitlines():
+        if line.startswith("- ") and position < len(pending):
+            restored.append(pending[position] + line[2:])
+            position += 1
+        else:
+            restored.append(line)
+    return "\n".join(restored)
 
 
 def _anchor_index(primitive: object, ordered: list) -> int:
@@ -572,9 +631,7 @@ def run(
                 file=sys.stderr,
             )
 
-        markdown = render_page_markdown(
-            ir2_page, excluded_node_ids=excluded_node_ids, list_markers=markers
-        )
+        markdown = render_page_markdown(ir2_page, excluded_node_ids=excluded_node_ids)
         (output_dir / "page_ir2.md").write_text(markdown, encoding="utf-8")
 
         # --- Canale review: cio' che NON entra nel corpo, e perche' ---
@@ -634,9 +691,13 @@ def run(
             if not base_path.is_file():
                 _fail(f"base non trovata: {base_path}", 3)
             base_sequence = _normalised_sequence(
-                _strip_asset_markers(base_path.read_text(encoding="utf-8")), markers
+                _strip_asset_markers(base_path.read_text(encoding="utf-8"))
             )
-            new_sequence = _normalised_sequence(_strip_ir2_notes(markdown), markers)
+            new_sequence = _normalised_sequence(
+                _with_source_markers(
+                    _strip_ir2_notes(markdown), ir2_page, excluded_node_ids
+                )
+            )
             if base_sequence == new_sequence:
                 print(f"E-B: ordine IDENTICO alla base ({len(base_sequence)} caratteri)",
                       file=sys.stderr)

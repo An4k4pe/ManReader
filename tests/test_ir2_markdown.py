@@ -38,14 +38,14 @@ class ListItemMarkerTest(unittest.TestCase):
 
     def test_it_strips_the_marker_the_node_declares(self) -> None:
         item = _list_item(0, "h Utilizzo. Richiede tempo.", "h ")
-        self.assertEqual(render_node(item, frozenset("h")), "- Utilizzo. Richiede tempo.")
+        self.assertEqual(render_node(item), "- Utilizzo. Richiede tempo.")
 
     def test_it_keeps_the_text_whole_when_no_marker_is_declared(self) -> None:
         # Su Fab `O` e' marcatore del documento, ma qui apre `Olivia` nel font
         # del corpo: il costruttore non l'ha dichiarata, e la resa non la toglie.
         # Toglierla dava `- livia`.
         item = _list_item(0, "Olivia", None)
-        self.assertEqual(render_node(item, frozenset("O")), "- Olivia")
+        self.assertEqual(render_node(item), "- Olivia")
 
     def test_it_strips_across_the_runs(self) -> None:
         item = NodeIR2(
@@ -62,7 +62,7 @@ class ListItemMarkerTest(unittest.TestCase):
             ),
             marker="h ",
         )
-        self.assertEqual(render_node(item, frozenset("h")), "- **Utilizzo.** Richiede tempo.")
+        self.assertEqual(render_node(item), "- **Utilizzo.** Richiede tempo.")
 
 
 def _paragraph(order: int, text: str, node_id: str | None = None) -> NodeIR2:
