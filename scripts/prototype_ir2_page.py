@@ -58,6 +58,7 @@ from document_furniture_policy import (  # noqa: E402
     deduced_number_slots,
     furniture_node_ids,
     furniture_slots,
+    running_head_primitive_ids,
     vertical_primitive_ids,
 )
 from document_heading_measurements import (  # noqa: E402
@@ -555,12 +556,16 @@ def run(
                 slots.all_slots,
                 # Per pagina, non dal documento: gli id di primitiva non sono
                 # unici fra pagine, e la verticalita' e' un fatto della pagina.
-                vertical_primitive_ids(primitive_page),
+                # Le testatine si confrontano per (testo, slot) insieme, cosi' un
+                # titolo di sezione che passa per lo stesso punto non esce.
+                vertical_primitive_ids(primitive_page)
+                | running_head_primitive_ids(primitive_page, slots.running_heads),
             )
             print(
                 f"arredo: {len(slots.from_label)} slot da etichetta, "
                 f"{len(slots.from_recurrence)} da ricorrenza, "
                 f"{len(slots.from_sequence)} da sequenza dedotta, "
+                f"{len(slots.running_heads)} testatine, "
                 f"{len(vertical_primitive_ids(primitive_page))} primitive verticali, "
                 f"{len(excluded_node_ids)} nodi fuori dal corpo"
                 + (f" — numero dedotto: {page_label}" if page_label_deduced else ""),

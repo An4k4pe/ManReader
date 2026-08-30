@@ -164,7 +164,7 @@ class FurnitureSlots:
     from_sequence: frozenset[Slot] = frozenset()
     from_repeated_text: frozenset[Slot] = frozenset()
     from_vertical: frozenset[Slot] = frozenset()
-    from_running_head: frozenset[Slot] = frozenset()
+    running_heads: frozenset[tuple[str, Slot]] = frozenset()
 
     @property
     def all_slots(self) -> frozenset[Slot]:
@@ -178,12 +178,10 @@ class FurnitureSlots:
         # una proprieta' della PRIMITIVA e non dello slot, e marcare lo slot
         # toglieva la prosa orizzontale che ci passa su altre pagine. Ora si
         # escludono le primitive, con `vertical_primitive_ids`.
-        return (
-            self.from_label
-            | self.from_recurrence
-            | self.from_sequence
-            | self.from_running_head
-        )
+        # `running_heads` **non entra**: e' una coppia (testo, slot) e si applica
+        # alle primitive, non allo slot. Toglierne lo slot porterebbe via tutto
+        # cio' che ci passa.
+        return self.from_label | self.from_recurrence | self.from_sequence
 
 
 def label_slots(
@@ -346,7 +344,7 @@ def furniture_slots(
         from_sequence=from_sequence,
         from_repeated_text=repeated_text_slots(captured, share=share),
         from_vertical=vertical_slots(captured),
-        from_running_head=running_head_slots(captured, share=share),
+        running_heads=running_heads(captured, share=share),
     )
 
 
@@ -498,13 +496,13 @@ def vertical_slots(pages: Sequence[NormalizedPrimitivePage]) -> frozenset[Slot]:
     return frozenset(found)
 
 
-def running_head_slots(
+def running_heads(
     pages: Sequence[NormalizedPrimitivePage],
     *,
     share: float = RECURRENCE_SHARE,
     majority: float = 0.5,
-) -> frozenset[Slot]:
-    """Ramo 5. La **testatina corrente**, a qualunque posizione.
+) -> frozenset[tuple[str, Slot]]:
+    """Ramo 5. Le **testatine correnti**, come coppie (testo, slot).
 
     `Criterio_TestatinaCorrente_v1.md`. Indicazione dell'utente: «le testatine
     devono funzionare in qualsiasi posizione, alto basso laterale e verso e
@@ -513,20 +511,25 @@ def running_head_slots(
     **Parte dal testo, non dallo slot**, ed e' li' che la clausola A sbagliava.
     Quella chiedeva «a questo slot si ripete qualche testo?», e un campo di scheda
     ripete il suo: `Stamina` di Draw Steel usciva dal corpo. Questa chiede «questo
-    testo sta sempre nello stesso posto?», e la misura dice che e' la domanda
-    giusta -- `Stamina` compare su 16 pagine sparsa su **31 slot diversi**,
-    `Psionic` di DrW su **71**, mentre `Vileborn` di Apo sta a **uno solo**.
+    testo sta sempre nello stesso posto?». `Stamina` compare su 16 pagine sparsa
+    su **31 slot diversi**, `Psionic` di DrW su **71**, mentre una testatina sta a
+    uno solo: una scheda si sposta col contenuto, una testatina no.
 
-    Una scheda si sposta col contenuto della pagina; una testatina no.
+    **Torna coppie e non slot**, ed e' la correzione che il giudizio ha imposto.
+    Restituire lo slot toglieva **tutto** cio' che ci passa: su Vil lo slot
+    (13,11) porta `G I O C A R E` su quattro pagine e **tredici titoli di sezione
+    diversi** sulle altre -- `DONI`, `PULSIONI`, `DOVERE` -- e uscivano tutti. E'
+    la seconda volta che identifico per testo e tolgo per posizione: la prima e'
+    stata la clausola del verticale.
 
-    Lo slot e' **specchiato sul centro**: un arredo non centrato si riflette fra
-    recto e verso, e contarne le due posizioni separate lo dimezza.
+    Lo slot e' **specchiato sul centro** per contare, ma le coppie portano gli
+    slot **reali**, perche' e' su quelli che si confronta una primitiva.
     """
 
     per_text: dict[str, dict[Slot, int]] = {}
     pages_of_text: dict[str, set[int]] = {}
     pages_of_slot: dict[Slot, set[int]] = {}
-    real: dict[Slot, set[Slot]] = {}
+    real: dict[tuple[str, Slot], set[Slot]] = {}
 
     for index, page in enumerate(pages):
         for primitive in page.text_primitives:
@@ -537,10 +540,10 @@ def running_head_slots(
             per_text.setdefault(text, {})[key] = per_text.setdefault(text, {}).get(key, 0) + 1
             pages_of_text.setdefault(text, set()).add(index)
             pages_of_slot.setdefault(key, set()).add(index)
-            real.setdefault(key, set()).add(slot_of(primitive, page))
+            real.setdefault((text, key), set()).add(slot_of(primitive, page))
 
     minimum = len(pages) * share
-    found: set[Slot] = set()
+    found: set[tuple[str, Slot]] = set()
     for text, slots in per_text.items():
         if len(pages_of_text[text]) < minimum:
             continue
@@ -551,5 +554,26 @@ def running_head_slots(
             continue
         if len(pages_of_slot[key]) < minimum:
             continue
-        found |= real.get(key, set())
+        for actual in real.get((text, key), ()):
+            found.add((text, actual))
     return frozenset(found)
+
+
+def running_head_primitive_ids(
+    page: NormalizedPrimitivePage, heads: frozenset[tuple[str, Slot]]
+) -> frozenset[str]:
+    """Gli id delle primitive di **questa** pagina che sono una testatina.
+
+    Si confrontano **testo e posizione insieme**: un titolo di sezione che passa
+    per lo stesso punto non e' la testatina, e un'occorrenza dello stesso testo
+    altrove nella prosa nemmeno.
+
+    Per pagina, come per il verticale: gli id di primitiva **non sono unici fra
+    pagine**.
+    """
+
+    return frozenset(
+        primitive.primitive_id
+        for primitive in page.text_primitives
+        if (normalize_text(primitive.text), slot_of(primitive, page)) in heads
+    )

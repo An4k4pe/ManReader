@@ -10,7 +10,8 @@ import unittest
 
 from document_furniture_policy import (
     repeated_text_slots,
-    running_head_slots,
+    running_head_primitive_ids,
+    running_heads,
     vertical_primitive_ids,
 )
 from geometry_model import PageGeometry
@@ -134,19 +135,19 @@ class RunningHeadTest(unittest.TestCase):
     def test_a_text_always_in_one_place_is_a_running_head(self) -> None:
         # `Capitolo 6` di FWK, `PREMI START` di Fab: qualunque posizione.
         pages = [_page(i, ("Capitolo 6", 44.0, 2.0)) for i in range(8)]
-        self.assertIn((44, 2), running_head_slots(pages))
+        self.assertIn(("Capitolo 6", (44, 2)), running_heads(pages))
 
     def test_position_is_not_constrained(self) -> None:
         # Su Fab la testatina sta al LATO, y=43.
         pages = [_page(i, ("PREMI START", 93.0, 43.0)) for i in range(8)]
-        self.assertIn((93, 43), running_head_slots(pages))
+        self.assertIn(("PREMI START", (93, 43)), running_heads(pages))
 
     def test_a_text_that_moves_around_is_not_a_running_head(self) -> None:
         # E' la distinzione che la clausola A non faceva: `Stamina` di Draw Steel
         # compare su 16 pagine sparsa su 31 slot, perche' la scheda si sposta col
         # contenuto. Una testatina no.
         pages = [_page(i, ("Stamina", 12.0, 20.0 + i * 4.0)) for i in range(8)]
-        self.assertEqual(running_head_slots(pages), frozenset())
+        self.assertEqual(running_heads(pages), frozenset())
 
     def test_the_two_mirrored_sides_are_counted_together(self) -> None:
         # Lo specchio si calcola sul CENTRO: con una larghezza di 5, il gemello
@@ -156,7 +157,7 @@ class RunningHeadTest(unittest.TestCase):
         for i in range(10):
             x = 89.0 if i % 2 else 6.0
             pages.append(_page(i, ("Il Mondo", x, 2.0)))
-        found = running_head_slots(pages)
+        found = {slot for _text, slot in running_heads(pages)}
         self.assertIn((6, 2), found)
         self.assertIn((89, 2), found)
 
@@ -164,7 +165,23 @@ class RunningHeadTest(unittest.TestCase):
         pages = [_page(i, (f"prosa della pagina {i}", 10.0, 50.0)) for i in range(12)]
         pages[0] = _page(0, ("Capitolo 6", 44.0, 2.0))
         pages[1] = _page(1, ("Capitolo 6", 44.0, 2.0))
-        self.assertEqual(running_head_slots(pages), frozenset())
+        self.assertEqual(running_heads(pages), frozenset())
+
+
+    def test_a_section_title_sharing_the_slot_is_not_removed(self) -> None:
+        # Su Vil lo slot (13,11) porta `G I O C A R E` su quattro pagine e
+        # TREDICI titoli di sezione diversi sulle altre. Togliere lo slot li
+        # portava via tutti: si toglie la coppia (testo, slot), non la posizione.
+        pages = []
+        for i in range(12):
+            testo = "G I O C A R E" if i % 3 == 0 else f"TITOLO NUMERO {i}"
+            pages.append(_page(i, (testo, 13.0, 11.0)))
+        heads = running_heads(pages)
+        self.assertIn(("G I O C A R E", (13, 11)), heads)
+        titolo = _page(1, ("TITOLO NUMERO 1", 13.0, 11.0))
+        self.assertEqual(running_head_primitive_ids(titolo, heads), frozenset())
+        testatina = _page(0, ("G I O C A R E", 13.0, 11.0))
+        self.assertEqual(len(running_head_primitive_ids(testatina, heads)), 1)
 
 
 if __name__ == "__main__":

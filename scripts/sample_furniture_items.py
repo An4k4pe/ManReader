@@ -100,7 +100,9 @@ def collect(pdf_path: Path, sample: int) -> list[dict]:
                     # verbale deve dire quale lo ha deciso. I due nuovi si
                     # nominano per primi perche' sono quelli in giudizio.
                     "ramo": (
-                        "verticale"
+                        "testatina"
+                        if slot in slots.from_running_head
+                        else "verticale"
                         if slot in slots.from_vertical
                         else "testo-ripetuto"
                         if slot in slots.from_repeated_text
@@ -130,7 +132,14 @@ def main() -> None:
     )
     parser.add_argument(
         "--solo-ramo",
-        choices=("etichetta", "ricorrenza", "sequenza", "testo-ripetuto", "verticale"),
+        choices=(
+            "etichetta",
+            "ricorrenza",
+            "sequenza",
+            "testo-ripetuto",
+            "verticale",
+            "testatina",
+        ),
         help="giudica solo le voci di un ramo: serve quando un ramo nuovo va "
              "provato da solo, senza che le voci dei rami gia' spediti lo diluiscano",
     )
