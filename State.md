@@ -1269,4 +1269,116 @@ Criteri ed esiti committati: `Criterio_TabellaInIR2_v1.md`,
 
 **Milestone chiusa nei commit `c1f0297`..`7d7b98c`.**
 
+## Milestone 40 — l'uscita leggibile: arredo, elenchi, titoli, e il terzo invariante che torna a funzionare
+
+**Misura di questa milestone, posta dall'utente**: *un file Markdown leggibile da
+occhi umani*. 84 commit da `7d7b98c`.
+
+### Cosa esiste ora
+
+- **L'arredo esce dal corpo**, cinque rami tenuti distinti — etichetta, ricorrenza
+  di banda, sequenza dedotta, verticale, testatina corrente. Copertura misurata
+  67,4% → 87,3% → **95,7%**, sei manuali su dieci al 100%. Lo specchiamento
+  recto/verso è **sul centro**, non sul bordo sinistro.
+- **Gli elenchi**: marcatori desunti dal documento, scale di valori, elenchi
+  numerati col loro numero, e la seconda via del **font simbolico** —
+  `Criterio_MarcatoreDaFont_v1.md` è l'unico criterio **scaricato** di questa
+  milestone, 18 voci su 18 in esaustiva.
+- **I titoli per dimensione**, `Criterio_Titoli_v3.md`: l'unità è la riga, non il
+  blocco. Precisione ≈89%, copertura 62%.
+- **Lo stile inline** in uscita, e i tratti che il normalizzatore non butta più.
+- **E-B, il terzo invariante, funziona di nuovo** e ha un comando:
+  `scripts/check_eb.py --pdf-dir .`, dieci pagine, ~10 minuti. **9 identiche su
+  10**, differenza spiegata. `AGENTS.MD` §Regole operative lo rende obbligatorio
+  quando il diff tocca `ir2_builder.py` o `ir2_markdown.py`.
+
+### Il giudizio delle dieci pagine, che è il risultato che conta
+
+`Esito_DieciPagineOggi_v1.md`, campione sorteggiato con seed dichiarato, giudicato
+dall'utente sull'uscita **corrente** contro l'immagine della pagina:
+
+| | |
+| --- | --- |
+| il contenuto si conserva | **passa, 10 su 10** |
+| l'arredo non porta via contenuto | **passa, 10 su 10** |
+| pagine senza rilievi | **zero** |
+
+> **La pipeline non distrugge e non nasconde: sbaglia a etichettare.** È la frase
+> che riassume dove sta il lavoro.
+
+Tutti i rilievi d'arredo di quel giudizio sono stati chiusi — `CAPITOLO 5 – MAGIA`
+su DB, `CAPITOLO` su Fab, `Personaggi 61` su Vil, `Capitolo 2` e `32` su FWK, `72`
+su Wil — e `punti di riferimento` su BiD, che l'utente ha giudicato **contenuto**,
+resta nel corpo.
+
+### Le cadute, e che cosa hanno insegnato
+
+- **Il ramo dei titoli senza dimensione**: prende i quattro casi per cui è scritto
+  e ne promuove altri 238, 161 dei quali su schede e tabelle. **Quarto** meccanismo
+  a cadere sulle schede. Ritirato, funzione in albero e non chiamata.
+- **L'emendamento ai marcatori** (`h` di Vil): Vil da 0 a 29 voci vere, e su Fab
+  la `O` di `Olivia` resa `livia`. **Contenuto distrutto**, non classifica
+  sbagliata. Ritirato.
+- **Il difetto che quello ha scoperto**: `strip_marker` toglieva **per posizione**.
+  Ora il nodo dichiara la sua testa — `NodeIR2.marker` — e la resa non indovina
+  più. Il buco era latente: 673 voci su 16 manuali, zero lettere perse, perché i
+  marcatori spediti sono simboli rari. **La garanzia reggeva per l'alfabeto.**
+- **E-B era rotto da tre meccanismi in fila** — elenchi, titoli, run — e la suite
+  sintetica restava verde. Riparato allineando l'emesso al testo del nodo invece
+  di riconoscere la sintassi: una regola sola, non tre.
+- **La finestra di scansione stava nel posto sbagliato**: i fatti document-level si
+  misuravano su venti pagine al centro del libro, e **9 delle 10 pagine del
+  campione stavano fuori**. Le pagine che l'assistente sceglieva a mano stavano
+  dentro 6 su 6. Distorsione di campionamento in quasi tutte le misure della
+  sessione, trovata dal giudizio su un campione non scelto.
+- **`prose_sizes` non è invariante di scala**: allargare la finestra al documento
+  intero porta le dimensioni di prosa di FWK da 6 a 14 e quelle di Dag da 4 a 23.
+  La finestra si **sposta**, non si allarga. È il prerequisito di qualunque
+  ambito-documento.
+
+### Due regole di processo nuove
+
+`AGENTS.MD` **§20** e la voce corrispondente in `CLAUDE.md`: **un veto che cade apre
+la diagnosi, non la chiude.** Il §15 resta, ma prima di ritirare un meccanismo va
+stabilito **che cosa** è caduto — un veto scritto nella moneta sbagliata cade su
+se stesso. La prova che separa l'emendamento dal salvataggio: deve reggere senza
+sapere se il meccanismo poi passa.
+
+E in `CLAUDE.md`: **il numero di pagina stampato è un dato, non una cosa da
+indovinare** — `page.get_label()` lo dichiara su 13 manuali su 16, e sui tre
+restanti lo deduce il ramo 3 (20/20, 18/20, 20/20).
+
+### Aperto, in ordine di quanto blocca
+
+1. **Gli asset non resi.** Su Dag idx 199 ci sono **quattro immagini estratte e
+   zero note nel corpo**: finiscono tutte in review perché nessun candidato le
+   accetta. È **metà dell'obiettivo** — «immagini sostituite da note brevi che
+   dicono cosa sostituiscono» — e su quella pagina non c'è. Prossimo lavoro.
+2. **I titoli in linea**: `REGOLE FERREE` su Apo, `LA TUA PULSIONE` su Vil, alla
+   stessa dimensione del corpo e fusi nel paragrafo.
+3. **Le tabelle**, fuori per decisione dell'utente.
+4. **`W` su Fab**, l'ornamento di un glifo solo che `running_heads` rifiuta per
+   `len(text) < 2`. **Accettato come errore dall'utente**: rilassare la guardia ne
+   causerebbe molti altri.
+5. **Le voci d'elenco false**, 277 su 7296 (3,8%) facendo scorrere la finestra:
+   un carattere solo o un numero nudo. Parcheggiate per decisione dell'utente.
+
+### Documenti di questa milestone
+
+Criteri ed esiti committati: `Criterio_ArredoRicorrente_v1..v3`,
+`Criterio_NumeroDedotto_v1`, `Criterio_TestatinaCorrente_v1..v4`,
+`Criterio_Elenchi_v1..v2`, `Criterio_ScalaDiValori_v1`, `Criterio_ElencoNumerato_v1`,
+`Criterio_MarcatoreDaFont_v1..v3`, `Criterio_MarcatorePerPrimitiva_v1`,
+`Criterio_Titoli_v1..v3`, `Criterio_TitoloSopraIlParagrafo_v1`,
+`Criterio_ConfrontoEB_v2..v4`, `Criterio_AmbitoDeiFatti_v1..v2`,
+`Criterio_DieciPagineOggi_v1`, `Decisione_Annidamento_v1`, e i rispettivi `Esito_*`.
+
+Script che producono i numeri citati qui: `scripts/check_eb.py`,
+`scripts/measure_furniture_coverage.py`, `scripts/measure_heading_candidates.py`,
+`scripts/measure_headings_above_paragraphs.py`,
+`scripts/build_judgement_material.py`, `scripts/build_marker_item_material.py`,
+`scripts/build_readability_material.py`.
+
+**Milestone chiusa nel commit che aggiunge questa sezione.**
+
 <!-- FINE DI State.md — se non leggi questa riga, la tua copia è troncata: fermati e dillo -->
