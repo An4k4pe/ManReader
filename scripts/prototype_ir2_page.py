@@ -712,6 +712,16 @@ def run(
         (output_dir / "review_ir2.md").write_text(
             "\n".join(review_lines) + "\n", encoding="utf-8"
         )
+        # Gli id esclusi in forma leggibile da un programma. **Non entrano
+        # nell'IR**: l'esclusione e' una decisione di resa e l'IR non la porta.
+        # Ma chi costruisce materiale a valle non deve ricavarla leggendo la
+        # prosa di `review_ir2.md` con un'espressione regolare -- e' una seconda
+        # via, e le seconde vie in questo progetto si sono sempre scollate da
+        # quella buona.
+        (output_dir / "excluded_ir2.json").write_text(
+            json.dumps(sorted(excluded_node_ids), ensure_ascii=False, indent=1),
+            encoding="utf-8",
+        )
 
         covered = {
             primitive_id for node in ir2_page.nodes for primitive_id in node.primitive_ids
