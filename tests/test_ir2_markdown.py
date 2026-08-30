@@ -21,6 +21,50 @@ from ir2_model import (
 PAGE = "page:0099"
 
 
+def _list_item(order: int, text: str, marker: str | None) -> NodeIR2:
+    return NodeIR2(
+        node_id=f"{PAGE}:b{order:04d}:l0000",
+        order=order,
+        kind="text.list_item",
+        primitive_ids=(f"primitive:text:i{order}",),
+        page_ids=(PAGE,),
+        text=text,
+        marker=marker,
+    )
+
+
+class ListItemMarkerTest(unittest.TestCase):
+    """`Criterio_MarcatorePerPrimitiva_v1.md`. La resa non inventa la testa."""
+
+    def test_it_strips_the_marker_the_node_declares(self) -> None:
+        item = _list_item(0, "h Utilizzo. Richiede tempo.", "h ")
+        self.assertEqual(render_node(item, frozenset("h")), "- Utilizzo. Richiede tempo.")
+
+    def test_it_keeps_the_text_whole_when_no_marker_is_declared(self) -> None:
+        # Su Fab `O` e' marcatore del documento, ma qui apre `Olivia` nel font
+        # del corpo: il costruttore non l'ha dichiarata, e la resa non la toglie.
+        # Toglierla dava `- livia`.
+        item = _list_item(0, "Olivia", None)
+        self.assertEqual(render_node(item, frozenset("O")), "- Olivia")
+
+    def test_it_strips_across_the_runs(self) -> None:
+        item = NodeIR2(
+            node_id=f"{PAGE}:b0000:l0000",
+            order=0,
+            kind="text.list_item",
+            primitive_ids=("primitive:text:i0",),
+            page_ids=(PAGE,),
+            text="h Utilizzo. Richiede tempo.",
+            runs=(
+                TextRunIR2(text="h "),
+                TextRunIR2(text="Utilizzo.", traits=("bold",)),
+                TextRunIR2(text=" Richiede tempo."),
+            ),
+            marker="h ",
+        )
+        self.assertEqual(render_node(item, frozenset("h")), "- **Utilizzo.** Richiede tempo.")
+
+
 def _paragraph(order: int, text: str, node_id: str | None = None) -> NodeIR2:
     return NodeIR2(
         node_id=node_id or f"{PAGE}:b{order:04d}:l0000",

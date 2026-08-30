@@ -45,6 +45,7 @@ from document_list_policy import (  # noqa: I001
     list_item_flags,
     numbered_item_flags,
     opens_a_list_item,
+    strippable_marker,
 )
 from geometry_model import BBox
 from ir2_model import (
@@ -881,6 +882,17 @@ def build_page_ir2(
                     text=text,
                     runs=runs,
                     heading_level=level,
+                    # Quale testa la resa puo' togliere lo decide **qui**, dove
+                    # le primitive ci sono. Chi rende vede solo caratteri e non
+                    # puo' sapere se quella `O` e' un glifo o la prima lettera
+                    # di `Olivia`. `Criterio_MarcatorePerPrimitiva_v1.md`.
+                    marker=(
+                        strippable_marker(
+                            text, primitives[0].text if primitives else "", list_markers
+                        )
+                        if is_list_item and not is_ordered
+                        else None
+                    ),
                 )
             )
             continue

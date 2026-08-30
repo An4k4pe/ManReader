@@ -31,6 +31,48 @@ def _asset() -> AssetRefIR2:
     )
 
 
+def _item(text: str, marker: str | None) -> NodeIR2:
+    return NodeIR2(
+        node_id="page:0001:b0001:l0000",
+        order=0,
+        kind="text.list_item",
+        primitive_ids=("primitive:text:i1",),
+        page_ids=("page:0001",),
+        text=text,
+        marker=marker,
+    )
+
+
+class NodeMarkerTest(unittest.TestCase):
+    """`Criterio_MarcatorePerPrimitiva_v1.md`: il nodo dice quale testa togliere."""
+
+    def test_accepts_a_marker_that_is_a_prefix_of_the_text(self) -> None:
+        self.assertEqual(_item("h Utilizzo.", "h ").marker, "h ")
+
+    def test_rejects_a_marker_that_is_not_a_prefix(self) -> None:
+        # Se non e' un prefisso, toglierlo taglierebbe altrove: uno stato che
+        # non significa niente non deve essere rappresentabile.
+        with self.assertRaises(ValueError):
+            _item("h Utilizzo.", "x ")
+
+    def test_rejects_a_marker_on_a_paragraph(self) -> None:
+        with self.assertRaises(ValueError):
+            NodeIR2(
+                node_id="page:0001:b0001:l0000",
+                order=0,
+                kind="text.paragraph",
+                primitive_ids=("primitive:text:p1",),
+                page_ids=("page:0001",),
+                text="h Prosa",
+                marker="h ",
+            )
+
+    def test_a_list_item_without_a_marker_is_legal(self) -> None:
+        # E' il caso di Fab: la testa c'e' ma non si puo' togliere, e la voce
+        # esce col suo carattere invece che mutilata.
+        self.assertIsNone(_item("Olivia", None).marker)
+
+
 class AssetRefIR2Test(unittest.TestCase):
     def test_accepts_a_minimal_asset(self) -> None:
         self.assertEqual(_asset().occurrence_count, 1)

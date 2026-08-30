@@ -118,6 +118,52 @@ def strip_marker(text: str, markers: frozenset[str]) -> str:
     return stripped
 
 
+
+def strippable_marker(text: str, head: str, markers: frozenset[str]) -> str | None:
+    """La testa che la resa puo' togliere **senza portare via una lettera**.
+
+    `head` e' il testo della **prima primitiva** del nodo. Torna il prefisso da
+    togliere -- marcatori e spazi -- oppure `None` se non c'e' niente da
+    togliere o se toglierlo distruggerebbe contenuto.
+
+    **La regola in una riga**: un marcatore **non alfanumerico** si toglie sempre,
+    perche' un `✦` dentro una primitiva col testo e' comunque un pallino
+    (`✦Effetto Pieno:` su DB, gia' a verbale). Un marcatore **alfanumerico** si
+    toglie solo se la prima primitiva **e' esattamente quel carattere**: allora e'
+    un glifo, non una lettera.
+
+    **Il caso che l'ha imposta**, misurato su Fab pagina stampata 171. Il font
+    `oldretrolabelstfb` scrive una `O` decorativa, e con quella `O` ammessa
+    marcatore la resa della tabella dei nomi diceva:
+
+    ::
+
+        - de        ← Ode          in PTSans-Narrow, il font del corpo
+        - livia     ← Olivia
+        - en Pharia ← Owen Pharia
+
+    Il marcatore veniva tolto **per posizione**, e la posizione non sa in che
+    font sta quel carattere. La condizione «primitiva sua» c'era gia' a monte --
+    e' la stessa di `_is_a_glyph_marker` -- e mancava soltanto qui.
+
+    Il buco non faceva danno su cio' che e' spedito: misurato, 673 voci su 16
+    manuali e **zero** lettere perse, perche' i marcatori alfanumerici ammessi
+    finora stanno in font di simboli e sono primitive loro. Era latente, non
+    innocuo.
+    """
+
+    body = strip_marker(text, markers)
+    if body == text:
+        return None
+    prefix = text[: len(text) - len(body)]
+    marker = prefix.strip()
+    if not marker:
+        return None
+    if marker[0].isalnum() and head.strip() != marker[0]:
+        return None
+    return prefix
+
+
 _BLOCK_NUMBER = re.compile(r"^b(\d+)$")
 
 

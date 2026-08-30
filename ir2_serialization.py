@@ -43,6 +43,7 @@ _NODE_KEYS = frozenset(
         "candidate_ids",
         "resolution",
         "heading_level",
+        "marker",
     }
 )
 _RUN_KEYS = frozenset({"text", "traits"})
@@ -92,6 +93,7 @@ def _node_to_dict(node: NodeIR2) -> dict[str, object]:
         "candidate_ids": list(node.candidate_ids),
         "resolution": node.resolution,
         "heading_level": node.heading_level,
+        "marker": node.marker,
     }
 
 
@@ -195,6 +197,7 @@ def _parse_node(value: object, page_path: str, index: int) -> NodeIR2:
         candidate_ids=_parse_str_tuple(data, "candidate_ids", f"{path}.candidate_ids"),
         resolution=_optional_str(data, "resolution", f"{path}.resolution"),
         heading_level=data.get("heading_level"),
+        marker=data.get("marker"),
     )
 
 

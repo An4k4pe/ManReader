@@ -13,7 +13,12 @@ from document_line_start_measurements import (
     LineStartMeasurements,
     measure_document_line_starts,
 )
-from document_list_policy import list_item_flags, list_markers, strip_marker
+from document_list_policy import (
+    list_item_flags,
+    list_markers,
+    strip_marker,
+    strippable_marker,
+)
 from geometry_model import PageGeometry
 from ir2_builder import _SourceLine, bind_marker_glyphs
 from primitive_model import NormalizedPrimitivePage, TextPrimitive
@@ -99,6 +104,34 @@ class StripMarkerTest(unittest.TestCase):
 
     def test_it_leaves_a_line_that_does_not_open_with_a_marker(self) -> None:
         self.assertEqual(strip_marker("Prosa normale", frozenset("•")), "Prosa normale")
+
+
+class StrippableMarkerTest(unittest.TestCase):
+    """`Criterio_MarcatorePerPrimitiva_v1.md`. La testa si toglie o no?"""
+
+    def test_an_alphanumeric_marker_inside_a_word_is_not_stripped(self) -> None:
+        # Il caso che ha imposto la regola: su Fab pagina stampata 171 la `O` e'
+        # marcatore in un font display, e la stessa `O` apre `Olivia` nel font
+        # del corpo. La resa dava `- livia`.
+        self.assertIsNone(strippable_marker("Olivia", "Olivia", frozenset("O")))
+
+    def test_an_alphanumeric_marker_on_its_own_primitive_is_stripped(self) -> None:
+        # Su Vil il pallino e' `h` in `NelsonOrnaments`, primitiva sua.
+        self.assertEqual(
+            strippable_marker("h Utilizzo. Richiede tempo", "h", frozenset("h")),
+            "h ",
+        )
+
+    def test_a_symbol_marker_is_stripped_even_inside_a_primitive(self) -> None:
+        # `✦Effetto Pieno:` su DB: il glifo non ha una primitiva sua e resta un
+        # pallino. La condizione della primitiva vale solo per gli alfanumerici.
+        self.assertEqual(
+            strippable_marker("✦Effetto Pieno:", "✦Effetto Pieno:", frozenset("✦")),
+            "✦",
+        )
+
+    def test_a_line_without_a_marker_has_nothing_to_strip(self) -> None:
+        self.assertIsNone(strippable_marker("Prosa normale", "Prosa", frozenset("•")))
 
 
 class MeasurementContractTest(unittest.TestCase):

@@ -245,6 +245,7 @@ class NodeIR2:
     candidate_ids: tuple[str, ...] = ()
     resolution: str | None = None
     heading_level: int | None = None
+    marker: str | None = None
 
     def __post_init__(self) -> None:
         _validate_non_empty_string(self.node_id, "node_id")
@@ -268,6 +269,23 @@ class NodeIR2:
             # renderebbe rappresentabile uno stato che non significa niente --
             # la stessa ragione per cui `page_label_deduced` esige un'etichetta.
             raise ValueError("a heading node must carry a heading_level")
+        if self.marker is not None:
+            # **Il marcatore che si puo' togliere alla resa, e non uno qualunque.**
+            # Toglierlo era una decisione presa sui CARATTERI, dove le primitive
+            # non arrivano: su Fab `O` e' marcatore in un font display, e lo
+            # stesso carattere apre `Olivia` nel font del corpo -- la resa dava
+            # `- livia`. Qui il nodo dice quale testa e' davvero il glifo, e chi
+            # rende non deve piu' indovinarlo.
+            #
+            # Resta un fatto della resa e non dell'IR: `text` conserva tutto, ed
+            # e' la stessa forma dell'arredo -- niente viene distrutto, cambia
+            # cio' che si vede.
+            if not isinstance(self.marker, str) or not self.marker:
+                raise ValueError("marker must be a non-empty string")
+            if self.kind not in (KIND_TEXT_LIST_ITEM, KIND_TEXT_LIST_ITEM_ORDERED):
+                raise ValueError("marker belongs to a list item")
+            if not (self.text or "").startswith(self.marker):
+                raise ValueError("marker must be a prefix of the node text")
         _validate_unique_non_empty_ids(self.candidate_ids, "candidate_ids")
 
         carried = [self.text, self.asset, self.structure]

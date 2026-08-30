@@ -28,7 +28,7 @@ would risk inventing it.
 
 from __future__ import annotations
 
-from document_list_policy import split_number, strip_marker
+from document_list_policy import split_number
 from ir2_model import (
     KIND_ASSET_NOTE,
     KIND_TABLE,
@@ -217,11 +217,13 @@ def render_runs(node: NodeIR2) -> str:
     return "".join(pieces)
 
 
-def render_list_item(node: NodeIR2, markers: frozenset[str]) -> str:
+def render_list_item(node: NodeIR2) -> str:
     """Una voce d'elenco, col marcatore sostituito dalla sintassi Markdown.
 
     **Il marcatore esce dalla resa, non dall'IR**: `node.text` lo conserva, e chi
-    consuma i dati ce l'ha. E' la stessa forma dell'arredo -- niente viene
+    consuma i dati ce l'ha. Quale testa sia il marcatore lo dice `node.marker`,
+    deciso dal costruttore dove le primitive ci sono -- questa funzione vede
+    caratteri, e coi soli caratteri su Fab toglieva la `O` di `Olivia`. E' la stessa forma dell'arredo -- niente viene
     distrutto, cambia cio' che si vede -- e la ragione e' la stessa: nessuno a
     valle puo' rifiutare questa esclusione, quindi il controllo sta nel criterio.
 
@@ -230,7 +232,13 @@ def render_list_item(node: NodeIR2, markers: frozenset[str]) -> str:
     tabulazione si legge come elenco annidato. Un marcatore tenuto non e' neutro.
     """
 
-    body = strip_marker(node.text or "", markers)
+    # **Il nodo dice quale testa e' il glifo**, e qui non si indovina piu' dai
+    # caratteri: `Criterio_MarcatorePerPrimitiva_v1.md`. Su Fab la stessa `O` e'
+    # un glifo in un font display e la prima lettera di `Olivia` nel font del
+    # corpo, e togliendola per posizione la resa dava `- livia`.
+    # Un nodo senza `marker` non ha niente da togliere.
+    prefix = node.marker or ""
+    body = (node.text or "")[len(prefix) :]
     if not body.strip():
         # Il marcatore e' rimasto orfano del suo testo: succede quando l'ordine
         # di lettura interlaccia due colonne di elenchi e i glifi arrivano prima
@@ -243,7 +251,7 @@ def render_list_item(node: NodeIR2, markers: frozenset[str]) -> str:
     # Il marcatore si toglie **dai run**, non dalla stringa gia' resa: se e' in
     # grassetto -- e su FW lo e' -- `render_runs` lo avvolge in asterischi, e
     # cercarlo in testa alla stringa resa lo mancava, lasciando `- • Afflizione`.
-    dropped = len(node.text or "") - len(strip_marker(node.text or "", markers))
+    dropped = len(prefix)
     trimmed: list[TextRunIR2] = []
     for run in node.runs:
         if dropped <= 0:
@@ -292,7 +300,7 @@ def render_node(node: NodeIR2, markers: frozenset[str] = frozenset()) -> str:
     if node.kind == KIND_TEXT_LIST_ITEM_ORDERED:
         return render_ordered_item(node)
     if node.kind == KIND_TEXT_LIST_ITEM:
-        return render_list_item(node, markers)
+        return render_list_item(node)
     if node.kind == KIND_TEXT_PARAGRAPH:
         return render_runs(node)
     if node.kind == KIND_ASSET_NOTE:
