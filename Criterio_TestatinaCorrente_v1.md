@@ -71,6 +71,18 @@ coprono tutto: y da 1 a 97, e il caso verticale di BiD.
 **BoB e Wil danno zero.** Non so se sia perché non hanno testatine o perché la
 regola le manca, e il §3 lo chiede esplicitamente al giudizio.
 
+> **Verificato il 30 agosto 2026, prima del giudizio.** I due zeri sono **fatti**.
+> Su **BoB** nessun testo compare su almeno un quarto delle pagine, e le fasce
+> alta e bassa portano solo corpo: il numero di pagina sta in una striscia
+> decorativa al margine destro, che il ramo 1 prende. Su **Wil** ciò che ricorre
+> sono le etichette della scheda d'area — `TRATTI` su 17 pagine ma **18 slot**,
+> `Ottieni (1)` su 17 ma **30 slot**, concentrazione 6-25% — cioè esattamente il
+> caso `Stamina`: la scheda si sposta col contenuto. In fondo alla pagina c'è un
+> fregio decorativo col solo folio.
+>
+> La domanda del §3 su BoB e Wil resta comunque al giudizio, ma con
+> l'aspettativa dichiarata: **non manca niente**.
+
 **Un titolo di sezione ripetuto potrebbe passare.** Se un manuale stampa lo stesso
 titolo in cima a più pagine consecutive di una sezione lunga, la regola lo prende.
 È il rischio speculare a quello della clausola A, e la barra del §4.A esiste per
