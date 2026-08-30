@@ -311,6 +311,26 @@ git status --short
 
 Eseguire lo smoke DB quando la modifica può influire su estrazione, IR o renderer.
 
+**Se il diff tocca `ir2_builder.py` o `ir2_markdown.py`, eseguire anche la barra
+E-B**, che nessuna delle verifiche di sopra copre:
+
+```bash
+./venv/bin/python scripts/check_eb.py --pdf-dir .
+```
+
+Costa circa dieci minuti e non va a ogni commit: va **quando cambia il
+costruttore o l'emettitore**, che è esattamente quando si è rotta. Fra Milestone
+38 e il 30 agosto 2026 **tre meccanismi di fila** — gli elenchi, i titoli e i run
+— hanno accecato il confronto E-B senza che nessuno se ne accorgesse, mentre
+`python -m unittest` restava verde: 1495 test verdi e l'ordine che divergeva **al
+carattere 0** su qualunque pagina con elenchi. La suite sintetica verifica ciò che
+qualcuno ha pensato di verificare; questa barra verifica che l'insieme non abbia
+perso o riordinato niente, contro un riferimento che nessuno di noi ha scritto.
+
+Una differenza non è di per sé un fallimento — il §2 di
+`Criterio_UscitaIR2Minima_v2.md` chiede che sia **spiegata** — ma se sia spiegata
+lo sa il verbale, non lo script, e va guardato a mano.
+
 ## Baseline legacy da preservare
 
 Finché la nuova pipeline non è attiva, restano non-regressione:
