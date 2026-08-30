@@ -85,6 +85,7 @@ from ir2_builder import (  # noqa: E402
     build_page_ir2,
 )
 from ir2_markdown import (  # noqa: E402
+    KIND_ASSET_NOTE,
     RENDER_UNRESOLVED_ASSET_NOTES,
     is_rendered_in_body,
     render_node,
@@ -103,8 +104,6 @@ from primitive_normalizer import normalize_backend_page_capture  # noqa: E402
 from pymupdf_capture import capture_pymupdf_page  # noqa: E402
 from resolution_page_candidates import resolve_page_candidates  # noqa: E402
 
-_ASSET_NOTE_LINE_PREFIX = "> **["
-
 
 def _fail(message: str, code: int) -> None:
     print(f"FAIL: {message}", file=sys.stderr)
@@ -116,7 +115,7 @@ def _normalised_sequence(text: str) -> str:
 
     **Non toglie piu' niente per carattere**, ed e' il ritiro del secondo
     emendamento a E-B (`Criterio_Elenchi_v1.md` §5.E, sostituito da
-    `Criterio_ConfrontoEB_v2.md`). Quell'emendamento cancellava i marcatori
+    `Criterio_ConfrontoEB_v3.md`). Quell'emendamento cancellava i marcatori
     dichiarati **da entrambi i lati**, e faceva due danni opposti:
 
     - **cancellava troppo.** Il carattere spariva *ovunque comparisse nel
@@ -142,48 +141,98 @@ def _normalised_sequence(text: str) -> str:
     return "".join(_HYPHENATED_WORD_RE.sub("", text).split())
 
 
-def _with_source_markers(
-    markdown: str, page: PageIR2, excluded_node_ids: frozenset[str]
-) -> str:
-    """Rimette il marcatore che la resa ha tolto, per confrontare con la base.
+def _emitted_content(
+    page: PageIR2, excluded_node_ids: frozenset[str]
+) -> tuple[str, list[tuple[str, str]]]:
+    """Il contenuto emesso, **senza la sintassi che l'emettitore aggiunge**.
 
-    La base emette il marcatore com'e' nella sorgente -- `* Muri e cancelli` --
-    mentre IR 2 lo sostituisce con la sintassi Markdown -- `- Muri e cancelli`.
-    Le due uscite dicono la stessa cosa e non si somigliano.
+    Torna la sequenza da confrontare con la base, e l'elenco dei nodi in cui la
+    resa ha perso caratteri.
 
-    Qui la differenza si annulla **restituendo** cio' che e' stato tolto, invece
-    di cancellare da tutt'e due: ogni riga che la resa ha aperto con `- ` torna ad
-    aprirsi col `marker` che il suo nodo dichiara. Un nodo senza marcatore --
-    `Olivia` su Fab, dove la testa e' una lettera e non un glifo -- perde solo il
-    `- `, e il testo resta intero da entrambe le parti.
+    **Perche' una regola sola invece di un emendamento per sintassi.** E-B e'
+    stato rotto da tre meccanismi in fila: gli elenchi (`- ` al posto del
+    marcatore), i titoli (`#`) e i run (`*`). Toglierli uno per uno con tre
+    normalizzazioni sarebbe stato tre volte lo stesso errore -- la quarta
+    sintassi che nasce romperebbe di nuovo il confronto in silenzio.
 
-    L'appaiamento e' **per ordine di emissione**, che e' l'ordine dei nodi, e si
-    guardano solo i nodi la cui resa comincia davvero per `- `: un nodo che si
-    rende vuoto -- il glifo orfano del suo testo -- non consuma un posto.
+    Qui la sintassi non si riconosce: si **allinea**. Ogni nodo porta il suo
+    testo in chiaro, `node.text`, e la sua resa e' quel testo piu' i delimitatori
+    che l'emettitore ci ha messo intorno. Confrontando i due si tiene il testo e
+    si perde la sintassi, **qualunque essa sia**, senza sapere quale.
 
-    `render_node` viene chiamato una seconda volta, ed e' spreco che qui si
-    accetta: questo e' uno script diagnostico e la pagina e' una.
+    **E l'allineamento e' anche il controllo che mancava.** Se un carattere del
+    nodo non compare nella sua resa, la resa lo ha perso: e' il difetto di Fab --
+    `- livia` per `Olivia` -- e finora nessuno lo guardava, perche' E-B
+    cancellava i marcatori da entrambi i lati e il confronto passava.
+
+    Il `- ` fa eccezione e va **restituito** prima di allineare: la resa lo mette
+    al posto del marcatore, che nel testo del nodo c'e' ancora. Un nodo senza
+    marcatore -- dove la testa e' una lettera e non un glifo -- perde solo il
+    `- `.
+
+    Un nodo **senza testo** -- tabelle, note d'asset -- non ha con che allinearsi
+    e passa com'e': stanno gia' fuori dal giudizio per il §3 del criterio
+    d'uscita.
     """
 
-    pending = [
-        node.marker or ""
-        for node in sorted(page.nodes, key=lambda n: n.order)
-        if is_rendered_in_body(
+    parts: list[str] = []
+    losses: list[tuple[str, str]] = []
+    for node in sorted(page.nodes, key=lambda n: n.order):
+        if not is_rendered_in_body(
             node,
             render_unresolved=RENDER_UNRESOLVED_ASSET_NOTES,
             excluded_node_ids=excluded_node_ids,
-        )
-        and render_node(node).startswith("- ")
-    ]
-    restored: list[str] = []
+        ):
+            continue
+        if node.kind == KIND_ASSET_NOTE:
+            # Le note d'asset non stanno nella base: sono la sostituzione che
+            # questo progetto introduce, e il §3 del criterio d'uscita le
+            # dichiara rumore. Prima le toglieva `_strip_ir2_notes` dalla
+            # stringa gia' resa; qui non entrano proprio.
+            continue
+        fragment = render_node(node)
+        if not fragment:
+            continue
+        if fragment.startswith("- "):
+            fragment = (node.marker or "") + fragment[2:]
+        if node.text is None:
+            parts.append(fragment)
+            continue
+        lost = _lost_in_rendering(fragment, node.text)
+        if lost:
+            losses.append((node.node_id, lost))
+        parts.append(node.text)
+    return ("\n".join(parts), losses)
+
+
+def _lost_in_rendering(fragment: str, plain: str) -> str:
+    """I caratteri del nodo che la sua resa non ha emesso, in ordine.
+
+    Si guardano i soli caratteri non-spazio: la resa unisce le righe e gli spazi
+    non sono contenuto. `plain` dev'essere una **sottosequenza** del frammento;
+    cio' che non lo e' e' contenuto distrutto dall'emettitore.
+    """
+
+    emitted = [character for character in fragment if not character.isspace()]
     position = 0
-    for line in markdown.splitlines():
-        if line.startswith("- ") and position < len(pending):
-            restored.append(pending[position] + line[2:])
-            position += 1
+    lost: list[str] = []
+    for character in plain:
+        if character.isspace():
+            continue
+        # Cercare **senza consumare** quando non si trova: una prima versione
+        # faceva avanzare il cursore mentre cercava, e al primo carattere
+        # mancante lo portava in fondo -- da li' in poi risultava perso tutto.
+        # Su `Olivia` reso `livia` diceva che erano perse sei lettere invece di
+        # una. Il test e' nato fallito.
+        found = next(
+            (index for index in range(position, len(emitted)) if emitted[index] == character),
+            None,
+        )
+        if found is None:
+            lost.append(character)
         else:
-            restored.append(line)
-    return "\n".join(restored)
+            position = found + 1
+    return "".join(lost)
 
 
 def _anchor_index(primitive: object, ordered: list) -> int:
@@ -204,12 +253,6 @@ def _anchor_index(primitive: object, ordered: list) -> int:
         if candidate.bbox[1] > y0:
             return index
     return len(ordered)
-
-
-def _strip_ir2_notes(markdown: str) -> str:
-    return "\n".join(
-        line for line in markdown.splitlines() if not line.startswith(_ASSET_NOTE_LINE_PREFIX)
-    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -693,11 +736,13 @@ def run(
             base_sequence = _normalised_sequence(
                 _strip_asset_markers(base_path.read_text(encoding="utf-8"))
             )
-            new_sequence = _normalised_sequence(
-                _with_source_markers(
-                    _strip_ir2_notes(markdown), ir2_page, excluded_node_ids
+            emitted, losses = _emitted_content(ir2_page, excluded_node_ids)
+            for node_id, lost in losses:
+                print(
+                    f"E-B: la resa ha PERSO caratteri di {node_id}: {lost!r}",
+                    file=sys.stderr,
                 )
-            )
+            new_sequence = _normalised_sequence(emitted)
             if base_sequence == new_sequence:
                 print(f"E-B: ordine IDENTICO alla base ({len(base_sequence)} caratteri)",
                       file=sys.stderr)
