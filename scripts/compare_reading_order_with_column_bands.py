@@ -70,7 +70,6 @@ from primitive_model import TextPrimitive  # noqa: E402
 from primitive_normalizer import normalize_backend_page_capture  # noqa: E402
 from pymupdf_capture import capture_pymupdf_page  # noqa: E402
 
-
 _OBSERVATION_ID = re.compile(r"^text:b(\d+):l(\d+):s(\d+)$")
 
 
