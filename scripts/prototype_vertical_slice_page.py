@@ -84,6 +84,10 @@ from compare_reading_order_with_column_bands import (  # noqa: E402
     _by_source_line,
     _tree_aware_order,
 )
+
+from page_analysis_co_reference import build_co_referenced_page_analyses  # noqa: E402
+from page_analysis_co_reference_binding import bind_co_referenced_page_analyses  # noqa: E402
+
 # Le bande vengono dal MODULO DI PRODUZIONE, non piu' dallo script diagnostico.
 # Prima questa fetta chiamava `prototype_derived_column_bands._process_page`,
 # quindi il markdown che si giudicava a vista NON era prodotto dal percorso che
@@ -92,9 +96,6 @@ from compare_reading_order_with_column_bands import (  # noqa: E402
 from page_analysis_column_band import (  # noqa: E402
     build_column_band_page_analysis_with_measurements,
 )
-
-from page_analysis_co_reference import build_co_referenced_page_analyses  # noqa: E402
-from page_analysis_co_reference_binding import bind_co_referenced_page_analyses  # noqa: E402
 from page_analysis_drawing_cluster_diagnostics import (  # noqa: E402
     dump_drawing_cluster_diagnostics,
 )
@@ -115,6 +116,7 @@ from primitive_model import (  # noqa: E402
     TextPrimitive,
 )
 from primitive_normalizer import normalize_backend_page_capture  # noqa: E402
+from pymupdf_asset_extraction import extract_stored_raster  # noqa: E402
 from pymupdf_capture import capture_pymupdf_page  # noqa: E402
 from resolution_page_candidates import resolve_page_candidates  # noqa: E402
 
@@ -181,9 +183,26 @@ def _extract_image_bytes(
 ) -> tuple[bytes, str, str] | None:
     """Extract the raster bytes for one occurrence; return (bytes, ext, method).
 
-    ``method`` is ``"xref"`` when the embedded resource itself was extracted,
-    or ``"rasterized_clip"`` when the fallback below was used -- callers must
-    not treat the two as interchangeable (see module docstring).
+    ``method`` e' ``"xref"`` quando si e' estratta la risorsa incorporata cosi'
+    com'e', ``"xref+smask"`` quando la si e' composta con la sua maschera di
+    trasparenza, o ``"rasterized_clip"`` quando si e' usato il ripiego qui sotto
+    -- e i tre non sono intercambiabili (vedi la docstring del modulo).
+
+    **La maschera va applicata, altrimenti l'immagine esce ritagliata male.**
+    Nei PDF il canale alfa e' un oggetto separato (`/SMask`), e
+    `Document.extract_image` restituisce **solo la base**: dove la maschera dice
+    «trasparente», la base porta nero. Misurato su Dag: **1264 immagini su 1293
+    -- il 98% -- hanno una SMask**, quindi quasi ogni illustrazione ritagliata
+    usciva su un rettangolo nero. Rilievo dell'utente del 31 agosto 2026, che
+    guardando la cartella ha visto le immagini «tutte ritagliate male».
+
+    Senza maschera si restituiscono i **byte memorizzati intatti**: se il PDF
+    conserva un JPEG esce quel JPEG, senza ricodifica e senza perdita aggiunta.
+    Con maschera bisogna per forza passare a PNG -- il JPEG non ha un canale
+    alfa -- e il file cresce (misurato: 239 KB -> 1452 KB su una illustrazione di
+    Dag). E' il prezzo della trasparenza, non una scelta di qualita': i pixel
+    restano quelli del documento, e nessuna ricodifica puo' restituire dettaglio
+    che il PDF non ha.
 
     Returns ``None`` when the occurrence lies wholly outside the page and has
     no embedded resource to extract: there is no raster to write.
@@ -192,8 +211,13 @@ def _extract_image_bytes(
     image_index = _image_index_from_observation_id(primitive.source_observation_id)
     xref = cast(int | None, raw_image_info[image_index].get("xref"))
     if xref is not None and xref > 0:
-        info = fitz_document.extract_image(xref)
-        return cast(bytes, info["image"]), cast(str, info["ext"]), "xref"
+        # **Una implementazione sola.** L'estrazione dei byte, maschera compresa,
+        # sta in `pymupdf_asset_extraction`, che e' modulo di produzione. Qui
+        # resta soltanto il ripiego per le occorrenze senza risorsa, che quel
+        # modulo di proposito non ha: fotografare la pagina non e' estrarre.
+        extracted = extract_stored_raster(fitz_document, xref)
+        if extracted is not None:
+            return extracted
 
     # Defensive fallback for occurrences with no resolvable xref (e.g. inline
     # images): rasterize the placed occurrence directly from the page. This
@@ -511,11 +535,17 @@ def _split_bands_at_crossings(
         row_y0 = float(cast(float, row["y0"]))
         row_y1 = float(cast(float, row["y1"]))
 
-        def overlap(piece: dict[str, object]) -> float:
+        # I due estremi si legano come argomenti di default, cioe' **al momento
+        # della definizione**. Qui `overlap` viene usata subito e mai conservata,
+        # quindi il legame tardivo non morderebbe -- ma se qualcuno la mettesse
+        # da parte leggerebbe la riga sbagliata, ed e' cio' che `B023` segnala.
+        def overlap(
+            piece: dict[str, object], y0: float = row_y0, y1: float = row_y1
+        ) -> float:
             return max(
                 0.0,
-                min(row_y1, float(cast(float, piece["y1"])))
-                - max(row_y0, float(cast(float, piece["y0"]))),
+                min(y1, float(cast(float, piece["y1"])))
+                - max(y0, float(cast(float, piece["y0"]))),
             )
 
         row["parent_id"] = max(pieces_of_parent, key=overlap)["band_id"]
