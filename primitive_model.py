@@ -103,6 +103,21 @@ class ImageOccurrencePrimitive:
     intrinsic_height: int | None = None
     placement_transform: AffineMatrix | None = None
     has_alpha: bool | None = None
+    # Se la sorgente conserva davvero un raster per questa collocazione.
+    #
+    # **Non e' una classificazione**, ed e' per questo che sta qui accanto a
+    # `has_alpha` e non fra i campi vietati: dice cosa il backend ha trovato, non
+    # che cosa la collocazione sia. Chi decide che farne sta a valle.
+    #
+    # Serve perche' `page.get_image_info()` non legge le risorse del PDF: fa
+    # percorrere la pagina al renderer e registra ogni disegno di raster,
+    # **compresi quelli che il renderer sintetizza** da contenuto che immagine non
+    # e'. Misurato sul corpus il 31 agosto 2026: 19168 collocazioni su 39727 --
+    # il 48% -- non hanno risorsa memorizzata. Su Fab sono il 91%, e sono
+    # riempimenti a gradiente (`PatternType 2, ShadingType 2`); su DB il 48%, e
+    # sono maschere morbide di `ExtGState` (153 voci `/SMask` = 153 collocazioni).
+    # Operatori di immagine inline nel corpus: **zero**.
+    has_stored_resource: bool | None = None
 
     def __post_init__(self) -> None:
         _validate_non_empty_string(self.primitive_id, "primitive_id")
@@ -127,6 +142,10 @@ class ImageOccurrencePrimitive:
             _validate_affine_matrix(self.placement_transform, "placement_transform")
         if self.has_alpha is not None and not isinstance(self.has_alpha, bool):
             raise ValueError("has_alpha must be a bool or None")
+        if self.has_stored_resource is not None and not isinstance(
+            self.has_stored_resource, bool
+        ):
+            raise ValueError("has_stored_resource must be a bool or None")
 
 
 @dataclass(frozen=True, slots=True)

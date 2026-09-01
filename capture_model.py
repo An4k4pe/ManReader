@@ -7,6 +7,10 @@ Identifiers intentionally have limited guarantees in this first schema:
 - ``capture_id`` identifies one capture artifact and may vary by backend or configuration.
 - ``observation_id`` is local to one page capture and is not a content hash.
 - ``resource_ref`` is backend-local and must not cross into normalized primitives.
+- ``has_stored_resource`` is the backend-independent **fact** that ``resource_ref``
+  encodes, and it does cross: whether the occurrence has a stored raster resource
+  at all. The identifier stays here; the fact travels, because downstream cannot
+  otherwise tell an image apart from something the renderer rasterized for it.
 - ``content_digest`` identifies content, not an occurrence; its algorithm is not fixed here.
 """
 
@@ -142,11 +146,20 @@ class BackendImageObservation:
     pixel_height: int | None = None
     placement_transform: AffineMatrix | None = None
     has_alpha: bool | None = None
+    # Se il backend ha trovato una risorsa raster memorizzata per questa
+    # collocazione. `None` = il backend non lo dichiara; e' distinto da `False`,
+    # che e' una constatazione. Non si deriva da `resource_ref is None`, che
+    # confonde «nessuna risorsa» con «il backend non ha detto».
+    has_stored_resource: bool | None = None
 
     def __post_init__(self) -> None:
         _validate_non_empty_string(self.observation_id, "observation_id")
         _validate_bbox(self.bbox)
         _validate_optional_non_empty_string(self.resource_ref, "resource_ref")
+        if self.has_stored_resource is not None and not isinstance(
+            self.has_stored_resource, bool
+        ):
+            raise ValueError("has_stored_resource must be a bool or None")
         _validate_optional_non_empty_string(self.content_digest, "content_digest")
         if (self.pixel_width is None) != (self.pixel_height is None):
             raise ValueError("pixel_width and pixel_height must be provided together")

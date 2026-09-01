@@ -330,6 +330,11 @@ def _capture_image_observations(
         try:
             xref = _optional_int(raw_image.get("xref"), "image xref")
             resource_ref = f"xref:{xref}" if xref is not None and xref > 0 else None
+            # `xref == 0` non e' «xref sconosciuto»: e' PyMuPDF che dichiara di
+            # non avere una risorsa memorizzata per questa collocazione, perche'
+            # il raster l'ha sintetizzato il renderer. Le due cose si tengono
+            # separate da `xref is None`, dove il backend non dice niente.
+            has_stored_resource = None if xref is None else xref > 0
             digest = _optional_digest(raw_image.get("digest"))
             has_mask = raw_image.get("has-mask")
             if has_mask is not None and not isinstance(has_mask, bool):
@@ -344,6 +349,7 @@ def _capture_image_observations(
                 pixel_height=_required_positive_int(raw_image, "height"),
                 placement_transform=_required_affine_matrix(raw_image, "transform"),
                 has_alpha=has_mask,
+                has_stored_resource=has_stored_resource,
             )
         except (TypeError, ValueError) as exc:
             errors.append(

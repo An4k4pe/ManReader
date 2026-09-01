@@ -160,6 +160,11 @@ def _normalize_image_observation(
         intrinsic_height=observation.pixel_height,
         placement_transform=observation.placement_transform,
         has_alpha=observation.has_alpha,
+        # Il FATTO passa, l'IDENTIFICATORE no: `resource_ref` e' `"xref:4518"`,
+        # cioe' backend-locale, e resta di la' -- `capture_model` §Identifiers lo
+        # vieta e due test lo sorvegliano. Quello che serve a valle non e' quale
+        # risorsa, ma **se** ce n'e' una.
+        has_stored_resource=observation.has_stored_resource,
     )
 
 

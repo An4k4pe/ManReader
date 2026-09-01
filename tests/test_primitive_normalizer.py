@@ -259,6 +259,33 @@ class PrimitiveNormalizerTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "image:thin"):
             normalize_backend_page_capture(_capture(image_observations=(image,)))
 
+    def test_the_stored_resource_fact_crosses_but_the_identifier_does_not(
+        self,
+    ) -> None:
+        """Il confine che questa correzione sposta, e quello che NON sposta.
+
+        `resource_ref` e' `"xref:7"`, cioe' backend-locale, e resta di la'
+        (`capture_model` §Identifiers). Il fatto che codifica -- se una risorsa
+        raster memorizzata ci sia -- deve invece attraversare, perche' senza di
+        esso a valle non si distingue un'immagine da un raster che il renderer
+        ha sintetizzato per contenuto che immagine non e'.
+        """
+
+        for declared in (True, False, None):
+            with self.subTest(has_stored_resource=declared):
+                image = BackendImageObservation(
+                    "image:i0000",
+                    (10.0, 10.0, 20.0, 20.0),
+                    resource_ref="xref:7",
+                    has_stored_resource=declared,
+                )
+                page = normalize_backend_page_capture(
+                    _capture(image_observations=(image,))
+                )
+                primitive = page.image_primitives[0]
+                self.assertIs(primitive.has_stored_resource, declared)
+                self.assertFalse(hasattr(primitive, "resource_ref"))
+
     def test_normalizer_does_not_add_semantic_or_order_fields(self) -> None:
         forbidden = {
             "role",
