@@ -744,6 +744,39 @@ def build_page_ir2(
     pending_is_ordered = False
     pending_heading: int | None = None
 
+    # **Un paragrafo di sole spaziature non e' un nodo, ma le sue primitive
+    # restano coperte.** `ir2_validate` pretende che *ogni* `TextPrimitive`
+    # appartenga a un nodo, «anche quelle il cui testo e' vuoto», e `NodeIR2`
+    # rifiuta un testo vuoto: un blocco fatto di sole tabulazioni cadeva fra i
+    # due vincoli e faceva morire la pagina.
+    #
+    # Misurato su FWK: la pagina idx 6 ha **102 primitive di sola tabulazione su
+    # 151**, e **177 pagine su 231** ne contengono. Il difetto non e' del `main`
+    # -- la fetta per pagina cade sulla stessa pagina -- ed e' rimasto invisibile
+    # finche' le pagine si sceglievano a mano.
+    #
+    # Le primitive si portano avanti sul primo nodo che nasce dopo, o
+    # sull'ultimo se la pagina finisce prima: nessun testo cambia, cambia solo a
+    # quale nodo la copertura e' attribuita.
+    carried: list[TextPrimitive] = []
+
+    def _emit(
+        text: str,
+        primitives: tuple[TextPrimitive, ...],
+        runs: tuple[TextRunIR2, ...],
+        is_item: bool,
+        is_ordered: bool,
+        heading: int | None,
+    ) -> None:
+        nonlocal carried
+        if not text:
+            carried.extend(primitives)
+            return
+        paragraphs.append(
+            (text, tuple(carried) + primitives, runs, is_item, is_ordered, heading)
+        )
+        carried = []
+
     for position, source_line in enumerate(bound_lines):
         if previous_line is None:
             pending_text = source_line.text
@@ -768,15 +801,13 @@ def build_page_ir2(
             list_markers,
             item_flags[position] or ordered_flags[position],
         ):
-            paragraphs.append(
-                (
-                    pending_text.strip(),
-                    tuple(pending_primitives),
-                    _strip_runs(pending_runs),
-                    pending_is_item,
-                    pending_is_ordered,
-                    pending_heading,
-                )
+            _emit(
+                pending_text.strip(),
+                tuple(pending_primitives),
+                _strip_runs(pending_runs),
+                pending_is_item,
+                pending_is_ordered,
+                pending_heading,
             )
             pending_is_item = item_flags[position]
             pending_is_ordered = ordered_flags[position]
@@ -790,16 +821,23 @@ def build_page_ir2(
             pending_runs = join_runs(pending_runs, runs_for_line(source_line))
         previous_line = source_line
     if pending_primitives:
-        paragraphs.append(
-            (
-                pending_text.strip(),
-                tuple(pending_primitives),
-                _strip_runs(pending_runs),
-                pending_is_item,
-                pending_is_ordered,
-                pending_heading,
-            )
+        _emit(
+            pending_text.strip(),
+            tuple(pending_primitives),
+            _strip_runs(pending_runs),
+            pending_is_item,
+            pending_is_ordered,
+            pending_heading,
         )
+    # La pagina e' finita e le spaziature non hanno trovato un nodo dopo: vanno
+    # sull'ultimo. Se non c'e' nessun paragrafo la copertura resta scoperta, e
+    # **deve** farlo rumorosamente -- `ir2_validate` lo dira'.
+    if carried and paragraphs:
+            testo, primitive, runs, item, ordered, livello = paragraphs[-1]
+            paragraphs[-1] = (
+                testo, primitive + tuple(carried), runs, item, ordered, livello
+            )
+            carried = []
 
     # I paragrafi NON si riordinano: l'ordine ricevuto e' l'ordine di lettura, e
     # riordinarli per geometria lo scavalcherebbe. Le note si inseriscono
@@ -862,19 +900,31 @@ def build_page_ir2(
             # Lo span e' l'ultimo livello dell'id di sorgente, quindi resta
             # derivato dalla sorgente e stabile.
             suffix = first.source_observation_id or first.primitive_id
+            # **Il genere si decide prima, e il marcatore lo segue.** Una riga
+            # puo' essere titolo per dimensione E voce d'elenco per marcatore: il
+            # genere dava `heading` e il marcatore restava attaccato, e
+            # `NodeIR2` rifiutava il nodo -- «marker belongs to a list item» --
+            # facendo morire la pagina. Trovato dal giro su BiD intero, invisibile
+            # finche' le pagine si sceglievano a mano.
+            #
+            # Vince il titolo, che e' la decisione presa a monte da
+            # `Criterio_Titoli_v3.md` sulla dimensione; il marcatore e' una
+            # proprieta' della resa di una voce, e su un titolo non ha senso.
+            # Il testo non cambia: `text` conserva tutto, marcatore compreso.
+            node_kind = (
+                KIND_TEXT_HEADING
+                if level is not None
+                else KIND_TEXT_LIST_ITEM_ORDERED
+                if is_ordered
+                else KIND_TEXT_LIST_ITEM
+                if is_list_item
+                else KIND_TEXT_PARAGRAPH
+            )
             nodes.append(
                 NodeIR2(
                     node_id=f"{page_id}:{suffix}",
                     order=order,
-                    kind=(
-                        KIND_TEXT_HEADING
-                        if level is not None
-                        else KIND_TEXT_LIST_ITEM_ORDERED
-                        if is_ordered
-                        else KIND_TEXT_LIST_ITEM
-                        if is_list_item
-                        else KIND_TEXT_PARAGRAPH
-                    ),
+                    kind=node_kind,
                     primitive_ids=_with_redraws(
                         tuple(item.primitive_id for item in primitives), redraw_ids
                     ),
@@ -890,7 +940,7 @@ def build_page_ir2(
                         strippable_marker(
                             text, primitives[0].text if primitives else "", list_markers
                         )
-                        if is_list_item and not is_ordered
+                        if node_kind == KIND_TEXT_LIST_ITEM
                         else None
                     ),
                 )
