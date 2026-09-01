@@ -28,6 +28,7 @@ import argparse
 import json
 import sys
 from collections import Counter
+from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -100,6 +101,7 @@ from page_analysis_co_reference_binding import bind_co_referenced_page_analyses 
 from page_analysis_column_band import (  # noqa: E402
     build_column_band_page_analysis_with_measurements,
 )
+from primitive_model import NormalizedPrimitivePage  # noqa: E402
 from primitive_normalizer import normalize_backend_page_capture  # noqa: E402
 from pymupdf_capture import capture_pymupdf_page  # noqa: E402
 from resolution_page_candidates import resolve_page_candidates  # noqa: E402
@@ -283,8 +285,84 @@ class DocumentScan:
     heading_levels: dict[float, int]
 
 
+def passes_page_guard(page: fitz.Page) -> bool:
+    """La guardia della fetta: niente rotazione, e mediabox uguale a cropbox.
+
+    Era scritta tre volte con le stesse due condizioni. Una sola, cosi' non
+    possono divergere.
+    """
+
+    return page.rotation == 0 and tuple(page.mediabox) == tuple(page.cropbox)
+
+
+@dataclass(frozen=True, slots=True)
+class OpenedSource:
+    """I due handle del backend, aperti una volta per tutto il documento."""
+
+    document: fitz.Document
+    plumber: pdfplumber.PDF
+
+
+@dataclass(frozen=True, slots=True)
+class BuiltPage:
+    """Cio' che una pagina produce, per chi la vuole in mano e non su disco."""
+
+    page_id: str
+    page_index: int
+    ir2_page: PageIR2
+    excluded_node_ids: frozenset[str]
+    asset_digests: tuple[str, ...]
+    markdown: str
+    producer_names: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class CapturedDocument:
+    """Il documento catturato **una volta sola**, per chi lo percorre tutto.
+
+    La fetta verticale nasce per pagina e ricattura ogni volta la finestra dei
+    fatti: venti pagine per ognuna che rende. Su un documento intero e' venti
+    volte il lavoro necessario -- e la docstring di `document_scan` gia' diceva
+    «una cattura sola: il vicinato e' una fetta di quella del documento», solo
+    che non c'era un chiamante che la tenesse.
+
+    ``pages`` non contiene le pagine che la guardia scarta -- rotazione, o
+    mediabox diverso dal cropbox -- ed e' per questo che e' una mappa per indice
+    e non una lista: l'indice resta quello del documento.
+    """
+
+    pages: dict[int, NormalizedPrimitivePage]
+    labels: dict[int, str]
+    page_count: int
+
+
+def capture_document(document: fitz.Document) -> CapturedDocument:
+    """Cattura e normalizza ogni pagina che supera la guardia, una volta."""
+
+    pages: dict[int, NormalizedPrimitivePage] = {}
+    labels: dict[int, str] = {}
+    for index in range(len(document)):
+        page = document[index]
+        labels[index] = (page.get_label() or "").strip()
+        if not passes_page_guard(page):
+            continue
+        pages[index] = normalize_backend_page_capture(
+            capture_pymupdf_page(
+                page,
+                source_id="diagnostic-source",
+                page_id=f"page:{index:04d}",
+                capture_id=f"scan:{index:04d}",
+            )
+        )
+    return CapturedDocument(pages=pages, labels=labels, page_count=len(document))
+
+
 def document_scan(
-    document: fitz.Document, page_index: int, *, neighbourhood: int
+    document: fitz.Document,
+    page_index: int,
+    *,
+    neighbourhood: int,
+    captured_document: CapturedDocument | None = None,
 ) -> DocumentScan:
     """I sei fatti, ognuno misurato **nel suo ambito**. `Criterio_AmbitoDeiFatti_v1.md`.
 
@@ -331,25 +409,44 @@ def document_scan(
     # finestra: stessa taglia, centrata sulla pagina invece che sul libro.
     # `Criterio_AmbitoDeiFatti_v2.md`.
     first_page = max(0, min(page_index - neighbourhood // 2, len(document) - neighbourhood))
+    window = range(
+        max(0, first_page), min(len(document), max(0, first_page) + neighbourhood)
+    )
     captured: list = []
     labels: list[str] = []
     indices: list[int] = []
-    for index in range(max(0, first_page), min(len(document), max(0, first_page) + neighbourhood)):
-        page = document[index]
-        if page.rotation != 0 or tuple(page.mediabox) != tuple(page.cropbox):
-            continue
-        indices.append(index)
-        captured.append(
-            normalize_backend_page_capture(
-                capture_pymupdf_page(
-                    page,
-                    source_id="diagnostic-source",
-                    page_id=f"page:{index:04d}",
-                    capture_id=f"scan:{index:04d}",
+    if captured_document is not None:
+        # **La finestra e' una FETTA della cattura del documento**, che e' cio'
+        # che la docstring qui sopra dichiara e che finora nessun chiamante
+        # sfruttava: `run()` ricatturava venti pagine per ognuna che rendeva.
+        # Su una passata di documento sono venti catture per pagina invece di
+        # una. Il risultato e' lo stesso -- stessa finestra, stesse pagine,
+        # stessa guardia -- e i fatti restano misurati sul vicinato, come vuole
+        # `Criterio_AmbitoDeiFatti_v2.md`.
+        for index in window:
+            page_capture = captured_document.pages.get(index)
+            if page_capture is None:
+                continue
+            indices.append(index)
+            captured.append(page_capture)
+            labels.append(captured_document.labels.get(index, ""))
+    else:
+        for index in window:
+            page = document[index]
+            if not passes_page_guard(page):
+                continue
+            indices.append(index)
+            captured.append(
+                normalize_backend_page_capture(
+                    capture_pymupdf_page(
+                        page,
+                        source_id="diagnostic-source",
+                        page_id=f"page:{index:04d}",
+                        capture_id=f"scan:{index:04d}",
+                    )
                 )
             )
-        )
-        labels.append((page.get_label() or "").strip())
+            labels.append((page.get_label() or "").strip())
 
     # --- i fatti, tutti sulla finestra --------------------------------------
     # Il font del corpo apre la seconda via dei marcatori: su Fab il pallino e'
@@ -461,15 +558,32 @@ def run(
     remove_furniture: bool = False,
     render_lists: bool = False,
     furniture_sample: int = 60,
-) -> None:
+    opened: OpenedSource | None = None,
+    captured_document: CapturedDocument | None = None,
+) -> BuiltPage | None:
+    """Costruisce e scrive una pagina; restituisce cio' che ha costruito.
+
+    ``opened`` e ``captured_document`` esistono per chi percorre il documento
+    intero: senza, questa funzione riapre il PDF e ricattura la finestra dei
+    fatti **a ogni pagina**. Passandoli, il PDF si legge una volta sola e la
+    finestra e' una fetta di quella cattura. Il risultato non cambia -- e' lo
+    stesso codice, sugli stessi dati -- e chi chiama come prima non se ne
+    accorge.
+    """
+
     page_index = page_number - 1
     generation_id = f"generation:ir2:{page_number:04d}"
     page_id = f"page:{page_number:04d}"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    with fitz.open(pdf_path) as document, pdfplumber.open(pdf_path) as plumber_pdf:
+    with ExitStack() as stack:
+        if opened is None:
+            document = stack.enter_context(fitz.open(pdf_path))
+            plumber_pdf = stack.enter_context(pdfplumber.open(pdf_path))
+        else:
+            document, plumber_pdf = opened.document, opened.plumber
         page = document[page_index]
-        if page.rotation != 0 or tuple(page.mediabox) != tuple(page.cropbox):
+        if not passes_page_guard(page):
             _fail("page guard: rotation or mediabox != cropbox", 3)
 
         capture = capture_pymupdf_page(
@@ -622,7 +736,12 @@ def run(
         prose: frozenset[float] = frozenset()
         levels: dict[float, int] = {}
         if remove_furniture or render_lists:
-            scan = document_scan(document, page_index, neighbourhood=furniture_sample)
+            scan = document_scan(
+                document,
+                page_index,
+                neighbourhood=furniture_sample,
+                captured_document=captured_document,
+            )
             deduced_labels = scan.deduced_labels
             prose = scan.prose_sizes
             levels = scan.heading_levels
@@ -740,6 +859,17 @@ def run(
 
         markdown = render_page_markdown(ir2_page, excluded_node_ids=excluded_node_ids)
         (output_dir / "page_ir2.md").write_text(markdown, encoding="utf-8")
+        built = BuiltPage(
+            page_id=page_id,
+            page_index=page_index,
+            ir2_page=ir2_page,
+            excluded_node_ids=excluded_node_ids,
+            asset_digests=tuple(note.digest for note in notes),
+            markdown=markdown,
+            producer_names=tuple(
+                sorted({a.provenance.producer_name for a in analyses})
+            ),
+        )
 
         # --- Canale review: cio' che NON entra nel corpo, e perche' ---
         #
@@ -835,6 +965,8 @@ def run(
                         )
                         break
                 _fail("E-B: l'ordine emesso non coincide con la base", 5)
+
+    return built
 
 
 def main() -> None:
