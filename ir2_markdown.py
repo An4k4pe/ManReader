@@ -325,8 +325,31 @@ def is_rendered_in_body(
     *,
     render_unresolved: bool,
     excluded_node_ids: frozenset[str] = frozenset(),
+    asset_digests_with_note: frozenset[str] | None = None,
 ) -> bool:
     """Whether a node belongs in the body, or in the review channel instead.
+
+    ``asset_digests_with_note`` e' la politica d'asset che il chiamante calcola --
+    `document_asset_policy.digests_with_body_note` -- e quando c'e' **sostituisce**
+    il ramo su ``resolution``, che era scritto sull'asse sbagliato.
+
+    Perche' era sbagliato, misurato e non predetto: ``resolution`` dice se
+    Resolution ha accettato un candidato, e Resolution ha **una regola sola** --
+    `resolution_page_candidates.py:86`, l'unico punto del repo che produce
+    ``accepted`` -- che accetta soltanto un `interior_visual_frame` gemello di un
+    `embedded_visual`. Ne segue che nel corpo poteva entrare solo un riquadro:
+    sulle dieci pagine del campione, **10 note rese su 10** sono
+    `layout.interior_visual_frame` e **nessuna delle 65 trattenute** lo e'.
+    Un'illustrazione non poteva essere annunciata per costruzione, e su Dag idx
+    199 -- quattro immagini estratte, zero note -- non lo era. Delle quattro frasi
+    di ``_KIND_PHRASES``, tre erano irraggiungibili nel corpo.
+
+    L'asse giusto e' un fatto di documento e non di pagina: lo sfondo sta su
+    duecento pagine, l'illustrazione su una. La chiave e' il **digest**, non il
+    nodo, perche' lo stesso contenuto ricorre su pagine diverse con nodi diversi.
+
+    Il ramo vecchio resta come ripiego per chi non calcola la politica, cosi' il
+    confronto E-B su un chiamante che non la passa non si sposta.
 
     ``excluded_node_ids`` is a **policy the caller computes**, not a mark on the
     node: nothing is written to `NodeIR2`, the serialization is unchanged, and no
@@ -351,8 +374,12 @@ def is_rendered_in_body(
         return False
     if node.kind != KIND_ASSET_NOTE:
         return True
+    # `render_unresolved` resta la scappatoia diagnostica «mostrami tutto», e
+    # vince su qualunque politica: chi la accende sta guardando, non pubblicando.
     if render_unresolved:
         return True
+    if asset_digests_with_note is not None:
+        return node.asset is not None and node.asset.digest in asset_digests_with_note
     return node.resolution == "accepted"
 
 
@@ -361,6 +388,7 @@ def render_page_markdown(
     *,
     render_unresolved_assets: bool = RENDER_UNRESOLVED_ASSET_NOTES,
     excluded_node_ids: frozenset[str] = frozenset(),
+    asset_digests_with_note: frozenset[str] | None = None,
     render_page_label: bool = False,
 ) -> str:
     """Render one page. Nodes are emitted in ``order``, which is reading order.
@@ -398,6 +426,7 @@ def render_page_markdown(
             node,
             render_unresolved=render_unresolved_assets,
             excluded_node_ids=excluded_node_ids,
+            asset_digests_with_note=asset_digests_with_note,
         )
     ]
 
@@ -441,6 +470,7 @@ def render_document_markdown(
     document: DocumentIR2,
     *,
     render_unresolved_assets: bool = RENDER_UNRESOLVED_ASSET_NOTES,
+    asset_digests_with_note: frozenset[str] | None = None,
 ) -> str:
     """Render a whole document, one page after another."""
 
@@ -451,7 +481,9 @@ def render_document_markdown(
     for page in document.pages:
         parts.append(f"<!-- page: {page.page_id} -->")
         rendered = render_page_markdown(
-            page, render_unresolved_assets=render_unresolved_assets
+            page,
+            render_unresolved_assets=render_unresolved_assets,
+            asset_digests_with_note=asset_digests_with_note,
         )
         if rendered:
             parts.append(rendered.rstrip("\n"))
