@@ -19,10 +19,13 @@ importato o duplicato.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from geometry_model import BBox
-from page_analysis_primitive_pair_measurements import (
+from page_analysis_primitive_pair_measurements import (  # noqa: I001
     PrimitiveNotVisibleOnPageError,
     measure_primitive_pair,
+    primitives_by_id_of,
 )
 from primitive_model import DrawingPrimitive, ImageOccurrencePrimitive, NormalizedPrimitivePage
 
@@ -52,11 +55,15 @@ def dump_interior_visual_diagnostics(
         *primitive_page.image_primitives,
         *primitive_page.drawing_primitives,
     )
+    # **Una volta sola.** Ricostruirlo a ogni coppia costava, su Wil idx 63
+    # (18.632 primitive di disegno), diciotto miliardi di inserimenti e mezz'ora
+    # di calcolo a vuoto.
+    index = primitives_by_id_of(primitive_page)
     return {
         "generation_id": generation_id,
         "page_id": primitive_page.page_id,
         "visuals": [
-            _visual_diagnostics(primitive, primitive_page)
+            _visual_diagnostics(primitive, primitive_page, index)
             for primitive in sorted(visual_primitives, key=lambda item: item.primitive_id)
         ],
     }
@@ -65,6 +72,7 @@ def dump_interior_visual_diagnostics(
 def _visual_diagnostics(
     primitive: _VisualPrimitive,
     primitive_page: NormalizedPrimitivePage,
+    primitives_by_id: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     page_width = primitive_page.page_geometry.width
     page_height = primitive_page.page_geometry.height
@@ -103,7 +111,7 @@ def _visual_diagnostics(
     )
 
     contained_count, contained_area_ratio = _contained_text_diagnostics(
-        primitive, visible_bbox, primitive_page
+        primitive, visible_bbox, primitive_page, primitives_by_id
     )
 
     return {
@@ -130,6 +138,7 @@ def _contained_text_diagnostics(
     primitive: _VisualPrimitive,
     visible_bbox: BBox,
     primitive_page: NormalizedPrimitivePage,
+    primitives_by_id: Mapping[str, object] | None = None,
 ) -> tuple[int, float | None]:
     contained_count = 0
     contained_area = 0.0
@@ -139,6 +148,7 @@ def _contained_text_diagnostics(
                 primitive_page,
                 first_primitive_id=primitive.primitive_id,
                 second_primitive_id=text_primitive.primitive_id,
+                primitives_by_id=primitives_by_id,  # type: ignore[arg-type]
             )
         except PrimitiveNotVisibleOnPageError:
             continue

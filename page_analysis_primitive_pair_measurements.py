@@ -8,6 +8,7 @@ candidates, or persist any result.
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal
 
@@ -125,8 +126,22 @@ def measure_primitive_pair(
     *,
     first_primitive_id: str,
     second_primitive_id: str,
+    primitives_by_id: Mapping[str, _Primitive] | None = None,
 ) -> PrimitivePairMeasurements:
-    """Measure one ordered pair of visible normalized primitives."""
+    """Measure one ordered pair of visible normalized primitives.
+
+    ``primitives_by_id`` e' l'indice della pagina, che il chiamante puo'
+    costruire **una volta sola** con `primitives_by_id_of`. Quando manca, questa
+    funzione lo ricostruisce da capo: e' comodo per una chiamata sola e
+    catastrofico in un ciclo.
+
+    Misurato su Wil idx 63: la pagina ha **18.632 primitive di disegno**, e
+    `page_analysis_interior_visual_diagnostics` misura ogni visuale contro ogni
+    testo. Ricostruendo l'indice a ogni coppia il costo era
+    `18.635 x 52 x 18.687` ~ **18 miliardi** di inserimenti, e la pagina girava a
+    vuoto per oltre mezz'ora -- trovata dal giro sul manuale intero, invisibile
+    alle pagine scelte a mano.
+    """
 
     if not isinstance(primitive_page, NormalizedPrimitivePage):
         raise ValueError("primitive_page must be a NormalizedPrimitivePage")
@@ -135,7 +150,8 @@ def measure_primitive_pair(
     if first_primitive_id == second_primitive_id:
         raise ValueError("first_primitive_id and second_primitive_id must differ")
 
-    primitives_by_id = _primitives_by_id(primitive_page)
+    if primitives_by_id is None:
+        primitives_by_id = _primitives_by_id(primitive_page)
     first_primitive = _require_primitive(primitives_by_id, first_primitive_id)
     second_primitive = _require_primitive(primitives_by_id, second_primitive_id)
 
@@ -259,6 +275,14 @@ def _validate_ratio(value: float, field_name: str) -> None:
     _validate_finite_number(value, field_name)
     if not 0.0 <= value <= 1.0:
         raise ValueError(f"{field_name} must be between 0.0 and 1.0")
+
+
+def primitives_by_id_of(
+    primitive_page: NormalizedPrimitivePage,
+) -> dict[str, _Primitive]:
+    """L'indice della pagina, da costruire una volta e passare a chi misura."""
+
+    return _primitives_by_id(primitive_page)
 
 
 def _primitives_by_id(
