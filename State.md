@@ -1381,4 +1381,77 @@ Script che producono i numeri citati qui: `scripts/check_eb.py`,
 
 **Milestone chiusa nel commit che aggiunge questa sezione.**
 
+## Milestone 41 — i titoli per fascia: il punto fisso della prosa, e tre meccanismi su cinque ritirati
+
+**Il difetto di partenza**, trovato guardando l'uscita: la stessa dimensione
+riceveva livelli diversi da pagina a pagina, perche' `prose_sizes` si misurava
+sulla finestra. Su Dag **241 occorrenze di titolo su 2035 (11,8%)** uscivano a un
+livello che dipendeva dalla pagina, e 189 erano una stringa sola --
+`**CARATTERISTICHE**`, h2 su 33 pagine e h3 su 156.
+
+**Il punto fisso, dall'utente**: cio' che e' identificato come prosa non e' mai un
+titolo, e i filtri lavorano su cio' che sta **sopra** la prosa. Il tetto e la
+mappa dimensione->livello sono **uno per documento**.
+
+**Che cosa e' passato.**
+
+- **Le fasce** (`document_heading_band_measurements`, `document_heading_band_policy`):
+  le dimensioni si accorpano entro il 6%, la fascia di massa maggiore e' il corpo,
+  e le tre piu' grandi sopra il tetto prendono h1/h2/h3. Le occorrenze instabili
+  di Dag: **da 241 a 2**.
+- **Il tetto a tre accorpa, non scarta** (`Criterio_TitoliPerFascia_v2`). La v1
+  scartava oltre il terzo rango e costava **dal 74% al 97% dei titoli** di ogni
+  manuale.
+- **Il tetto dalla massa** (`Criterio_TettoDallaMassa_v1`): una dimensione e'
+  prosa se porta almeno l'**1,8%** della massa del corpo. Altopiano misurato
+  1,5%-2,0% su otto manuali. Compra **FWK, da 0 a 100 titoli**.
+- **Il filtro sulla riga**: una riga piu' lunga della mediana di riga del corpo
+  non e' un titolo. Toglie **23 righe di paragrafo** da Wil e Dag, fra cui una da
+  792 caratteri.
+- **Il filetto di guida** (`Criterio_Capolettera_v1` §3): una riga con quattro o
+  piu' caratteri identici consecutivi e' una voce di sommario. Toglie il sommario
+  di apertura di BoB.
+
+**Che cosa e' caduto, e perche' -- tre meccanismi su cinque.**
+
+- **`Criterio_TitoliPerFascia_v1`**: il tetto scartava invece di accorpare, e il
+  §0.A misurava `min(prose_sizes)` chiamandolo «l'ancora» mentre la regola usa
+  `max(prose)`. **Un veto scritto sull'estremo sbagliato.**
+- **Meccanismo A** (chi non puo' essere titolo non vota): ho chiesto l'arredo
+  all'**ambito documento**, dove trova **zero slot su tutti i rami** -- misurato
+  su Wil, 316 pagine, 0 primitive escluse contro 20 su una finestra di venti. La
+  finestra dei fatti **si sposta, non si allarga**.
+- **Meccanismo B** (la riga alla dimensione dominante): curava FWK e rompeva Fab
+  (88 -> 626 titoli), e il tetto dalla massa lo rende inutile.
+
+**Tre errori di dichiarazione, a verbale** (`Esito_Capolettera_v1` §4): una
+tabella che non conteneva il manuale su cui la regola si rompeva; un veto di
+giudizio omesso proprio nel giro in cui serviva; e una regressione attribuita al
+meccanismo sbagliato, scoperta solo perche' dopo un ritiro un numero non tornava.
+
+**Il veto D e' stato emendato** (`Esito_TettoDallaMassa_v1` §3): giudicava ogni
+riga promossa, quindi cadeva su difetti antichi e misurava la pipeline invece del
+cambiamento. Emendato a giudicare il **delta**, e su quello passa.
+
+**Barra E-B: 9/10**, sola differenza Fab idx 126, gia' a verbale. **1641 test
+verdi.**
+
+**Debiti aperti**: l'**asse del font** -- su Dag `PANORAMICA` sta a 12,0 pt in
+`EvelethCleanRegular` mentre la prosa sta a 12,1 in `QuestaSans-LightItalic`,
+quindi sull'asse della dimensione i titoli stanno **sotto** la prosa e nessuna
+regola di misura puo' separarli; le **schede mostro**; un **URL promosso a
+titolo** su Wil e un **folio fuso** nel titolo su FWK, entrambi pre-esistenti; il
+**testo raddoppiato** (`'Valois Valois'`), che e' un difetto di composizione della
+riga.
+
+### Documenti di questa milestone
+
+`Criterio_TitoliPerFascia_v1..v2`, `Criterio_Capolettera_v1`,
+`Criterio_TettoDallaMassa_v1` e i rispettivi `Esito_*`.
+
+Script che producono i numeri citati qui: `scripts/measure_heading_bands.py`, e
+i diagnostici in `output/titoli/`.
+
+**Milestone chiusa nel commit che aggiunge questa sezione.**
+
 <!-- FINE DI State.md — se non leggi questa riga, la tua copia è troncata: fermati e dillo -->
