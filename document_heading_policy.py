@@ -129,17 +129,69 @@ def sizes_that_carry_headings(
     return frozenset(found)
 
 
+# Quanti caratteri identici consecutivi fanno un **filetto di guida**. Quattro e
+# non tre, perche' tre punti sono i puntini di sospensione, che stanno dentro una
+# frase legittima. `Criterio_Capolettera_v1.md` §3.
+LEADER_RUN = 4
+
+
+def has_leader(text: str) -> bool:
+    """Se il testo contiene un filetto di guida, cioe' una voce di sommario.
+
+    Il segnale e' la **ripetizione tipografica** -- `'.............'` -- non una
+    lunghezza tarata: il filetto si riconosce dal carattere ripetuto.
+
+    Misurato su BoB: delle 19 righe promosse piu' lunghe di 60 caratteri, **18
+    sono a 12,0 pt sulle pagine idx 6-8**, cioe' il sommario di apertura. Ognuna
+    e' sola alla sua dimensione nel proprio blocco, quindi passava la regola di
+    riga, e la sua fascia passava il filtro sulla lunghezza con 0,45 contro 0,50.
+    """
+
+    run = 0
+    previous = ""
+    for character in text:
+        if character.isalnum() or character.isspace():
+            run = 0
+            previous = ""
+            continue
+        if character == previous:
+            run += 1
+            if run >= LEADER_RUN:
+                return True
+        else:
+            previous = character
+            run = 1
+    return False
+
+
 def heading_lines(
     lines: Sequence[SizedLine],
     prose: frozenset[float],
     levels: dict[float, int],
     excluded: frozenset[str] = frozenset(),
+    *,
+    max_length: float | None = None,
 ) -> dict[int, int]:
     """Da posizione della riga al suo livello di titolo. `lines` e' una pagina.
 
     `Criterio_Titoli_v3.md` §1. **L'unita' e' la riga, non il blocco.** Una riga
     e' un titolo se sta sopra tutta la prosa ed e' **l'unica alla sua dimensione
     dentro il suo blocco**.
+
+    ``max_length`` e' la mediana di riga del corpo: **una riga piu' lunga di una
+    riga di prosa non e' un titolo**, qualunque sia la sua fascia.
+    `Criterio_TettoDallaMassa_v1.md` §1. Il filtro sulla lunghezza esisteva gia',
+    ma guardava la **mediana della fascia** mentre la promozione si decide **riga
+    per riga**: su Fab una fascia con mediana 19 caratteri conteneva una riga di
+    **628**, e il meccanismo dichiarava «i titoli hanno righe corte» producendo un
+    titolo di 628 caratteri.
+
+    Il rapporto qui e' **1,0** e non il mezzo del filtro di fascia, e la
+    differenza ha una ragione: la fascia si giudica sulla **tendenza** -- i titoli
+    in media sono molto piu' corti del testo -- e la riga sul **limite**: un
+    titolo puo' essere lungo, ma non piu' di una riga intera di prosa. Su Fab il
+    corpo ha mediana 53 caratteri: al mezzo morirebbe
+    `TABELLE PER LA CREAZIONE DELL'IDENTITA'` (38), che e' un titolo vero.
 
     **Che cosa e' caduto della v2**, e va detto perche' non si rimetta: chiedevo
     che il blocco non contenesse prosa e avesse al piu' due righe. Misurato, quel
@@ -176,6 +228,14 @@ def heading_lines(
         for position in positions:
             line = lines[position]
             if len(line.text) <= 1 or line.text in excluded:
+                continue
+            # Una voce di sommario non e' un titolo, per quanto sia sola
+            # alla sua dimensione nel blocco. `Criterio_Capolettera_v1.md` §3.
+            if has_leader(line.text):
+                continue
+            # Una riga piu' lunga di una riga di prosa non e' un titolo.
+            # `Criterio_TettoDallaMassa_v1.md` §1.
+            if max_length is not None and len(line.text) > max_length:
                 continue
             level = levels.get(line.size)
             # **Sola alla sua dimensione nel blocco.** Le righe consecutive di
@@ -292,6 +352,10 @@ def headings_above_a_paragraph(
         for order, position in enumerate(positions):
             line = lines[position]
             if len(line.text) <= 1 or line.text in excluded:
+                continue
+            # Una voce di sommario non e' un titolo, per quanto sia sola
+            # alla sua dimensione nel blocco. `Criterio_Capolettera_v1.md` §3.
+            if has_leader(line.text):
                 continue
             if levels.get(line.size) is not None:
                 continue

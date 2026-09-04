@@ -85,6 +85,8 @@ from document_asset_policy import decide_document_assets  # noqa: E402
 from document_asset_recurrence_measurements import (  # noqa: E402
     measure_document_asset_recurrence,
 )
+from document_heading_band_measurements import measure_size_mass  # noqa: E402
+from document_heading_band_policy import HeadingBands, heading_bands  # noqa: E402
 from document_heading_measurements import measure_font_sizes  # noqa: E402
 from document_heading_policy import prose_sizes  # noqa: E402
 from ir2_markdown import render_page_markdown  # noqa: E402
@@ -111,6 +113,11 @@ class _Lavoro:
     captured: CapturedDocument
     tabelle: bool
     finestra: int
+    # Le fasce dei titoli si calcolano **una volta**, sul documento intero, prima
+    # del fork. `Criterio_TitoliPerFascia_v1.md` §1 le vuole a ambito documento, e
+    # ricalcolarle per pagina costerebbe una scansione completa per ognuna delle
+    # 379 pagine di Dag. Con `fork` i figli le ereditano senza copiarle.
+    bands: HeadingBands | None = None
     opened: OpenedSource | None = None
 
 
@@ -143,6 +150,7 @@ def _rendi_pagina(page_index: int) -> tuple[int, object, str | None]:
             furniture_sample=_LAVORO.finestra,
             opened=_LAVORO.opened,
             captured_document=_LAVORO.captured,
+            bands=_LAVORO.bands,
         ), None
     except Exception as errore:  # noqa: BLE001
         # Una pagina che cade non deve fermare il documento: si registra e si
@@ -496,6 +504,24 @@ def main() -> int:
             high = int(last_text) if last_text else low
             wanted = [i for i in wanted if low <= i <= high]
 
+        ordinate = [captured.pages[i] for i in sorted(captured.pages)]
+        fasce = heading_bands(
+            measure_size_mass(ordinate), measure_font_sizes(ordinate).median_length
+        )
+        if fasce.ceiling is None:
+            print("titoli: nessuna prosa misurata, il meccanismo tace", flush=True)
+        else:
+            print(
+                f"titoli: corpo {fasce.body.label}, tetto prosa {fasce.ceiling:.1f}, "
+                f"{len(fasce.candidates)} fasce candidate",
+                flush=True,
+            )
+        for livello, gruppo in sorted(fasce.bands_by_level.items()):
+            print(
+                f"  h{livello}: " + ", ".join(f"{b.label} ({b.page_count}pag)" for b in gruppo),
+                flush=True,
+            )
+
         global _LAVORO
         _LAVORO = _Lavoro(
             pdf=arguments.pdf,
@@ -503,6 +529,7 @@ def main() -> int:
             captured=captured,
             tabelle=arguments.tabelle,
             finestra=arguments.finestra,
+            bands=fasce,
         )
         # --- Cio' che una corsa precedente ha gia' prodotto ---
         gia_fatte: dict[int, BuiltPage] = {}

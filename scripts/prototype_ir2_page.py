@@ -58,18 +58,15 @@ from prototype_vertical_slice_page import (  # noqa: E402
 from document_furniture_policy import (  # noqa: E402
     deduced_number_slots,
     furniture_node_ids,
+    furniture_primitive_ids,
     furniture_slots,
     running_head_primitive_ids,
     vertical_primitive_ids,
 )
+from document_heading_band_measurements import measure_size_mass  # noqa: E402
+from document_heading_band_policy import HeadingBands, heading_bands  # noqa: E402
 from document_heading_measurements import (  # noqa: E402
     measure_font_sizes,
-    sized_lines,
-)
-from document_heading_policy import (  # noqa: E402
-    heading_levels,
-    prose_sizes,
-    sizes_that_carry_headings,
 )
 from document_line_start_measurements import (  # noqa: E402
     count_block_signatures,
@@ -283,6 +280,9 @@ class DocumentScan:
     scale_signatures: frozenset[tuple[str, ...]]
     prose_sizes: frozenset[float]
     heading_levels: dict[float, int]
+    # La mediana di riga del corpo: una riga piu' lunga di una riga di prosa non
+    # e' un titolo. `Criterio_TettoDallaMassa_v1.md` §1.
+    heading_max_length: float | None
 
 
 def passes_page_guard(page: fitz.Page) -> bool:
@@ -357,12 +357,57 @@ def capture_document(document: fitz.Document) -> CapturedDocument:
     return CapturedDocument(pages=pages, labels=labels, page_count=len(document))
 
 
+def document_furniture_primitive_ids(
+    pages: list[NormalizedPrimitivePage],
+    labels: list[str],
+) -> list[frozenset[str]]:
+    """Le primitive d'arredo di ogni pagina, ad ambito **documento**.
+
+    Serve al meccanismo A di `Criterio_Capolettera_v1.md`: la quota di parole di
+    una fascia si calcola solo su cio' che potrebbe diventare un titolo, e i
+    numeri di pagina non possono. Su Wil la fascia dei nomi di insediamento
+    contiene 213 folii -- `'10'`, `'11'`, ... `'1115'` -- che da soli la tengono
+    sotto la soglia.
+
+    **NON USARE COSI'. Questa funzione e' un reperto, non uno strumento.**
+    Il meccanismo A di `Criterio_Capolettera_v1.md` la chiamava, ed e' caduto
+    proprio qui: l'arredo e' un fatto di **finestra**, e chiederglielo sul
+    documento intero non restituisce niente. Misurato su Wil, 316 pagine: slot da
+    etichetta 0, da ricorrenza 0, da sequenza 0, da testo ripetuto 0, testatine 0
+    -- **zero** primitive escluse, contro 217 numeri a 19,8-21,0 pt che dovevano
+    uscire. La ricorrenza si misura su una finestra di venti pagine, dove un folio
+    nello stesso punto fa il 90% e passa; su trecento pagine la geometria cambia e
+    nessuno slot arriva alla soglia.
+
+    E' l'errore contro cui `Criterio_AmbitoDeiFatti_v2.md` mette in guardia: la
+    finestra dei fatti **si sposta, non si allarga**. Chi riprende il meccanismo
+    deve raccogliere l'arredo finestra per finestra e aggregarlo per pagina, non
+    allargare la finestra.
+
+    Resta in albero perche' e' il punto da cui ripartire, non perche' serva
+    adesso: `AGENTS.MD` e l'indicazione dell'utente del 31 agosto 2026 -- non si
+    cancella, si tagga.
+
+    Una frozenset per pagina, nell'ordine dato: gli id di primitiva **non sono
+    unici fra pagine**.
+    """
+
+    measured = measure_document_text_recurrence(pages)
+    slots = furniture_slots(list(zip(pages, labels, strict=True)), measured)
+    out: list[frozenset[str]] = []
+    for page in pages:
+        found = furniture_primitive_ids(page, slots.all_slots)
+        out.append(found | running_head_primitive_ids(page, slots.running_heads, found))
+    return out
+
+
 def document_scan(
     document: fitz.Document,
     page_index: int,
     *,
     neighbourhood: int,
     captured_document: CapturedDocument | None = None,
+    bands: HeadingBands | None = None,
 ) -> DocumentScan:
     """I sei fatti, ognuno misurato **nel suo ambito**. `Criterio_AmbitoDeiFatti_v1.md`.
 
@@ -454,11 +499,22 @@ def document_scan(
     body = body_font([p for page in captured for p in page.text_primitives])
     markers = list_markers(measure_document_line_starts(captured, body))
     scales = value_scale_signatures(count_block_signatures(captured, markers))
-    sizes = measure_font_sizes(captured)
-    prose = prose_sizes(sizes)
-    # Due passate: prima si vede quali dimensioni intestano davvero qualcosa, poi
-    # si assegnano i ranghi solo a quelle. `Criterio_Titoli_v3.md`.
-    carried = sizes_that_carry_headings([sized_lines(page) for page in captured], sizes, prose)
+    # **I titoli hanno ambito DOCUMENTO, e qui e' una differenza voluta.**
+    # Arredo, marcatori e scale restano sulla finestra che contiene la pagina
+    # (`Criterio_AmbitoDeiFatti_v2.md`); il corpo no. `Criterio_TitoliPerFascia_v1.md`
+    # §1: «una sola per documento, calcolata su tutte le pagine», perche' un corpo
+    # che cambia fra due pagine e' esattamente il difetto da correggere -- misurato
+    # su Dag, 241 occorrenze di titolo su 2035 uscivano a un livello che dipendeva
+    # dalla pagina. `bands` arriva gia' calcolato da chi percorre il documento;
+    # senza, si calcola qui sulla cattura intera e non sulla finestra.
+    if bands is None:
+        whole = captured_document or capture_document(document)
+        whole_pages = [whole.pages[i] for i in sorted(whole.pages)]
+        bands = heading_bands(
+            measure_size_mass(whole_pages),
+            measure_font_sizes(whole_pages).median_length,
+        )
+    prose = bands.prose_anchor
 
     # --- arredo, testatine, numeri: la stessa finestra ----------------------
     near, near_indices, near_labels = captured, indices, labels
@@ -484,7 +540,8 @@ def document_scan(
         list_markers=markers,
         scale_signatures=scales,
         prose_sizes=prose,
-        heading_levels=heading_levels(sizes, prose, carried),
+        heading_levels=bands.size_levels,
+        heading_max_length=bands.body.median_line_length if bands.body else None,
     )
 
 
@@ -560,6 +617,7 @@ def run(
     furniture_sample: int = 60,
     opened: OpenedSource | None = None,
     captured_document: CapturedDocument | None = None,
+    bands: HeadingBands | None = None,
 ) -> BuiltPage | None:
     """Costruisce e scrive una pagina; restituisce cio' che ha costruito.
 
@@ -741,6 +799,7 @@ def run(
                 page_index,
                 neighbourhood=furniture_sample,
                 captured_document=captured_document,
+                bands=bands,
             )
             deduced_labels = scan.deduced_labels
             prose = scan.prose_sizes
@@ -759,10 +818,17 @@ def run(
                     + (", ".join(repr("".join(f)) for f in sorted(scales)) or "nessuna"),
                     file=sys.stderr,
                 )
+                per_livello: dict[int, list[float]] = {}
+                for dimensione, livello in levels.items():
+                    per_livello.setdefault(livello, []).append(dimensione)
                 print(
-                    f"titoli: prosa a {sorted(prose)}, livelli "
-                    + (", ".join(f"{s}→h{n}" for s, n in sorted(levels.items(), reverse=True))
-                       or "nessuno"),
+                    "titoli: corpo a "
+                    + (f"{min(prose):.1f}-{max(prose):.1f}" if prose else "nessuno")
+                    + ", fasce "
+                    + (", ".join(
+                        f"{min(v):.1f}-{max(v):.1f}→h{n}"
+                        for n, v in sorted(per_livello.items())
+                    ) or "nessuna"),
                     file=sys.stderr,
                 )
 
@@ -783,6 +849,7 @@ def run(
             scale_signatures=scales,
             prose_sizes=prose,
             heading_levels=levels,
+            heading_max_length=scan.heading_max_length,
         )
         validate_page_ir2_against_primitive_page(ir2_page, primitive_page)
 

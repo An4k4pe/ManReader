@@ -75,6 +75,14 @@ def sized_lines(page: NormalizedPrimitivePage) -> list[SizedLine]:
     La dimensione della riga e' la **massima** delle sue primitive: una riga in
     cui una parola e' piu' grande e' governata da quella, ed e' cosi' che si
     comporta la tipografia.
+
+    **Il meccanismo B di `Criterio_Capolettera_v1.md` voleva la dominante ed e'
+    stato ritirato.** Curava FWK, dove un capolettera a 58 pt si prendeva la riga
+    del paragrafo e diventava il tetto della prosa; ma spostava anche il tetto di
+    Fab (14,0 -> 10,3, e 88 titoli diventavano 626) e di Wil (10,3 -> 12,9). Il
+    tetto dalla massa lo rende inutile: un capolettera porta lo **0,00%** della
+    massa e non e' prosa comunque, quindi FWK guarisce senza toccare questa
+    formula ne' `ir2_builder`, che e' sulla strada dell'ordine di lettura.
     """
 
     grouped: dict[tuple[str, str], list] = defaultdict(list)

@@ -646,6 +646,7 @@ def build_page_ir2(
     scale_signatures: frozenset[tuple[str, ...]] = frozenset(),
     prose_sizes: frozenset[float] = frozenset(),
     heading_levels: dict[float, int] | None = None,
+    heading_max_length: float | None = None,
 ) -> PageIR2:
     """Build one IR 2 page. Reading order is the caller's; this only groups."""
 
@@ -731,7 +732,10 @@ def build_page_ir2(
     # «sola alla sua dimensione nel blocco» conterebbe due volte un titolo
     # spezzato, e non sarebbe piu' un titolo. `Criterio_Titoli_v3.md` §2.
     merged_lines, group_of = merge_wrapped(sized)
-    merged_levels = heading_lines(merged_lines, prose_sizes, heading_levels or {})
+    merged_levels = heading_lines(
+        merged_lines, prose_sizes, heading_levels or {},
+        max_length=heading_max_length,
+    )
     heading_flags = {
         position: merged_levels[group]
         for position, group in enumerate(group_of)
