@@ -1,0 +1,36 @@
+livelli di dimensione nel documento (dimensione: caratteri):
+   7.5:8585, 8.0:183284, 8.5:56926, 9.0:215451, 10.0:1598, 11.0:9723, 12.0:5738, 13.0:29, 17.0:458, 20.0:1, 28.0:94, 40.0:11
+
+ livello   zone  schemi   CARATTERI  regioni   vere  non vere
+--------------------------------------------------------
+     7.5      -       -         -
+     8.0      -       -         -
+     8.5   7365       2       29574      115    115         0
+     9.0   6177       2       29574      115    115         0
+    10.0   1185       3       43815      141    115        26
+    11.0   1022       2      150738      148    148         0
+    12.0    466       3      219770      159    148        11
+    13.0     64       0           0        0      0         0
+    17.0     63       0           0        0      0         0
+    20.0     15       0           0        0      0         0
+    28.0     13       0           0        0      0         0
+    40.0      -       -         -
+
+>>> livello scelto dalla ricerca: 12.0
+    zone=466  schemi=3  riconosciute=148  falsi positivi=11
+    obbligatori: ['ATK', 'Diffi culty', 'HP', 'Motives & Tactics', 'Stress', 'Thresholds']
+    obbligatori: ['Diffi culty', 'Impulses', 'Potential Adversaries']
+    obbligatori: ['mark a Stress', 'spend a Hope']
+
+--- cosa sono gli 11 'falsi positivi' del livello scelto? ---
+   pag  6 BEASTFORM OPTIONS
+   pag  7 (orfana)
+   pag 11 ELEMENTAL ORIGIN
+   pag 60 BLADE DOMAIN
+   pag 61 BONE DOMAIN
+   pag 62 CODEX DOMAIN
+   pag 63 GRACE DOMAIN
+   pag 64 MIDNIGHT DOMAIN
+   pag 65 SAGE DOMAIN
+   pag 66 SPLENDOR DOMAIN
+   pag 67 VALOR DOMAIN
