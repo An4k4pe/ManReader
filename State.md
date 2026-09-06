@@ -1444,6 +1444,30 @@ titolo** su Wil e un **folio fuso** nel titolo su FWK, entrambi pre-esistenti; i
 **testo raddoppiato** (`'Valois Valois'`), che e' un difetto di composizione della
 riga.
 
+### Le citazioni: tre assi provati e caduti, **prima** di dichiarare un criterio
+
+Aperto dopo i titoli, chiuso senza scrivere un meccanismo. Non e' caduta la
+**resa** -- il callout `> **[etichetta]**` funziona ed e' gia' in uso per le note
+d'asset -- ma il **riconoscimento**: sapere quale testo sia una citazione. Tre
+assi, tutti misurati sugli otto manuali:
+
+- **Le virgolette** (la regola del legacy, `markdown_builder._looks_like_closed_quote`
+  piu' `_is_quote_attribution_block`): **2-18 righe per manuale**. Le 519 righe di
+  Fab non ne hanno -- `'Questo e' il tuo mondo,'` finisce con una virgola.
+- **Il font**: vero che una citazione sta in una faccia diversa dal corpo, ma
+  **anche i titoli** ci stanno. Su Fab le citazioni sono in `MinionPro-Regular` e
+  `MonotypeCorsiva`, i titoli in `Antonio-Bold`: tutte famiglie diverse dal corpo,
+  tre casi su tre. L'asse non separa.
+- **Lo spazio fra la fascia di corpo e il tetto della prosa**, che il meccanismo
+  dei titoli calcola gia': **1 manuale su 8** contiene cio' che serve. Su Fab si',
+  ma su Dag contiene **titoli** (`INTRODUZIONE`, 1080 righe su 243 pagine;
+  `DAGGERHEART TEAM`, 822 righe), su BiD e FWK prosa qualunque con mediane di 41 e
+  62 caratteri, e su BoB, Wil, Apo e Vil e' **vuoto**.
+
+**Un guadagno collaterale**: le due dimensioni di Dag sotto il tetto che sono
+titoli veri -- ~1900 righe -- **quantificano il debito del font** molto piu' in
+grande delle 8 occorrenze di `PANORAMICA` da cui l'esito lo faceva partire.
+
 ### Documenti di questa milestone
 
 `Criterio_TitoliPerFascia_v1..v2`, `Criterio_Capolettera_v1`,
