@@ -125,8 +125,38 @@ per i ridisegni. Il capolettera non ha ancora il suo meccanismo.
 
 ## 7. Che cosa non è stato eseguito
 
-- **Veto B** (giudizio riga per riga): il materiale c'è, ma chiedere l'attenzione
-  dell'utente su un candidato che ha già fallito C la spenderebbe male.
+- **Veto B** (giudizio riga per riga): **eseguito il 7 settembre 2026**, dopo che
+  il meccanismo era stato adottato attraverso `Criterio_TettoDallaMassa_v1`.
+  Campione di **45 righe promosse**, cinque per manuale su nove, seed
+  `20260902`, con indice posizionale e numero stampato.
+
+  **Esito: 42 titoli su 45.** Le tre bocciate dall'utente:
+
+  | # | manuale | riga | attribuzione |
+  | --- | --- | --- | --- |
+  | 21 | Wil | `https://grumpybearstuff.com/pregenerati-wilderfeast/` | **pre-esistente** |
+  | 25 | Wil | `ACUME: (Costo: 1 Successo) Definisci un dettaglio…` | **pre-esistente** |
+  | 26 | FWK | `ave ai vittoriosi morti! di nathan d. paoletta 58` | **nuova** |
+
+  **L'attribuzione viene dal delta di `Esito_TettoDallaMassa_v1.md` §3**, non da
+  una stima: su Wil le regole adottate hanno prodotto **zero entrate** (618 → 596,
+  22 uscite), quindi 21 e 25 erano promosse anche prima. Su FWK **tutte le 100**
+  righe sono entrate, perché prima il manuale ne produceva zero: la 26 è
+  attribuibile.
+
+  **E la 26 non è una promozione sbagliata**: `ave ai vittoriosi morti! di nathan
+  d. paoletta` **è** un titolo, con il **numero di pagina fuso in coda**. Il
+  difetto sta nel testo della riga, non nella decisione di promuoverla, ed è la
+  stessa classe di `'benvenuti nel Kosmohedron 10'` già a verbale.
+
+  **Alla lettera il veto cade** — dichiarava «una sola riga promossa che non è un
+  titolo» — e si riporta così. Nella forma emendata, che giudica il delta, resta
+  **un caso su 45**, ed è un difetto di composizione del testo.
+
+  Segnalata dall'utente anche la **44**, `ANGELI ANGELI CADUTI CADUTI` su Kul:
+  giudicata **titolo, ma ripetuto**. È il difetto del testo raddoppiato, come
+  `'Valois Valois'`, e non riguarda la promozione.
+
 - **Veto E** (`check_eb.py`): non lanciato, per la stessa ragione della v1 —
   un'ora e venti di macchina su un meccanismo non adottato.
 
