@@ -270,6 +270,24 @@ def merge_wrapped(
     lo mangiava: e' la ragione per cui usciva `**DONI I doni sono aspetti…**` in
     un grassetto solo.
 
+    **L'unione a dimensioni DIVERSE e' stata provata ed e' caduta**, ed e' il
+    meccanismo B di `Criterio_TitoloComposto_v1.md`. Doveva riparare Kul, dove un
+    titolo display cambia corpo parola per parola -- `ORRORI` (86), `DELLA` (95),
+    `GNOSI` (102) -- e l'intera struttura di primo livello del manuale era la
+    parola `DELLA`.
+
+    **Misurato, produce 83 unioni e la maggioranza e' sbagliata**: su BoB
+    `'RELAZIONI I PRESCELTI'`, `'sgattaiolare ESEMPI'`,
+    `'orologio da 8 MIGLIORARE LE MISSIONI'`; su BiD
+    `'ABILITA' SPECIALI DEL GUANTO gambetto di torre'`. Incolla l'intestazione di
+    sezione al primo elemento che introduce.
+
+    **La ragione, che spiega perche' il vincolo qui non basta**: «solo lo stesso
+    blocco» impedisce di fondere i titoli **fratelli**, che stanno a **pari
+    dimensione** in blocchi diversi. Ma un'intestazione e cio' che introduce hanno
+    dimensioni **diverse** e stanno spesso nello **stesso** blocco. Il vincolo che
+    rendeva sicura questa regola era la pari dimensione, e toglierlo la scopre.
+
     Torna la lista unita e, per ogni riga originale, l'indice del gruppo a cui
     appartiene -- serve al chiamante per sapere dove NON rompere il paragrafo.
     """
@@ -290,6 +308,8 @@ def merge_wrapped(
                 x0=min(merged[-1].x0, line.x0),
                 x1=max(merged[-1].x1, line.x1),
                 font=merged[-1].font,
+                y0=min(merged[-1].y0, line.y0),
+                y1=max(merged[-1].y1, line.y1),
             )
         else:
             merged.append(line)

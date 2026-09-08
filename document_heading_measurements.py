@@ -40,6 +40,11 @@ class SizedLine:
     riconosce un titolo **non** dalla dimensione ma dal font che lo governa e da
     dove finisce rispetto al margine del suo blocco. Hanno un valore neutro perche'
     chi misura solo le dimensioni non deve costruirli.
+
+    `y0` e `y1` servono al meccanismo A di `Criterio_TitoloComposto_v1.md`: la
+    **sovrastampa** si riconosce dall'uguaglianza della bbox intera, e senza la
+    verticale due righe sovrapposte sarebbero indistinguibili da due righe uguali
+    incolonnate. Stesso valore neutro, per la stessa ragione.
     """
 
     block: str
@@ -48,6 +53,8 @@ class SizedLine:
     x0: float = 0.0
     x1: float = 0.0
     font: str | None = None
+    y0: float = 0.0
+    y1: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +74,41 @@ class FontSizeMeasurements:
                     raise ValueError(f"{name}: font size must be greater than zero")
                 if value < 0:
                     raise ValueError(f"{name}: value cannot be negative")
+
+
+def _already_impressed(primitive, impressions: set) -> bool:
+    """Se questa primitiva e' gia' stata impressa **su questa pagina**.
+
+    Meccanismo A di `Criterio_TitoloComposto_v1.md`. Stesso testo, stessa
+    dimensione, **stessa bbox**: due cose fisicamente nella stessa scatola con lo
+    stesso testo sono lo stesso inchiostro. E' un'**uguaglianza, non una soglia**
+    -- misurato su quattro manuali, 816 coppie hanno bbox identica e 5
+    differiscono di meno di mezzo punto senza esserlo, e quelle 5 restano fuori
+    perche' prenderle vorrebbe una tolleranza geometrica cablata.
+
+    Su Kul idx 162 la sorgente scrive la stessa parola due volte alla stessa
+    coordinata, presumibilmente per ispessire il tratto:
+
+        l0000: ['ANGELI' @ (34.9625, 42.9375, 192.1955, 152.3325)]
+        l0001: ['ANGELI' @ (34.9625, 42.9375, 192.1955, 152.3325), ' ' @ (...)]
+
+    La seconda riga e' la stessa impressione **piu' uno spazio in coda**, ed e' il
+    motivo per cui il confronto va fatto fra **primitive** e non fra righe: le
+    bbox di riga non coincidono, quelle delle primitive si'. Da qui venivano
+    `'ANGELI ANGELI CADUTI CADUTI'`, `'Valois Valois'` su Vil e
+    `'villaggio di lala villaggio di lala'` su Wil.
+
+    **La primitiva non si scarta**: smette solo di contribuire al testo. Resta
+    nella riga, quindi resta coperta da un nodo e `AGENTS.MD` §Coverage regge --
+    ed e' il modo silenzioso in cui questo meccanismo potrebbe rompere
+    l'invariante senza che nessun test se ne accorga.
+    """
+
+    key = (primitive.text, primitive.font_size, primitive.bbox)
+    if key in impressions:
+        return True
+    impressions.add(key)
+    return False
 
 
 def sized_lines(page: NormalizedPrimitivePage) -> list[SizedLine]:
@@ -92,8 +134,13 @@ def sized_lines(page: NormalizedPrimitivePage) -> list[SizedLine]:
             grouped[(match.group(1), match.group(2))].append(primitive)
 
     lines: list[SizedLine] = []
+    impressions: set = set()
     for (block, _line), primitives in grouped.items():
-        text = "".join(p.text for p in sorted(primitives, key=lambda z: z.bbox[0])).strip()
+        text = "".join(
+            p.text
+            for p in sorted(primitives, key=lambda z: z.bbox[0])
+            if not _already_impressed(p, impressions)
+        ).strip()
         sizes = [p.font_size for p in primitives if p.font_size]
         if text and sizes:
             lines.append(
@@ -103,6 +150,8 @@ def sized_lines(page: NormalizedPrimitivePage) -> list[SizedLine]:
                     size=round(max(sizes), 1),
                     x0=min(p.bbox[0] for p in primitives),
                     x1=max(p.bbox[2] for p in primitives),
+                    y0=min(p.bbox[1] for p in primitives),
+                    y1=max(p.bbox[3] for p in primitives),
                     font=governing_font(primitives),
                 )
             )
