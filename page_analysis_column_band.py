@@ -267,6 +267,8 @@ class _FlankingProfile:
         "right_width_median",
         "left_chars_median",
         "right_chars_median",
+        "left_chars_total",
+        "right_chars_total",
         "left_wordy",
         "right_wordy",
     )
@@ -283,6 +285,8 @@ class _FlankingProfile:
         right_chars_median: float,
         left_wordy: int,
         right_wordy: int,
+        left_chars_total: int = 0,
+        right_chars_total: int = 0,
     ) -> None:
         self.left = left
         self.right = right
@@ -294,6 +298,12 @@ class _FlankingProfile:
         self.right_chars_median = right_chars_median
         self.left_wordy = left_wordy
         self.right_wordy = right_wordy
+        # I caratteri SOMMATI per lato. Nessun criterio di ammissione li legge:
+        # esistono perche' la misura dei corridoi respinti (Milestone 43) possa
+        # riportarli senza ripartire i fianchi una seconda volta, che sarebbe
+        # una seconda implementazione della stessa cosa.
+        self.left_chars_total = left_chars_total
+        self.right_chars_total = right_chars_total
 
     @property
     def minimum(self) -> int:
@@ -392,9 +402,20 @@ def _reject_reason(
         return "too_few_lines"
     if profile.wordy_minimum < min_flanking_groups:
         return "too_few_wordy_lines"
-    if line_height > 0 and (rect.y1 - rect.y0) < min_gutter_lines * line_height:
+    if _is_too_short(rect, line_height=line_height, min_gutter_lines=min_gutter_lines):
         return "too_short"
     return None
+
+
+def _is_too_short(rect: _GapRect, *, line_height: float, min_gutter_lines: float) -> bool:
+    """Il criterio di altezza, estratto per poterlo chiedere anche fuori da
+    `_reject_reason`, che si ferma al primo motivo che scatta.
+
+    Serve a Milestone 43: un corridoio etichettato `too_few_wordy_lines` puo'
+    essere ANCHE troppo basso, e chi legge il motivo da solo non lo sa. Chiederlo
+    qui evita che il criterio venga riscritto altrove -- cioe' che la stessa
+    soglia viva in due posti."""
+    return line_height > 0 and (rect.y1 - rect.y0) < min_gutter_lines * line_height
 
 
 def _flanking_profile(
@@ -472,6 +493,8 @@ def _flanking_profile(
         right_chars_median=median(right_chars),
         left_wordy=sum(1 for n in left_chars if n >= min_chars),
         right_wordy=sum(1 for n in right_chars if n >= min_chars),
+        left_chars_total=int(sum(left_chars)),
+        right_chars_total=int(sum(right_chars)),
     )
 
 
@@ -1026,6 +1049,141 @@ def _analysis_from_tree(
     )
 
 
+def _judge_gutters(
+    primitive_page: NormalizedPrimitivePage,
+    *,
+    bin_width_x: float,
+    bin_height_y: float,
+    min_flanking_groups: int,
+    min_flanking_chars: float,
+    min_gutter_lines: float,
+) -> tuple[list[tuple[_GapRect, _FlankingProfile, str | None]], float]:
+    """Tutti i corridoi della pagina con il loro profilo e il loro verdetto.
+
+    Estratta da `column_band_tree` **senza cambiarne una riga di comportamento**:
+    stesso ordine (per altezza decrescente), stesse chiamate, stesse costanti.
+    L'albero prende da qui i soli ammessi, esattamente come prima.
+
+    Esiste perche' il verdetto di scarto non venga piu' buttato. Milestone 43:
+    un corridoio respinto e' materiale per chi viene dopo -- lo dice gia' la
+    docstring di `_reject_reason` -- e finora spariva dentro una variabile
+    locale. Qui non si decide niente di nuovo: si smette di perdere cio' che era
+    gia' stato deciso.
+    """
+
+    page_width = primitive_page.page_geometry.width
+    page_height = primitive_page.page_geometry.height
+    groups, _unparsed = _group_by_pymupdf_line(
+        list(primitive_page.text_primitives), page_width=page_width, page_height=page_height
+    )
+    if not groups:
+        return [], 0.0
+
+    grid, _n_x, _n_y = _build_gap_grid(
+        groups,
+        page_width=page_width,
+        page_height=page_height,
+        bin_width_x=bin_width_x,
+        bin_height_y=bin_height_y,
+    )
+    rects = _chain_gutters(grid, bin_height_y=bin_height_y)
+    for rect in rects:
+        _extend_gutter_span(grid, rect, bin_height_y=bin_height_y)
+    rects.sort(key=lambda r: (r.y1 - r.y0), reverse=True)
+
+    rotated_groups = _rotated_group_ids(groups, list(primitive_page.text_primitives))
+    text_length_by_id = {
+        p.primitive_id: len((p.text or "").strip()) for p in primitive_page.text_primitives
+    }
+    line_height = _median_line_height(groups)
+
+    judged: list[tuple[_GapRect, _FlankingProfile, str | None]] = []
+    for rect in rects:
+        profile = _flanking_profile(
+            groups,
+            rect,
+            bin_width_x=bin_width_x,
+            rotated_groups=rotated_groups,
+            text_length_by_id=text_length_by_id,
+            min_chars=min_flanking_chars,
+        )
+        judged.append(
+            (
+                rect,
+                profile,
+                _reject_reason(
+                    profile,
+                    rect,
+                    line_height=line_height,
+                    min_flanking_groups=min_flanking_groups,
+                    min_gutter_lines=min_gutter_lines,
+                ),
+            )
+        )
+    return judged, line_height
+
+
+def column_band_gutter_rows(
+    primitive_page: NormalizedPrimitivePage,
+    *,
+    bin_width_x: float = _DEFAULT_BIN_WIDTH_X,
+    bin_height_y: float = _DEFAULT_BIN_HEIGHT_Y,
+    min_flanking_groups: int = _DEFAULT_MIN_FLANKING_GROUPS,
+    min_flanking_chars: float = _DEFAULT_MIN_FLANKING_CHARS,
+    min_gutter_lines: float = _DEFAULT_MIN_GUTTER_LINES,
+) -> list[dict[str, object]]:
+    """I corridoi della pagina come dati puri: dove stanno, cosa hanno ai
+    fianchi, e perche' sono stati ammessi o respinti.
+
+    Non decide niente e non crea candidati: e' l'uscita osservativa che permette
+    a un consumer di sapere che un corridoio **c'era** anche quando l'ammissione
+    lo ha respinto. `reject_reason` a `None` significa ammesso.
+
+    Restituisce dati semplici e non le strutture interne del producer, per la
+    stessa ragione per cui `column_band_tree` era stato dichiarato un ponte
+    provvisorio: chi consuma non deve dipendere da come e' fatto chi produce.
+
+    `height_in_page_lines` e' l'altezza in **righe della pagina** — l'unita' che
+    usa `too_short` — e vale 0.0 su una pagina senza righe di testo.
+    """
+
+    judged, line_height = _judge_gutters(
+        primitive_page,
+        bin_width_x=bin_width_x,
+        bin_height_y=bin_height_y,
+        min_flanking_groups=min_flanking_groups,
+        min_flanking_chars=min_flanking_chars,
+        min_gutter_lines=min_gutter_lines,
+    )
+    rows: list[dict[str, object]] = []
+    for rect, profile, reason in judged:
+        # `_reject_reason` si ferma al primo motivo: un corridoio etichettato
+        # `too_few_wordy_lines` puo' essere anche troppo basso, e chi legge il
+        # motivo da solo non lo sa. Questo campo risponde alla domanda «la
+        # mancanza di parole e' l'UNICA cosa fra questo corridoio e
+        # l'ammissione?», e la risponde con i criteri del producer, non
+        # riscrivendoli altrove.
+        solo_parole = reason == "too_few_wordy_lines" and not _is_too_short(
+            rect, line_height=line_height, min_gutter_lines=min_gutter_lines
+        )
+        rows.append(
+            {
+                "x0": rect.x_bin_start * bin_width_x,
+                "x1": (rect.x_bin_end + 1) * bin_width_x,
+                "y0": rect.y0,
+                "y1": rect.y1,
+                "height_in_page_lines": (rect.y1 - rect.y0) / line_height if line_height else 0.0,
+                "left_lines": profile.left,
+                "right_lines": profile.right,
+                "left_chars_total": profile.left_chars_total,
+                "right_chars_total": profile.right_chars_total,
+                "reject_reason": reason,
+                "rejected_only_by_wordiness": solo_parole,
+            }
+        )
+    return rows
+
+
 def column_band_tree(
     primitive_page: NormalizedPrimitivePage,
     *,
@@ -1062,50 +1220,18 @@ def column_band_tree(
     riceve, quindi il passo cade.
     """
 
-    page_width = primitive_page.page_geometry.width
-    page_height = primitive_page.page_geometry.height
-    groups, _unparsed = _group_by_pymupdf_line(
-        list(primitive_page.text_primitives), page_width=page_width, page_height=page_height
-    )
-    if not groups:
-        return []
-
-    grid, _n_x, _n_y = _build_gap_grid(
-        groups,
-        page_width=page_width,
-        page_height=page_height,
+    judged, _line_height = _judge_gutters(
+        primitive_page,
         bin_width_x=bin_width_x,
         bin_height_y=bin_height_y,
+        min_flanking_groups=min_flanking_groups,
+        min_flanking_chars=min_flanking_chars,
+        min_gutter_lines=min_gutter_lines,
     )
-    rects = _chain_gutters(grid, bin_height_y=bin_height_y)
-    for rect in rects:
-        _extend_gutter_span(grid, rect, bin_height_y=bin_height_y)
-    rects.sort(key=lambda r: (r.y1 - r.y0), reverse=True)
-
-    rotated_groups = _rotated_group_ids(groups, list(primitive_page.text_primitives))
-    text_length_by_id = {
-        p.primitive_id: len((p.text or "").strip()) for p in primitive_page.text_primitives
-    }
-    line_height = _median_line_height(groups)
-    accepted = [
-        rect
-        for rect in rects
-        if _reject_reason(
-            _flanking_profile(
-                groups,
-                rect,
-                bin_width_x=bin_width_x,
-                rotated_groups=rotated_groups,
-                text_length_by_id=text_length_by_id,
-                min_chars=min_flanking_chars,
-            ),
-            rect,
-            line_height=line_height,
-            min_flanking_groups=min_flanking_groups,
-            min_gutter_lines=min_gutter_lines,
-        )
-        is None
-    ]
+    if not judged:
+        return []
+    accepted = [rect for rect, _profile, reason in judged if reason is None]
+    page_width = primitive_page.page_geometry.width
     return _segment_tree(
         accepted,
         bin_width_x=bin_width_x,
