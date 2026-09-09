@@ -134,6 +134,47 @@ def sizes_that_carry_headings(
 # frase legittima. `Criterio_Capolettera_v1.md` §3.
 LEADER_RUN = 4
 
+# I confini del **titolo impilato**, `Criterio_TitoloImpilato_v1.md` §1. Stanno
+# tutti dentro vuoti misurati su 114 coppie candidate dei sedici manuali: dentro
+# nessuno dei tre cade un solo caso.
+#
+#   sovrapposizione >= 0,22   vuoto 0,167 -> 0,264   interlinea normale / negativa
+#   sovrapposizione <  1,00   vuoto 0,871 -> 1,025   impilato / affiancato
+#   avanzamento     <= 1,50   vuoto 1,182 -> 3,898   titolo che continua / paragrafo
+STACK_OVERLAP_MIN = 0.22
+STACK_OVERLAP_MAX = 1.0
+STACK_ADVANCE_MAX = 1.5
+
+
+def is_stacked(previous: SizedLine, line: SizedLine) -> bool:
+    """Se le due righe sono composte **una sull'altra**, cioe' un titolo solo.
+
+    `Criterio_TitoloImpilato_v1.md` §1. Un titolo display impilato e' composto con
+    l'**interlinea negativa** -- le parole si incastrano -- mentre un'intestazione
+    e cio' che introduce hanno interlinea normale, e due colonne affiancate hanno
+    scatole che si contengono. Tre figure diverse, e la composizione le distingue.
+
+    **L'avanzamento positivo non e' una soglia, e' un verso**: dice che la seconda
+    riga sta *sotto* e non *accanto*. E' cio' che toglie le 22 coppie di BoB --
+    `'sgattaiolare' + 'ESEMPI'`, `'orologio da 8' + 'MIGLIORARE LE MISSIONI'` --
+    che hanno avanzamento **negativo** perche' stanno in colonne diverse che il
+    blocco ha messo insieme, e che avevano fatto ritirare il meccanismo
+    precedente (`Esito_TitoloComposto_v1.md` §2).
+
+    Tutto e' rapportato all'altezza della **scatola piu' piccola**: e' la sola
+    delle due che sia confrontabile fra corpi molto diversi.
+    """
+
+    smaller = min(previous.y1 - previous.y0, line.y1 - line.y0)
+    if smaller <= 0:
+        return False
+    overlap = (previous.y1 - line.y0) / smaller
+    advance = (line.y0 - previous.y0) / smaller
+    return (
+        0.0 < advance <= STACK_ADVANCE_MAX
+        and STACK_OVERLAP_MIN <= overlap < STACK_OVERLAP_MAX
+    )
+
 
 def has_leader(text: str) -> bool:
     """Se il testo contiene un filetto di guida, cioe' una voce di sommario.
@@ -247,7 +288,9 @@ def heading_lines(
 
 
 def merge_wrapped(
-    lines: Sequence[SizedLine], breaks: frozenset[int] = frozenset()
+    lines: Sequence[SizedLine],
+    breaks: frozenset[int] = frozenset(),
+    levels: dict[float, int] | None = None,
 ) -> tuple[list[SizedLine], list[int]]:
     """Unisce le righe consecutive dello **stesso blocco** e **pari dimensione**.
 
@@ -270,23 +313,23 @@ def merge_wrapped(
     lo mangiava: e' la ragione per cui usciva `**DONI I doni sono aspetti…**` in
     un grassetto solo.
 
-    **L'unione a dimensioni DIVERSE e' stata provata ed e' caduta**, ed e' il
-    meccanismo B di `Criterio_TitoloComposto_v1.md`. Doveva riparare Kul, dove un
-    titolo display cambia corpo parola per parola -- `ORRORI` (86), `DELLA` (95),
-    `GNOSI` (102) -- e l'intera struttura di primo livello del manuale era la
-    parola `DELLA`.
+    **A dimensioni diverse serve la geometria**, ed e' il
+    `Criterio_TitoloImpilato_v1.md`. Il primo tentativo -- unire due titoli
+    adiacenti dello stesso blocco e basta -- e' caduto con 83 unioni in
+    maggioranza sbagliate (`'sgattaiolare ESEMPI'` su BoB): «solo lo stesso
+    blocco» impedisce di fondere i titoli **fratelli**, che stanno a pari
+    dimensione in blocchi diversi, ma un'intestazione e cio' che introduce hanno
+    dimensioni **diverse** e stanno nello **stesso** blocco.
 
-    **Misurato, produce 83 unioni e la maggioranza e' sbagliata**: su BoB
-    `'RELAZIONI I PRESCELTI'`, `'sgattaiolare ESEMPI'`,
-    `'orologio da 8 MIGLIORARE LE MISSIONI'`; su BiD
-    `'ABILITA' SPECIALI DEL GUANTO gambetto di torre'`. Incolla l'intestazione di
-    sezione al primo elemento che introduce.
+    Con ``levels`` dato, due righe di dimensioni diverse si uniscono solo se sono
+    **composte una sull'altra** -- `is_stacked` -- e il livello risultante e'
+    quello della dimensione **maggiore**: un titolo e' prominente almeno quanto la
+    sua parola piu' prominente. Su Kul i corpi crescono parola per parola, 86, 95,
+    102, e quella crescita e' un effetto grafico, non una gerarchia.
 
-    **La ragione, che spiega perche' il vincolo qui non basta**: «solo lo stesso
-    blocco» impedisce di fondere i titoli **fratelli**, che stanno a **pari
-    dimensione** in blocchi diversi. Ma un'intestazione e cio' che introduce hanno
-    dimensioni **diverse** e stanno spesso nello **stesso** blocco. Il vincolo che
-    rendeva sicura questa regola era la pari dimensione, e toglierlo la scopre.
+    Il confronto geometrico e' fra la riga e **quella originale che la precede**,
+    non fra la riga e l'unione accumulata: le scatole di un'unione si allargano, e
+    misurare su quelle cambierebbe i rapporti a ogni passo.
 
     Torna la lista unita e, per ogni riga originale, l'indice del gruppo a cui
     appartiene -- serve al chiamante per sapere dove NON rompere il paragrafo.
@@ -294,17 +337,28 @@ def merge_wrapped(
 
     merged: list[SizedLine] = []
     group_of: list[int] = []
+    previous: SizedLine | None = None
     for position, line in enumerate(lines):
+        same_size = bool(merged) and abs(merged[-1].size - line.size) < 0.05
+        stacked = (
+            levels is not None
+            and bool(merged)
+            and previous is not None
+            and levels.get(merged[-1].size) is not None
+            and levels.get(line.size) is not None
+            and is_stacked(previous, line)
+        )
         if (
             position not in breaks
             and merged
             and merged[-1].block == line.block
-            and abs(merged[-1].size - line.size) < 0.05
+            and (same_size or stacked)
         ):
             merged[-1] = SizedLine(
                 block=line.block,
                 text=f"{merged[-1].text} {line.text}".strip(),
-                size=line.size,
+                # A pari dimensione resta quella; impilate vince la maggiore.
+                size=line.size if same_size else max(merged[-1].size, line.size),
                 x0=min(merged[-1].x0, line.x0),
                 x1=max(merged[-1].x1, line.x1),
                 font=merged[-1].font,
@@ -314,6 +368,7 @@ def merge_wrapped(
         else:
             merged.append(line)
         group_of.append(len(merged) - 1)
+        previous = line
     return merged, group_of
 
 

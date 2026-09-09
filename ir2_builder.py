@@ -731,7 +731,11 @@ def build_page_ir2(
     # Le righe che vanno a capo si uniscono **prima** di decidere: la condizione
     # «sola alla sua dimensione nel blocco» conterebbe due volte un titolo
     # spezzato, e non sarebbe piu' un titolo. `Criterio_Titoli_v3.md` §2.
-    merged_lines, group_of = merge_wrapped(sized)
+    # I livelli entrano perche' un titolo display puo' cambiare corpo parola per
+    # parola. `Criterio_TitoloImpilato_v1.md`: si uniscono solo se composte una
+    # sull'altra, che e' cio' che distingue `'CAPITOLO 1' + 'le basi'` da
+    # `'sgattaiolare' + 'ESEMPI'`, dove il secondo e' in un'altra colonna.
+    merged_lines, group_of = merge_wrapped(sized, levels=heading_levels or {})
     merged_levels = heading_lines(
         merged_lines, prose_sizes, heading_levels or {},
         max_length=heading_max_length,
