@@ -1,0 +1,174 @@
+RISULTATI — le schede in Markdown, verbatim con la nota.
+Criterio: CRITERIO_MARKDOWN_SCHEDE.md.  Bersaglio: il Markdown.
+
+  python3 markdown_schede.py <Dragonbane-Quickstart.pdf> --out <dir> --visuali
+  python3 markdown_schede.py <Dragonbane-Quickstart.pdf> --out <dir> --da 29 --a 29
+
+Il Markdown esce da `markdown_builder.build_markdown(DocumentIR)` del repo,
+INVARIATO. Righe e colonne dalla catena di produzione (cattura -> primitive
+normalizzate -> producer `layout.column_band` -> ordine a bande). Nessun tipo di
+blocco nuovo, nessun wiring, nessun producer.
+
+================================================================
+R1 — conservazione del contenuto.  REGGE
+================================================================
+  86.809 caratteri non-spazio in entrata dalle primitive,
+  86.809 negli blocchi IR: multiset IDENTICO su tutte le 47 pagine.
+  Verificato sulla IR e non sul Markdown, perche' il renderer aggiunge
+  legittimamente `#`, `**`, `>` e i commenti di pagina.
+
+================================================================
+R2 — la scheda esce come blocco unico.  2 SU 4, come predetto
+================================================================
+  pagina 29  RAGNO GIGANTE         il callout comincia sul nome        SI
+  pagina 31  PIPISTRELLI VAMPIRO   il callout comincia sul nome        SI
+  pagina 33  LA SIGNORA            il callout comincia in mezzo alla
+                                   prosa; il nome esce FUORI, come
+                                   titolo `## LA SIGNORA`              NO
+  pagina 35  IL WIGHT              idem                                NO
+
+  Predetto 2 su 4 prima di eseguire, per la causa gia' misurata nel giro
+  precedente (nome centrato sopra un corpo a due colonne). Effetto collaterale
+  non previsto e non sgradevole: su 33 e 35 il nome non si perde comunque,
+  perche' la regola «maiuscolo corto = titolo» di `markdown_builder` lo promuove
+  a `##`. Il lettore vede il nome; il blocco non lo contiene.
+
+  Difetto reso VISIBILE dalla resa, che i numeri non mostravano — pagina 29:
+
+     > [!SCHEDA] gruppo 5 — Armatura, Movimento, PF
+     >
+     > RAGNO GIGANTE
+     > Ferocia: 2  Taglia: Normale
+     > Movimento: 24  Armatura: — PF: 36
+     > ATTACCHI MOSTRUOSI
+     > ...
+     > o venire intrappolato in essa, rendendogli impossibile muoversi.
+     > Liberarsi richiede di superare un tiro          <- FRASE TRONCATA
+
+     > [!SCHEDA] gruppo 1 — PF, di
+     >
+     > di FOR con un castigo (azione). Gli altri possono aiutare.   <- e ripresa
+
+  Una testa spuria del «gruppo 1», la cui firma e' {PF, di} — dove `di` e' un
+  frammento di prosa e non un'etichetta — taglia la scheda a meta' di una frase.
+  Nel conteggio 148/148 questo non si vede; in pagina si vede subito.
+  Nello stesso blocco finiscono il piede di pagina, il numero di pagina e il
+  filigranato della copia: e' il residuo dichiarato fuori scope in Milestone 37
+  («piede di pagina e numeri di pagina finiscono nelle bande»).
+
+================================================================
+R3 — il rumore.  MURO, come predetto
+================================================================
+  68 regioni su 47 pagine.  33 pagine su 47 ne hanno almeno una, fino a 5.
+     callout per pagina:  0 -> 14 pagine   1 -> 10   2 -> 15   3 -> 5
+                          4 ->  2 pagine   5 ->  1
+
+  Da quale gruppo vengono:
+     gruppo 0  {–, ✦}                  32 regioni   <- meta' del rumore
+     gruppo 1  {PF, di}                11
+     gruppo 2  {tiro di, ✦}             6
+     gruppo 3  {abilita' personaggio}   5
+     gruppo 4  {armi}                   5
+     gruppo 5  {Armatura, Movimento, PF} 5   <- le schede mostro
+
+  Meta' del rumore viene da UN gruppo la cui firma sono due caratteri di elenco
+  puntato (`–`, `✦`): il rilevatore tratta il marcatore di elenco come
+  un'etichetta. Non e' una sorpresa teorica — il punto elenco di un manuale e'
+  spesso un codepoint di un font di simboli — ma diventa un fatto solo qui.
+
+================================================================
+La regola di non-perdita: accesa, e spara nel posto sbagliato
+================================================================
+  Regioni «struttura non riconosciuta» emesse: 4, TUTTE della firma rara
+  `Dragonbane`, e sono righe singole di prosa che cominciano con quella parola
+  in stile diverso (pagine 1, 1, 2, 4).
+
+  Le quattro schede mostro NON escono con quella nota, perche' le loro righe
+  sono coperte dai record del gruppo 5 e la regola dichiarata dice che il record
+  vince. E' il comportamento voluto — la scheda e' rivendicata da un template —
+  ma va detto chiaro: su questo manuale la regola di non-perdita non ha ancora
+  protetto niente di prezioso, ha solo incorniciato quattro righe di prosa.
+
+================================================================
+Fuori scope, con il numero pronto per il prossimo giro
+================================================================
+  Sovrapposizioni regione x visuale: 4.208 coppie (non 4.208 visuali distinte:
+  ogni regione viene confrontata con ogni primitiva visiva della sua pagina).
+  La nota che sostituisce sfondi e cornici non e' stata fatta: serve
+  l'estrazione degli asset. Il numero dice che non e' un caso raro da rimandare
+  ancora a lungo — su queste pagine il fondo decorativo e' ovunque.
+
+================================================================
+VERDETTO contro il criterio
+================================================================
+R1 era la condizione: REGGE, quindi il giro si accetta. R2 e R3 erano da
+riportare: 2 su 4 e un muro, entrambi predetti prima.
+
+Cosa questo giro ha aggiunto che i numeri non davano: la resa mostra che il
+problema aperto non e' piu' «trovare le schede» — su 4 su 4 il gruppo giusto le
+contiene — ma **dove cominciano e dove finiscono**, e che meta' del rumore
+viene da una sola confusione (marcatore di elenco letto come etichetta).
+
+
+################################################################
+SECONDA PASSATA — dopo i rilievi dell'utente sul Markdown
+################################################################
+Rilievi: la tabella andrebbe formattata meglio, mancano dei rimandi, gli elenchi
+sono spariti. Verificato prima di rispondere: dal Markdown non manca NESSUN
+carattere (IR 19.248 -> markdown 19.248 non-spazio; il renderer aggiunge solo
+`>`, `*`, `#` e i commenti di pagina). I tre problemi sono di STRUTTURA.
+
+## Gli elenchi: difetto mio, corretto
+Costruivo un `BlockIR` per RIGA. Ma nella IR del repo il blocco e' il
+PARAGRAFO, e la riga viene dalla sorgente (`text:b{block}:l{line}:s{span}`).
+Senza il blocco, il renderer fondeva gli elenchi in un paragrafo unico e non
+riceveva mai `role="bullet_list"`.
+Corretto: il paragrafo e' il blocco di sorgente, e i marcatori di elenco sono
+**dedotti dal documento** — un'etichetta ricorrente senza caratteri alfanumerici
+e' un marcatore. Su Dragonbane deduce `–` e `✦`.
+   `ir_builder.py:17` tiene una lista cablata di sei marcatori: `✦` c'e', `–` no.
+   Il criterio dedotto qui la contiene su questo manuale senza indovinarla.
+Effetti: 24 voci di elenco rese come tali sulle 8 pagine del campione, e le
+regioni scendono da 64 a 32 — il gruppo la cui firma erano i due marcatori non
+e' piu' un record, e' un elenco.
+Difetto residuo, non corretto: dove i marcatori stanno in una colonna a parte
+(`✦ ✦` su una riga sola, testi su un'altra) le voci restano fuse. E' di nuovo
+un fatto di ordine di lettura, non di resa.
+
+## La tabella: c'e' gia' un producer, non l'ho consumato
+`table_candidate` (pdfplumber, wired da Milestone 21) trova una tabella su
+4 pagine su 4. Su pagina indice 29 il bbox e' (85.2,393.1)-(521.8,722.2) e
+contiene 23 righe a partire da `ATTACCHI MOSTRUOSI`: e' esattamente la tabella
+del d6. Il Markdown la appiattisce perche' questo giro ha consumato UN producer
+su sei — solo `column_band`.
+
+## I confini della scheda: sono disegnati sulla pagina
+Misurato sulle 4 pagine di scheda.
+   `embedded_visual` (wired, Milestone 27/28): su 4 pagine su 4 esiste un
+   candidato disegnato che contiene il BLOCCO DEI CAMPI col nome; su 3 pagine su
+   4 lo stesso candidato contiene anche la tabella degli attacchi, cioe' la
+   scheda intera. (Prima avevo scritto 4 su 4 avendone controllate 2: su pagina
+   29 il riquadro si ferma ai campi e la tabella e' un oggetto disegnato a
+   parte, che `table_candidate` trova esattamente.)
+      pag 29  box (53.2,318.7)-(307.3,413.0)   4,9% pagina  righe 0..2
+              solo i campi: la tabella sotto e' un altro oggetto
+      pag 31  box (53.2, 79.3)-(307.3,497.6)  21,9% pagina  righe 0..27
+              da 'PIPISTRELLI VAMPIRO' a 'sangue delle vittime.'
+      pag 33  box (52.7,279.0)-(559.5,712.9)  45,4% pagina  righe 0..42
+              da 'LA SIGNORA' a 'zona calda. L'armatura non ha effetto.'
+      pag 35  box (52.7,259.2)-(559.5,716.2)  47,8% pagina  righe 0..45
+              da 'IL WIGHT' a 'cade a terra. L'attacco puo' essere parato.'
+   `interior_visual_frame` (wired, Milestone 31): su 2 pagine su 4 trova il
+   riquadro STRETTO dei soli campi.
+      pag 29  box (53.2,318.7)-(307.3,413.0)  righe 0..2
+              'RAGNO GIGANTE' / 'Ferocia: 2 Taglia: Normale' /
+              'Movimento: 24 Armatura: — PF: 36'
+   Perche' non li trova su 33 e 35: il riquadro li' copre il 45-48% della pagina
+   e `max_area_ratio` di IVF sta al 28% — soglia legacy che `AGENTS.MD` elenca
+   gia' fra i «default non definitivi».
+
+Conseguenza: la domanda «come fa uno script a capire dove finisce una scheda
+senza un LLM» ha una risposta che non richiede deduzione. **Non la deduce: la
+legge.** Il confine e' disegnato, e i producer che lo trovano sono gia' in
+produzione. E lo stesso riquadro e' anche lo sfondo decorativo che l'obiettivo
+vuole sostituire con una nota: un oggetto, due ruoli.
