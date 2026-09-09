@@ -173,7 +173,7 @@ osservazione backend
 - Un candidato tabella non rimuove testo e non produce CSV definitivo prima della resolution.
 - L'isolamento fra producer è una proprietà voluta, non un limite da superare: la relazione fra candidati di producer diversi si decide in Resolution o nel consumer, mai dentro un producer. Fino ai candidati ragionare a pezzi isolati è corretto; dal consumer in poi la combinazione è inevitabile, perché una regione influisce sull'altra.
 - Il precedente è ratificato due volte: Milestone 24 (`page_edge_visual`/`side_band`) e Milestone 30 (`interior_visual_frame`/`embedded_visual`, esplicitamente "stesso precedente" di Milestone 24). Milestone 33 ha invece **rinviato** la sovrapposizione banda/`table_candidate`/`embedded_visual` alla futura milestone del producer: è un rinvio, non una ratifica.
-- Questione aperta, non ancora un invariante: se un producer possa filtrare i propri candidati per anticipare una decisione del consumer. Il caso che la solleva è `column_band`, che con `too_few_wordy_lines` può accettare come banda la colonna dei numeri di una tabella (misurato su Vil p.223, tabella di dadi) oppure scartarla, a seconda di quanti caratteri portano quei numeri. Una versione precedente di questo bullet citava un esempio diverso, poi **ritirato perché falso** (su DB p.18 il gutter scartato era un rientro sospeso, non una colonna di tabella), e un criterio `too_few_chars` che nel codice non esiste più. Il caso che la complica è `embedded_visual`, già wired, che filtra il proprio output con soglie duplicate localmente da `page_covering_visual` e `page_edge_visual` — alla lettera un filtro su criterio altrui, nello spirito ciò che tiene isolati i due producer. Finché la distinzione fra i due casi non è formulata, la regola non è applicabile e non va trattata come vincolante.
+- Questione **risolta per il caso che la sollevava**, non ancora in generale: se un producer possa filtrare i propri candidati per anticipare una decisione del consumer. Il caso era `column_band`, che con `too_few_wordy_lines` può accettare come banda la colonna dei numeri di una tabella (misurato su Vil p.223, tabella di dadi) oppure scartarla, a seconda di quanti caratteri portano quei numeri. **Milestone 42 lo chiude con l'evidenza**: su 15 pagine di DB marcate a mano dall'utente il giudizio a vista coincide col meccanismo 10 corridoi su 10, e dice che la colonna dei numeri è un separatore di colonna a tutti gli effetti — quindi il corridoio **va emesso**, non filtrato. Il discriminatore che serve (c'è una tabella qui?) **non sta nel profilo del corridoio**: sulla somma dei caratteri di fianco la colonna D6 di DB 121 e il punto elenco di Apo si sovrappongono (3 contro 2-4) e nessuna soglia le separa. Sta nei candidati di `table_candidate`, cioè fuori dal producer, dove questo stesso elenco lo colloca. Milestone 43 lo implementa: misura dei corridoi respinti più regola in Resolution. Una versione precedente di questo bullet citava un esempio diverso, poi **ritirato perché falso** (su DB p.18 il gutter scartato era un rientro sospeso, non una colonna di tabella), e un criterio `too_few_chars` che nel codice non esiste più. **Resta aperto** il caso che la complica, e non è stato toccato: `embedded_visual`, già wired, filtra il proprio output con soglie duplicate localmente da `page_covering_visual` e `page_edge_visual` — alla lettera un filtro su criterio altrui, nello spirito ciò che tiene isolati i due producer. Finché quel caso non è formulato, la regola generale non è applicabile e non va trattata come vincolante.
 
 ### Coverage e ownership
 
@@ -857,3 +857,68 @@ estendibile con una soglia unica. L'ottava — contenimento
 `interior_visual_frame ⊃ embedded_visual`, l'unica relazione che `State.md` indicasse come da
 guardare per prima — è caduta contro criterio pre-registrato: 1,94×/1,24× su Fab contro una
 barra di 3×, e il 40,6% d'origine si è rivelato prodotto per il 90% da due pagine su quaranta.
+
+## Milestone 42 - perché `column_band` non emette bande (diagnostica pura) — completata
+
+Numerazione: le Milestone 38-41 stanno su altri rami (IR 2 minima con bersaglio
+Markdown, la tabella in IR 2, l'uscita leggibile, i titoli per fascia). Questo
+ramo riparte da 37 e prende il primo numero libero; la duplicazione fra i due
+percorsi Markdown è reale e resta da sanare.
+
+Diagnostica sola: nessun producer modificato, nessuna soglia toccata, nessun
+wiring — stesso perimetro di Milestone 25, 29 e 32. Criterio pre-registrato in
+`Criterio_BandeMancanti_v1.md` e `Criterio_SommaCaratteriFianco_v1.md`, ogni fase
+scritta prima dei propri dati; script committati
+`scripts/scan_missing_column_bands.py` e `scripts/compare_flanking_char_sum.py`.
+
+Tre ritrattazioni registrate, tutte con la misura che le corregge: la domanda
+d'origine era mal posta (12 delle 14 pagine senza bande sono frontespizi); «43
+pagine su 47 con testo fuori banda» contava le pagine sbagliate, e il danno reale
+va dallo 0% al 5,2% del testo di pagina secondo il manuale; la conclusione che
+`too_few_wordy_lines` scartasse correttamente è stata **ribaltata dal giudizio a
+vista dell'utente**, 10 corridoi su 10 su 15 pagine di DB.
+
+Causa vera: una banda copre solo il tratto in cui il corridoio è dimostrato, e
+sopra e sotto il consumer ordina per `y` **in silenzio**. Quattro varianti del
+criterio di fianco misurate su verità (14 corridoi giudicati a vista), DB e Apo;
+vince **V4 — dentro un `table_candidate` si scarta solo se un lato somma zero
+caratteri**, 14/14 e contenuta (DB 326→357, Apo 47→69, zero fuori tabella).
+
+Lezione registrata: la verità di riferimento veniva tutta da DB, e su DB la
+variante senza cancello sembrava gratis; su Apo apriva 33 elenchi puntati come
+colonne. Misurare un manuale solo avrebbe dato la risposta sbagliata.
+
+Restano fuori scope: la frammentazione delle bande; il caso `too_short` sul filo;
+le pagine senza bande che sono frontespizi.
+
+## Milestone 43 - V4 in Resolution e la lettura per righe delle tabelle — completata
+
+Implementazione con i numeri della Milestone 42 come **oracolo**: non si rimisura,
+si rispetta. Piano e criteri in `Criterio_Milestone43_V4_v1.md`, verbale in
+`Verbale_Milestone43_v1.md`.
+
+Tre moduli nuovi e un solo file preesistente toccato
+(`page_analysis_column_band.py`, di cui la maggior parte è estrazione a
+comportamento invariato):
+
+- `page_analysis_column_band_rejected_gutters.py` — **misura, non candidato**: i
+  corridoi respinti smettono di sparire. Un `RegionCandidate` in più avrebbe
+  cambiato ciò che ogni consumer si trova davanti; la misura non cambia il
+  comportamento di nessuno. Stesso precedente di Milestone 33.
+- `resolution_column_boundaries.py` — la regola V4. Artefatto **parallelo**:
+  `ResolvedCandidateOutcome` assegna un esito a un candidato, e un corridoio
+  respinto candidato non è, quindi `resolution_model.py` e
+  `resolution_page_candidates.py` non vengono toccati. Quattro esiti, e ogni
+  corridoio respinto ne riceve uno.
+- `table_row_reading_order.py` — funzione pura, non wired: dentro una regione
+  coperta da un `table_candidate` le righe si leggono per righe. Senza, la regola
+  V4 peggiora le tabelle invece di migliorarle.
+
+Oracolo centrato attraverso i moduli di produzione
+(`scripts/verify_resolution_column_boundaries.py`): DB 326+31=357, Apo 47+22=69,
+zero confini ammessi fuori da una tabella. Suite 1288 test verdi (1263
+preesistenti + 25 nuovi), Ruff verde, BasedPyright 0/0/0.
+
+Restano fuori scope, dichiarati: nessun consumer di questo ramo usa i confini
+ammessi né l'ordinamento per righe — il percorso Markdown di produzione vive su
+IR 2, su un altro ramo, e collegarli è lavoro suo.
