@@ -97,10 +97,15 @@ from page_analysis_co_reference import build_co_referenced_page_analyses  # noqa
 from page_analysis_co_reference_binding import bind_co_referenced_page_analyses  # noqa: E402
 from page_analysis_column_band import (  # noqa: E402
     build_column_band_page_analysis_with_measurements,
+    column_band_gutter_rows,
+)
+from page_analysis_column_band_rejected_gutters import (  # noqa: E402
+    measure_rejected_gutters,
 )
 from primitive_model import NormalizedPrimitivePage  # noqa: E402
 from primitive_normalizer import normalize_backend_page_capture  # noqa: E402
 from pymupdf_capture import capture_pymupdf_page  # noqa: E402
+from resolution_column_boundaries import resolve_column_boundaries  # noqa: E402
 from resolution_page_candidates import resolve_page_candidates  # noqa: E402
 
 
@@ -702,6 +707,33 @@ def run(
         gutters = tuple(
             interval for measure in band_measures for interval in measure.gutter_x_intervals
         )
+
+        # I confini che RESOLUTION ammette dentro le tabelle (Milestone 44).
+        # Sono corridoi che `column_band` scarta perche' un lato non porta
+        # parole -- la colonna dei numeri di dado -- e che il giudizio a vista
+        # dell'utente su 15 pagine ha dichiarato separatori di colonna a tutti
+        # gli effetti, 10 corridoi su 10. Senza di loro i numeri e la
+        # descrizione finiscono nella stessa cella, o la regione non ha due
+        # confini e nessuna tabella viene costruita.
+        #
+        # Niente e' deciso qui: gli intervalli arrivano gia' ammessi, e la
+        # decisione ha guardato l'uscita di due producer, che e' il posto dove
+        # `AGENTS.MD` la colloca.
+        candidati_tabella = tuple(
+            candidate
+            for analysis in analyses
+            if analysis.provenance.producer_name == "table_candidate"
+            for candidate in analysis.candidates
+        )
+        confini_ammessi = resolve_column_boundaries(
+            page_id=primitive_page.page_id,
+            rejected_gutters=measure_rejected_gutters(
+                primitive_page.page_id, column_band_gutter_rows(primitive_page)
+            ),
+            table_candidates=candidati_tabella,
+        ).admitted
+        gutters = gutters + tuple((b.x0, b.x1) for b in confini_ammessi)
+
         table_regions: list[TableRegionInput] = []
         for analysis in analyses:
             if analysis.provenance.producer_name != "table_candidate":

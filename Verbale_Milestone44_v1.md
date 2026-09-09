@@ -199,3 +199,53 @@ Le tre fasi previste dal piano sono fatte:
 ancora ne' i confini ne' l'ordinamento per righe. Il percorso Markdown di
 produzione vive su IR 2, che sta su un altro ramo (Milestone 38-41). Collegare
 questi tre pezzi a un consumer reale e' lavoro suo, non di questa milestone.
+
+---
+
+# L'innesto in IR 2: i confini ammessi arrivano al consumer
+
+Criterio pre-registrato in `Criterio_ConfiniInTabellaIR2_v1.md`.
+
+## Cosa e' stato collegato, e cosa NO
+Collegati i **confini**: `scripts/prototype_ir2_page.py` — da cui `main_ir2.py`
+importa, quindi il punto e' unico e vale per il documento intero — aggiunge ai
+`gutter_x_intervals` di `TableRegionInput` gli intervalli che
+`resolve_column_boundaries` ammette.
+
+**Non** collegato l'ordinamento per righe, e va detto perche' e' un risultato:
+`ir2_builder.build_table` raggruppa gia' le righe di tabella per sovrapposizione
+verticale delle righe di sorgente, con lo stesso meccanismo di
+`table_row_reading_order.py` e con un'uscita migliore — una griglia di celle
+invece di un ordine. Collegare anche quella sarebbe stata una seconda
+implementazione della stessa cosa. Il modulo resta come contratto verificato dai
+suoi test, non come consumatore.
+
+## Le predizioni
+- **Q1 — la tabella guadagna la colonna dei numeri: CONFERMATA.** Su DB 122
+  (TESORI 2) `| D20 TESORO | VALORE/OGGETTO/EFFETTO |` diventa
+  `| D20 | TESORO | VALORE/OGGETTO/EFFETTO |`, e la riga `| 3 Anello d'Oro | 4D6
+  monete d'oro |` diventa `| 3 | Anello d'Oro | 4D6 monete d'oro |`.
+- **Q2 — non-regressione: CONFERMATA, ed era la condizione.** `main_ir2.py` su
+  DB pagine 95-125 prima e dopo: **11 pagine cambiate, 11 pagine con confini
+  ammessi, e sono le stesse**. Nessuna pagina toccata dove Resolution non ha
+  ammesso niente.
+- **Q3 — il costo: FALSIFICATA.** Prevedevo un aumento misurabile perche'
+  `column_band_gutter_rows` ricalcola i corridoi. Misurato: 57,1s prima, 57,0s
+  dopo su 31 pagine con 4 processi. Sotto il rumore.
+
+## L'effetto, misurato sulle 11 pagine che cambiano
+    tabelle costruite      10 -> 12
+    righe di tabella      288 -> 346
+    celle non vuote       720 -> 846   (+126)
+    celle totali        1.262 -> 1.593
+
+Piu' testo finisce dentro la griglia invece di restare paragrafo residuo. Non e'
+uniforme: **due pagine peggiorano** — DB 96 perde una cella piena, DB 102 ne
+perde cinque. Su DB 102 la tabella era gia' quasi vuota prima: le righe di
+descrizione attraversano un gutter e `_column_of` le lascia fuori per scelta
+dichiarata («mettere il testo nella cella sbagliata in silenzio e' peggio che
+lasciarlo paragrafo»). Il confine ammesso aggiunge una colonna corretta a una
+griglia che non riesce comunque a collocare le descrizioni: e' un difetto
+preesistente di quella pagina, non introdotto qui, ma il conto peggiora.
+
+Suite completa verde, ruff verde.
