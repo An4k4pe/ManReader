@@ -1586,4 +1586,118 @@ Moduli in albero **non collegati**, taggati con la loro diagnosi:
 
 **Milestone chiusa nel commit che aggiunge questa sezione.**
 
+## Milestone 43 — perché `column_band` non emette bande (diagnostica pura) — completata
+
+**Provenienza, e perché il numero non è quello con cui è nata.** Sviluppata su un
+ramo parallelo derivato da Milestone 37, che non conosceva le Milestone 38-42 di
+questa linea; lì era numerata 42. Portata qui per cherry-pick e rinumerata al
+primo numero libero. Il codice è arrivato **senza conflitti** — su questa linea
+`page_analysis_column_band.py`, `resolution_model.py` e
+`resolution_page_candidates.py` erano identici al punto di partenza — e la suite
+completa resta verde.
+
+Diagnostica sola: nessun producer modificato, nessuna soglia toccata, nessun
+wiring — stesso perimetro di Milestone 25, 29 e 32. Criteri pre-registrati in
+`Criterio_BandeMancanti_v1.md` e `Criterio_SommaCaratteriFianco_v1.md`, ogni fase
+scritta prima dei propri dati; script committati
+`scripts/scan_missing_column_bands.py` e `scripts/compare_flanking_char_sum.py`.
+Verbale in `Verbale_Milestone43_v1.md`.
+
+**Il fatto che la apre è registrato qui.** Milestone 38 annota «6 pagine su 10
+non producono bande» come limite del potere discriminante di E-B, e non lo
+indaga. Questa milestone lo indaga.
+
+**Tre ritrattazioni, ognuna con la misura che la corregge.** La domanda d'origine
+era mal posta: 12 delle 14 pagine senza bande hanno 1-3 righe di testo, sono
+frontespizi, e non avere colonne è l'esito giusto. Il numero «43 pagine su 47 con
+testo fuori banda» contava le pagine con almeno una riga fuori: la quota reale è
+il **6,1%**, e solo metà di quella è testo affiancato — il danno effettivo va
+dallo **0% al 5,2%** secondo il manuale. Terza: un valore riportato senza
+misurarlo («il corridoio è alto ~2 righe»), mentre la misura dice 34,00pt contro
+un minimo di 34,06 — scartato per **sei centesimi di punto**, e l'unità con cui
+il criterio giudica un blocco è l'interlinea **della pagina**, non quella del
+blocco.
+
+**La causa**: una banda copre solo il tratto in cui il corridoio è dimostrato.
+Sopra e sotto, la pagina non ha struttura di colonna e il consumer ordina per `y`
+**in silenzio**.
+
+**Il giudizio a vista ha ribaltato una conclusione.** Avevo ispezionato tre
+corridoi scartati e generalizzato che `too_few_wordy_lines` «facesse il suo
+mestiere». Su **15 pagine di DB marcate a mano dall'utente** (rosso = banda che
+si forma, blu = banda che dovrebbe formarsi) il confronto col meccanismo è **10
+corridoi su 10** e dice il contrario: la colonna dei numeri di dado di una
+tabella è un separatore a tutti gli effetti. Caso più netto, DB p.122: nella
+stessa tabella `TESORO | VALORE` è ammesso e `D20 | TESORO` no.
+
+**Quattro varianti del criterio di fianco**, ognuna con criterio registrato prima:
+
+| regola | verità (14 corridoi) | DB 126 pag. | Apo 148 pag. |
+| --- | --- | --- | --- |
+| V0, oggi | 5/14 | 326 | 47 |
+| V1, somma ≥ 5 | 13/14 | 354 | 69 |
+| V3, lato non vuoto | 14/14 | 358 | 102, di cui **33 fuori tabella** |
+| **V4, non vuoto in tabella** | **14/14** | **357, 0 fuori** | **69, 0 fuori** |
+
+**V3 era 14 su 14 per un accidente di codifica**: su DB il rientro sospeso degli
+elenchi ha righe di fianco che sono span **vuoti** (somma 0), su Apo lo stesso
+elenco ha per marcatore il carattere `h` di `NelsonOrnaments` (somma 2-4). E la
+colonna D6 della FORESTA di DB 121 — tabella tagliata in due metà da tre righe —
+somma **3**: le due classi si sovrappongono, e nessuna soglia sulla somma le
+separa. Il discriminatore sta nei candidati di `table_candidate`, cioè fuori dal
+producer.
+
+Lezione registrata: la verità di riferimento veniva tutta da DB, e su DB la
+variante senza cancello sembrava gratis. Misurare un manuale solo avrebbe dato la
+risposta sbagliata.
+
+Restano aperti: la frammentazione delle bande; il caso `too_short` sul filo.
+
+## Milestone 44 — V4 in Resolution e la lettura per righe delle tabelle — completata
+
+Stessa provenienza della 43 (lì era numerata 43). Implementazione con i numeri
+della milestone precedente come **oracolo**: non si rimisura, si rispetta. Piano
+e criteri in `Criterio_Milestone44_V4_v1.md`, verbale in
+`Verbale_Milestone44_v1.md`.
+
+**Fase 1 — i corridoi respinti smettono di sparire.** Il verdetto su un corridoio
+non ammesso viveva in una variabile locale: quando il producer aveva finito, quel
+corridoio non esisteva più in nessun artefatto, mentre la docstring di
+`_reject_reason` dichiara da sempre che uno scarto etichettato è materiale per
+chi viene dopo. `_judge_gutters` è estratta da `column_band_tree` **senza cambiare
+una riga di comportamento**; il profilo porta anche le somme dei caratteri per
+lato, che nessun criterio legge. Nuovo modulo
+`page_analysis_column_band_rejected_gutters.py`: **misura, non candidato** — un
+`RegionCandidate` in più avrebbe cambiato ciò che ogni consumer si trova davanti.
+Il record rifiuta un respinto senza motivo.
+
+**Fase 2 — V4 in Resolution.** `ResolvedCandidateOutcome` assegna un esito a un
+**candidato**, e un corridoio respinto candidato non è: la regola vive quindi in
+un artefatto parallelo, `resolution_column_boundaries.py`, che non tocca né
+`resolution_model.py` né `resolution_page_candidates.py`. Quattro esiti, e ogni
+corridoio respinto ne riceve uno. Oracolo centrato attraverso i moduli di
+produzione: **DB 326+31=357, Apo 47+22=69**, zero confini ammessi fuori da una
+tabella. Su Apo i 33 `outside_table_candidate` sono gli elenchi puntati che V3
+avrebbe preso per colonne: rifiutati per nome, con il motivo scritto.
+
+**Fase 3 — le tabelle si leggono per righe.** Senza, la Fase 2 le peggiora: due
+colonne lette per colonne danno «tutti i numeri, poi tutte le descrizioni».
+`table_row_reading_order.py`, funzione pura: due righe stanno nella stessa riga di
+tabella se le loro estensioni verticali **si sovrappongono** — una relazione fra
+rettangoli, non una soglia. Le righe non si ricompongono, arrivano dalla sorgente
+e la funzione le riordina soltanto. Verificato su DB p.102: il numero di riga
+passa **davanti** alla propria descrizione invece che dentro.
+
+Suite: **1671 test verdi** su questa linea (1646 preesistenti + 25 portati), 7
+skipped. Ruff verde, BasedPyright 0/0/0.
+
+**Il passo che questa milestone rende possibile e non fa.** Sul ramo d'origine
+non esisteva alcun consumer: i confini ammessi e l'ordinamento per righe erano
+costruiti e non letti da nessuno. Qui **IR 2 esiste** (`ir2_builder`,
+`ir2_markdown`, `main_ir2`), e l'ordine dei nodi è contratto. Far consumare a
+quel percorso i confini di `resolution_column_boundaries` e l'ordinamento di
+`table_row_reading_order` è il lavoro immediatamente successivo, ed è il punto in
+cui si vedrebbe, su una pagina vera, se la tabella dei tesori si legge finalmente
+per righe.
+
 <!-- FINE DI State.md — se non leggi questa riga, la tua copia è troncata: fermati e dillo -->
