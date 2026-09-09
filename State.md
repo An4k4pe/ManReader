@@ -1478,4 +1478,112 @@ i diagnostici in `output/titoli/`.
 
 **Milestone chiusa nel commit che aggiunge questa sezione.**
 
+## Milestone 42 — dopo che i titoli funzionano per dimensione: che cosa resta, e perche'
+
+La Milestone 41 ha chiuso i titoli **per fascia di dimensione**. Questa raccoglie
+quello che resta fuori da quell'asse, e vale soprattutto per le **diagnosi**: tre
+meccanismi su cinque cadono, e ognuno dice una cosa che non si ritrova senza
+rifare le misure.
+
+**Il giudizio, finalmente eseguito.** `Criterio_TitoliPerFascia_v2` §4 dichiarava
+un veto di giudizio riga per riga e non lo aveva mai eseguito -- allora il
+meccanismo era gia' caduto su un altro veto, poi e' stato adottato e il giudizio
+non e' stato recuperato. Campione di **45 righe**, cinque per manuale su nove,
+seed `20260902`: **42 titoli su 45**. Le tre bocciate sono **attribuite col
+delta** e non a stima -- su Wil le regole adottate hanno prodotto zero entrate,
+quindi le sue due erano promosse anche prima; la terza, su FWK, e' un titolo vero
+col numero di pagina fuso in coda.
+
+**Il font: raggiungibile ma non puntabile.** `Criterio_TitoliDalFont_v2` cade, ed
+e' il **quinto** meccanismo che le schede fanno cadere. Il bersaglio pero' e'
+raggiungibile -- su Dag `PANORAMICA` e `PRINCIPI DEL GM` escono promosse -- e la
+diagnosi e' il risultato che resta:
+
+> Sotto il tetto della prosa, «non e' prosa di corpo» e' una popolazione enorme:
+> numeri di pagina, didascalie, etichette, voci d'indice, celle di scheda,
+> filigrane. Il compositore usa **le stesse facce** per tutte, perche' fanno lo
+> stesso mestiere tipografico -- stare fuori dal flusso. Quindi il font distingue
+> il **flusso dal non-flusso** e **non** distingue le parti del non-flusso fra
+> loro: su Dag `PANORAMICA` e `220` sono entrambe in `EvelethCleanRegular`, ed e'
+> corretto che lo siano.
+
+Chi affrontera' le schede riparte da li', perche' quel meccanismo dovra'
+discriminare **dentro** il non-flusso.
+
+**La sovrastampa, adottata.** Su Kul ogni parola dei titoli display e' disegnata
+due volte alla stessa coordinata, e da li' venivano `ANGELI ANGELI CADUTI CADUTI`,
+`Valois Valois` su Vil, `villaggio di lala villaggio di lala` su Wil. E'
+un'**uguaglianza e non una soglia**: 816 coppie con bbox identica contro 5 che
+differiscono di meno di mezzo punto, e quelle 5 restano fuori dichiarate. Il
+confronto sta fra **primitive** e non fra righe -- la seconda riga e' la stessa
+primitiva **piu' uno spazio in coda** -- e la primitiva duplicata **non si
+scarta**: smette solo di contribuire al testo, cosi' §Coverage regge.
+
+**Il titolo impilato, adottato, e ripara piu' del suo bersaglio.** Un titolo
+display impilato ha l'**interlinea negativa**, un'intestazione e cio' che
+introduce l'hanno normale, due colonne affiancate hanno scatole che si
+contengono. **43 unioni**, e il guadagno vero non e' Kul: e' il **numero di
+capitolo separato dal titolo**, che su Dag, BiD, Lan e SV spezzava in due **ogni
+apertura di capitolo**. I tre confini stanno dentro vuoti misurati su 114 coppie
+dei sedici manuali, e nel codice **ogni costante porta il suo vuoto accanto**.
+
+Il veto principale regge sul caso che aveva ucciso il tentativo precedente: le 22
+coppie di BoB (`'sgattaiolare' + 'ESEMPI'`) restano separate perche' hanno
+avanzamento **negativo** -- la seconda riga comincia piu' in alto, sta in
+un'altra colonna. «Sotto» contro «accanto», non una taratura.
+
+**Le citazioni: strada aperta e chiusa** senza scrivere un meccanismo. Non e'
+caduta la resa -- il callout `> **[etichetta]**` e' gia' in uso -- ma il
+**riconoscimento**. Le virgolette danno 2-18 righe per manuale contro le 519
+cercate; il font non separa citazioni da titoli; lo spazio fra corpo e tetto
+contiene cio' che serve su **un manuale su otto**.
+
+### I cinque errori di dichiarazione di questa serie, a verbale
+
+Perche' sono lo stesso errore in cinque forme, e riconoscerlo costa meno che
+rifarlo:
+
+1. **una tabella di sensibilita' senza il manuale su cui la regola si rompeva**
+   (`Criterio_Capolettera_v1` §2, Fab assente);
+2. **un veto di giudizio omesso proprio nel giro in cui serviva**
+   (`Criterio_Capolettera_v1` §5: il rischio scritto, il veto no);
+3. **una regressione attribuita al meccanismo sbagliato** -- il salto di Fab da 88
+   a 626 detto del meccanismo A, era del B, scoperto solo perche' dopo un ritiro
+   un numero non tornava;
+4. **un perno giustificato su un manuale** quando il repo aveva gia' la misura su
+   sedici che lo falsificava (`Criterio_TitoliDalFont_v1`, il filtro della
+   famiglia contro `Esito_TitoloSopraIlParagrafo_v1` §3);
+5. **una popolazione dichiarata nel campione e mai misurata** -- **Kul**, «dentro
+   e da guardare» in tre criteri di fila. Misurandolo si e' trovato che l'intera
+   struttura di primo livello del manuale era la parola `DELLA`, cioe' un difetto
+   vero **esattamente dove il criterio diceva di guardare**.
+
+**Il veto di giudizio e' stato emendato** (`Esito_TettoDallaMassa_v1` §3):
+giudicava ogni riga promossa, quindi cadeva su difetti antichi e misurava la
+pipeline invece del cambiamento. Emendato a giudicare il **delta**, su indicazione
+dell'utente -- «che senso ha fare cadere una regola per un errore che
+preesisteva?».
+
+**Barra E-B: 9/10** a ogni adozione, sola differenza Fab idx 126 gia' a verbale.
+**1646 test verdi.**
+
+**Debiti aperti**: le **schede** (cinque cadute, chat dedicata); il **font**;
+`GNOSI` su Kul, orfano perche' 102 pt non forma una fascia -- il filtro delle tre
+pagine esclude le parole piu' grandi dei titoli display, che per costruzione
+compaiono poche volte; le **5 coppie quasi-identiche** della sovrastampa, una
+delle quali ora visibile in `'DEMIURGO DEMIURGO IL FALSO DIO'`; un **URL** promosso
+a titolo su Wil e un **folio fuso** su FWK, entrambi pre-esistenti; `REALTAA`,
+corruzione del testo sorgente.
+
+### Documenti di questa milestone
+
+`Criterio_Capolettera_v1`, `Criterio_TettoDallaMassa_v1`,
+`Criterio_TitoliDalFont_v1..v2`, `Criterio_TitoloComposto_v1`,
+`Criterio_TitoloImpilato_v1` e i rispettivi `Esito_*`.
+
+Moduli in albero **non collegati**, taggati con la loro diagnosi:
+`document_heading_font_measurements.py`, `document_heading_font_policy.py`.
+
+**Milestone chiusa nel commit che aggiunge questa sezione.**
+
 <!-- FINE DI State.md — se non leggi questa riga, la tua copia è troncata: fermati e dillo -->
