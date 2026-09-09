@@ -1096,4 +1096,45 @@ né i confini ammessi né l'ordinamento per righe; il percorso Markdown di
 produzione vive su IR 2, che sta su un altro ramo. Collegarli è lavoro suo, ed è
 lo stesso punto in cui la duplicazione fra i due rami va sanata.
 
+## Schede statistiche — lavoro esplorativo, dove sta e come si riprende
+
+**Nessuna decisione architetturale**, e niente di questo e' wired: vive tutto in
+`esperimenti_statblock/`, che non importa dal repo salvo due file dichiarati.
+Il documento da leggere per riprendere e'
+**`esperimenti_statblock/PASSAGGIO_DI_CONSEGNE_2.md`** — contiene i percorsi
+locali dei manuali, gli esiti delle predizioni registrate, gli errori commessi e
+l'ordine di ripartenza. Il primo `PASSAGGIO_DI_CONSEGNE.md` resta valido per il
+metodo fino al 5 settembre 2026.
+
+Cosa e' stabilito, in tre righe:
+
+- **Correzioni 2 e 3** (estrazione multipla per riga, confini di colonna dal
+  producer `column_band` invece di una costante in punti): fatte, misurate,
+  **non accettate** — due predizioni su quattro cadute, e sotto la causa
+  diagnosticata ce n'era una seconda, il titolo centrato sopra due colonne che un
+  modello di testa che conta righe non puo' raggiungere.
+- **Correzione 4, la misura di copertura: accettata.** Eseguita sul rilevatore
+  congelato, cioe' sul giro che aveva fallito **in silenzio**, produce due righe
+  su 47 pagine e la prima sono le quattro schede mostro sulle pagine esatte della
+  verita'. Trova anche, senza che nessuno gliele indichi, le capacita' rare di
+  avversario del manuale 1 — il caso di `COMPITO_APERTO_schede_rare.md`.
+- **I confini di una scheda non si deducono, si leggono**: il riquadro e'
+  disegnato sulla pagina, e i producer che lo trovano (`embedded_visual`,
+  `interior_visual_frame`) sono wired da Milestone 28 e 31. Consumando tutti e
+  sei i producer le schede escono in Markdown cominciando dal nome **4 volte su
+  4**, contro 2 su 4 della pila di testa. Il criterio di riconoscimento non passa
+  dalla frequenza: un riquadro che contiene almeno due righe con almeno due
+  coppie etichetta/valore, che e' l'appunto di `State.md:903` alla lettera.
+
+Tre cose aperte e non fatte: la **correzione 1** (co-occorrenza), la cui
+valutazione e' oggi inquinata perche' il template si forma da solo per conteggio
+gonfiato; la **nota che sostituisce lo sfondo decorativo** della scheda, che e'
+meta' dell'obiettivo; il **terzo manuale** (Draw Steel: Monsters), sigillato e da
+aprire solo con il criterio scritto prima.
+
+Avvertenza per chi riprende: `esperimenti_statblock/markdown_ir.py` produce
+Markdown attraverso **IR 1**, mentre il percorso di produzione e' **IR 2**, che
+vive su un altro ramo. Continuare li' significa lavorare sul ramo sbagliato per
+la resa.
+
 <!-- FINE DI State.md — se non leggi questa riga, la tua copia è troncata: fermati e dillo -->
