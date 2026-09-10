@@ -1,0 +1,102 @@
+RISULTATI — passo 2, le schede a una coppia per riga.  Criterio: CRITERIO_UNA_COPPIA.md
+
+  python confini_dal_riquadro.py <Daggerheart-SRD-9-09-25.pdf> --verita Thresholds --verita Impulses --separa --senza-tabelle [--una-coppia]
+  python confini_dal_riquadro.py <Dragonbane-Quickstart.pdf> --verita Ferocia --separa --senza-tabelle [--una-coppia]
+  python materiale_una_coppia.py <pdf> --verita ... --sigla dh|dbq --out <cartella>    (fogli di provini)
+
+Riproducibilita': dopo l'aggiunta di `min_coppie` a `markdown_ir.py`, il giro
+del passo 1 (default 2) riesce identico su entrambi i manuali; cambia solo la
+riga d'intestazione che dichiara il parametro.
+
+================================================================
+Predizioni
+================================================================
+                                          presa  fusa  mancata  dal nome
+  Daggerheart, min_coppie 2 (passo 1)      130     0      19    130/130
+  Daggerheart, min_coppie 1                147     0       2    147/147
+  Dragonbane, 2 e 1                          4     0       0      4/4
+
+  P1 ambienti: 18 righe-ambiente prese su 19 (17 delle 18 che mancavano;
+     predetto almeno 16), tutte dal nome.                        REGGE
+  P2 i 129 avversari restano presi, 129 dal nome.                 REGGE
+  P3 la riga di prosa di idx 2 resta mancata.                     REGGE
+  P4 Dragonbane: 4 prese dal nome.                                REGGE
+  P5 regioni nuove senza riga-verita': 24 su Daggerheart (predetto al
+     piu' 10), 17 su Dragonbane (predetto al piu' 5).             CADUTA
+
+  L'ambiente che resta mancato (idx 55, «Impulses: Collect power…»): la
+  regione che nasce e' il solo fondino bianco dei campi (3 righe da
+  «Difficulty: 20»). Il riquadro esterno di quell'ambiente non risulta fra
+  le regioni; il perche' non e' stato guardato.
+
+================================================================
+Le regioni nuove, per genere
+(lettura dell'assistente sui fogli di provini, NON il giudizio)
+================================================================
+  Daggerheart, 24:
+    20 tabelle di armi e armature (idx 22-28): con le tabelle escluse il
+       loro riquadro diventa «scheda», perche' il nome in grassetto e le
+       celle in tondo fanno una coppia per riga;
+     3 box di regole con elenchi a etichetta (EXAMPLE EXPERIENCES,
+       Optional Rule: Defined Ranges, l'elenco dei Tier);
+     1 ambiente preso a meta' (idx 55).
+  Dragonbane, 17:
+     5 blocchi ABILITA' delle schede personaggio (idx 36, 38, 40, 42, 44);
+     3 retri di scheda personaggio, prosa di presentazione piu' capacita'
+       (idx 39, 41, 45);
+     l'introduzione (idx 1) e il box FORZARE IL TIRO (idx 10): prosa;
+     2 tabelle di dado (idx 20, 28) e la tabella d'attacco del Ragno (idx 29);
+     2 elenchi a etichetta (idx 8, 13);
+     2 regioni di incantesimi (idx 25, 26): il ritaglio mostra testo sopra
+       un'illustrazione; quale candidato abbia formato la regione non e'
+       stato verificato. A idx 26 i campi dell'incantesimo (Grado, Scuola,
+       Requisiti, Tempo di Lancio, Portata, Durata) hanno forma di scheda.
+
+================================================================
+Accettazione: NON ACCETTATO, al giudizio a vista dell'utente
+================================================================
+Giudizio dell'utente sui fogli di provini, 10 settembre 2026, con le sue
+parole: «nei file ci sono quasi solo non schede». Annotato sui provini:
+
+                                            Daggerheart  Dragonbane
+  schede                                          -          5
+  parte di scheda (vedi sotto)                    1          -
+  prosa                                           2          5
+  callout                                         -          2
+  tabella                                        20          3
+  elenchi                                         1          1
+  varie, non schede                               -          1
+  totale                                         24         17
+
+  schede:           Dragonbane idx 36, 38, 40, 42, 44 — i blocchi ABILITA'
+                    delle schede personaggio;
+  parte di scheda:  Daggerheart idx 55, il fondino dei campi dell'ambiente
+                    rimasto a meta'. Annotato in verde e senza croce; letto
+                    «parte di scheda» dall'assistente, lettura da confermare;
+  prosa:            Dragonbane idx 1, 25, 39, 41, 45; Daggerheart EXAMPLE
+                    EXPERIENCES e Optional Rule: Defined Ranges;
+  callout:          Dragonbane idx 10 (FORZARE IL TIRO), 13 (AZIONI GRATUITE);
+  tabella:          Dragonbane idx 20, 28, 29 (la tabella d'attacco del
+                    Ragno); Daggerheart le 20 tabelle di armi e armature;
+  elenchi:          Dragonbane idx 26 (incantesimi), Daggerheart l'elenco
+                    dei Tier;
+  varie:            Dragonbane idx 8.
+
+La clausola «nessuna regione nuova e' prosa» cade su 7 regioni. Il passo non
+si accetta; resta in vigore il criterio a due coppie per riga.
+
+Tre fatti che il giudizio fissa per i criteri successivi:
+  - i blocchi ABILITA' delle schede personaggio SONO schede;
+  - i blocchi degli incantesimi con i loro campi NON lo sono (elenchi);
+  - la tabella d'attacco di una scheda, nel suo riquadro, e' una TABELLA.
+Grub non era fra i provini (la sua regione esiste gia' a due coppie): resta
+non giudicato.
+
+Che cosa e' caduto (AGENTS.MD §20), da confermare col giudizio: la coppia e'
+definita dal cambio di stile (`pila2.etichette`), e il cambio di stile non
+distingue «etichetta: valore» da una parola in grassetto nella prosa, dal
+nome in grassetto di una riga di tabella o dal nome di un'abilita' in un
+modulo. Con due coppie sulla stessa riga queste cose passano di rado; con
+una passano tutte. La guardia del criterio originale faceva un lavoro vero,
+e riga per riga le righe degli ambienti non si distinguono dalla prosa che
+comincia in grassetto.

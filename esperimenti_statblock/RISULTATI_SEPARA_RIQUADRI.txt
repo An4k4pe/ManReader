@@ -1,0 +1,53 @@
+RISULTATI — passo 1, separare i riquadri fusi.  Criterio: CRITERIO_SEPARA_RIQUADRI.md
+Meccanismo: `riquadri.separa_riquadri`, nel consumatore. Nessun producer ne'
+soglia toccati.
+
+  python confini_dal_riquadro.py <Daggerheart-SRD-9-09-25.pdf> --verita Thresholds --verita Impulses --senza-tabelle [--separa]
+  python confini_dal_riquadro.py <Dragonbane-Quickstart.pdf> --verita Ferocia --senza-tabelle [--separa]
+
+================================================================
+ACCETTATO
+================================================================
+                                   presa  fusa  mancata  dal nome
+  Daggerheart, senza --separa        85    45      19     85/85
+  Daggerheart, con --separa         130     0      19    130/130
+  Dragonbane, senza e con             4     0       0      4/4
+
+  Fuse degli avversari: 0.                                        REGGE
+  Mancate per pagina: identiche nei due giri, le stesse 19
+  (18 ambienti e la riga di prosa di idx 2).                      REGGE
+  P3, Dragonbane invariato: 4 prese dal nome, AZIONI invariata.   REGGE
+
+  P1: 129 avversari presi su 129 (predetto almeno 120).
+  P2: ambienti invariati pagina per pagina.
+  P4: 130 regioni prese su 130 cominciano dal nome.
+
+  Candidati separati: 52 su Daggerheart, 20 su Dragonbane.
+
+================================================================
+Verifica a vista (pezzi sovrapposti all'immagine della pagina)
+================================================================
+  Daggerheart idx 38 e 49: ogni pezzo e' il rettangolo di una scheda e
+    comincia dal nome. 12 su 12 a idx 38; FALLEN WARLORD, HALLOWED ARCHER,
+    KRAKEN, ORACLE OF DOOM e i tre OUTER REALMS a idx 49.
+  Daggerheart idx 51: si separa in due righe una piccola tabella di regole
+    («Environment Statistic» / «Damage Dice») disegnata con due fondini.
+    Non forma una scheda.
+  Dragonbane idx 29: si separa un gruppo vettoriale in cartiglio del nome e
+    fascia della prima riga di campi. La regione della scheda la forma il
+    riquadro raster della pergamena, che ha un membro solo, quindi l'esito
+    non cambia; ma nell'innesto IR 2 i due pezzi esisteranno, e la nota
+    dello sfondo dovra' scegliere fra loro.
+  Dragonbane idx 36 (scheda personaggio): si separa nelle sue caselle (ORO,
+    ARGENTO, ESAUSTO, MALATICCIO...). Fedele al disegno, e un giorno utile
+    per rendere il modulo; non forma schede.
+
+================================================================
+Riportato, non giudicato
+================================================================
+  Con le tabelle dentro: Daggerheart in tabella 134 su 149. La precedenza
+  scheda/tabella e' il passo 3.
+
+  Senza tabelle GRUB (Dragonbane idx 32) diventa una regione scheda. Per la
+  verita' a 4 schede e' «senza riga-verita'»; se sia una scheda lo giudica
+  l'utente.

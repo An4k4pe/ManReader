@@ -1,0 +1,82 @@
+RISULTATI — il riquadro da' i confini delle schede anche dove e' vettoriale?
+Criterio: docstring di `confini_dal_riquadro.py`, scritto prima dei dati
+(10 settembre 2026, chat dedicata alle schede su IR 2, ramo nato da
+`claude/ir2-porta-42-43`).
+
+  python confini_dal_riquadro.py <Daggerheart-SRD-9-09-25.pdf> --verita Thresholds --verita Impulses
+  python confini_dal_riquadro.py <Dragonbane-Quickstart.pdf> --verita Ferocia
+
+Il riconoscimento del giro precedente e' riusato INVARIATO
+(`markdown_ir.candidati_di_pagina`, `markdown_ir.regioni_di_pagina`).
+Nessun producer, soglia o renderer toccato. Verita' indipendente dai
+riquadri: una riga con quell'etichetta per scheda, letta con `pila2.etichette`.
+
+Perche' questa misura: l'utente ha osservato che le pagine di Dragonbane sono
+un misto di scheda, prosa e tabelle, mentre Daggerheart e' fatto di sole
+schede. Il criterio del riquadro («4 su 4») era stato misurato solo sul primo.
+
+================================================================
+CONTROLLO — manuale 2, Dragonbane Quickstart.  REGGE, come predetto
+================================================================
+  righe-verita' 4: presa 4, fusa 0, in tabella 0, mancata 0
+  regioni prese che cominciano dal nome: 4 su 4
+  regioni scheda senza riga-verita': 1  (idx 13, AZIONI)
+
+  Identico a RISULTATI_RESA_COMPLETA.txt. Fra il ramo d'origine e questo sono
+  cambiate due diagnostiche a monte dei riquadri
+  (`page_analysis_interior_visual_diagnostics.py`,
+  `page_analysis_primitive_pair_measurements.py`): qui non spostano nulla.
+
+================================================================
+MANUALE 1, Daggerheart SRD.  NON REGGE — predizione (>9 su 10) FALSIFICATA
+================================================================
+  righe-verita' 149 = 129 avversari (Thresholds, idx 37-50)
+                    + 19 ambienti (Impulses, idx 51-55)
+                    + 1 riga di prosa (idx 2, «Thresholds and record…»)
+
+     presa 5, fusa 23, in tabella 111, mancata 10
+
+  Le 129 righe degli avversari tornano col conteggio indipendente di
+  PASSAGGIO_DI_CONSEGNE.md §3 (129 avversari).
+
+Tre cause, isolate su idx 38, 45 e 52 con i candidati sovrapposti
+all'immagine della pagina:
+
+1. I riquadri SONO disegnati uno per scheda, e i producer li fondono.
+   idx 38: 12 rettangoli grigi per 12 schede (`page.get_drawings()`),
+   stacco verticale fra due schede della stessa colonna 8,6-12,0 pt.
+   `_DEFAULT_CLUSTER_MARGIN = 5.0` in `page_analysis_embedded_visual.py`,
+   `page_analysis_interior_visual_frame.py` e
+   `page_analysis_drawing_cluster_diagnostics.py`: ogni riquadro si allarga
+   di 5 pt per lato, quindi due riquadri si fondono se lo stacco e' <= 10 pt.
+   Misurato: si fondono gli stacchi 8,6 / 8,9 / 9,2 / 9,2 / 9,4 / 9,9;
+   restano separati 10,9 e 12,0. Ne escono 6 candidati per 12 schede:
+   colonne 1 e 2 intere, colonne 3 e 4 con le prime due unite.
+
+   Il candidato fuso PORTA i singoli riquadri nei suoi `primitive_ids`
+   (colonna 1 di idx 38: 3 fondi grigi, 3 contorni, 6 fondini bianchi dei
+   campi). L'informazione per separarli sta gia' nel contratto; si perde nel
+   bbox del candidato.
+
+2. Il criterio «due righe con almeno due coppie» manca gli ambienti.
+   idx 52: 4 riquadri, uno per ambiente, giusti. Nessuno passa, perche' le
+   righe degli ambienti portano UNA coppia ciascuna (`Impulses: …`,
+   `Difficulty: 11`). Su Dragonbane una riga porta
+   `Ferocia: 2  Taglia: Normale`, ed e' li' che il criterio era stato misurato.
+
+3. `table_candidate` copre una colonna di schede (idx 38: 4 regioni, una per
+   colonna, dai campi della prima scheda in giu', ~100 primitive ciascuna), e
+   la regola dell'esperimento «vince la regione piu' ampia» le da' la
+   precedenza: 111 righe-verita' su 149. E' la regola del consumatore di
+   `markdown_ir`, non una proprieta' del riquadro; ma dice che fra scheda e
+   tabella la precedenza non puo' essere l'ampiezza (Milestone 39: una
+   scheda CONTIENE una tabella).
+
+================================================================
+VERDETTO
+================================================================
+«I confini di una scheda non si deducono, si leggono dal riquadro» e' vero
+della PAGINA su entrambi i manuali, e vero dei producer wired solo su
+Dragonbane. Sul manuale fatto di sole schede la misura crolla a 5 su 149.
+Il «4 su 4» di RISULTATI_RESA_COMPLETA.txt non va citato come risultato
+generale.

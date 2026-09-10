@@ -114,18 +114,22 @@ def candidati_di_pagina(documento, plumber, pi: int):
     }
 
 
-def righe_a_campi(righe) -> set[int]:
+def righe_a_campi(righe, min_coppie: int = 2) -> set[int]:
     """Le righe che portano almeno DUE coppie etichetta/valore.
 
     E' la definizione di `State.md:903` — «campi etichetta:valore da preservare»
     — presa alla lettera e senza soglie: una riga con due campi e' una riga di
     scheda, una con uno solo puo' essere prosa che comincia in grassetto. Non
     passa dalla frequenza: la frequenza serve a dare un NOME al template, non a
-    riconoscere che una riga ha dei campi."""
-    return {i for i, r in enumerate(righe) if len(pila2.etichette(r)) >= 2}
+    riconoscere che una riga ha dei campi.
+
+    `min_coppie` e' il passo 2 dell'ordine del 10 settembre 2026
+    (CRITERIO_UNA_COPPIA.md): gli ambienti di Daggerheart hanno una coppia per
+    riga. Il default riproduce i giri precedenti."""
+    return {i for i, r in enumerate(righe) if len(pila2.etichette(r)) >= min_coppie}
 
 
-def regioni_di_pagina(righe, record_righe, firma_di, candidati) -> list[dict]:
+def regioni_di_pagina(righe, record_righe, firma_di, candidati, min_coppie: int = 2) -> list[dict]:
     """Le regioni della pagina: le schede dal riquadro, poi le tabelle.
 
     Un riquadro e' una scheda se contiene almeno DUE righe a campi: due, perche'
@@ -133,7 +137,7 @@ def regioni_di_pagina(righe, record_righe, firma_di, candidati) -> list[dict]:
     decide il riquadro disegnato — ma da' il nome del template quando le righe
     dentro appartengono a un suo record. Fra riquadri annidati vince il piu'
     esterno: la scheda e' l'oggetto intero, non il suo blocco dei campi."""
-    campi = righe_a_campi(righe)
+    campi = righe_a_campi(righe, min_coppie)
     proposte: list[dict] = []
     for candidato in list(candidati["embedded"]) + list(candidati["riquadri"]):
         indici = [i for i, r in enumerate(righe) if _dentro(candidato.bbox, r)]
