@@ -838,13 +838,35 @@ def build_page_ir2(
             pending_heading,
         )
     # La pagina e' finita e le spaziature non hanno trovato un nodo dopo: vanno
-    # sull'ultimo. Se non c'e' nessun paragrafo la copertura resta scoperta, e
-    # **deve** farlo rumorosamente -- `ir2_validate` lo dira'.
+    # sull'ultimo.
     if carried and paragraphs:
-            testo, primitive, runs, item, ordered, livello = paragraphs[-1]
-            paragraphs[-1] = (
-                testo, primitive + tuple(carried), runs, item, ordered, livello
-            )
+        testo, primitive, runs, item, ordered, livello = paragraphs[-1]
+        paragraphs[-1] = (
+            testo, primitive + tuple(carried), runs, item, ordered, livello
+        )
+        carried = []
+    elif carried:
+        # Nessun paragrafo che le accolga: la pagina e' bianca, e le spaziature
+        # hanno il loro nodo. `Criterio_PaginaDiSoliSpazi_v1.md`.
+        #
+        # Prima si falliva, e la scelta era dichiarata: «deve farlo
+        # rumorosamente». Ma il fallimento e' rumoroso nel **log** e silenzioso
+        # nel **prodotto** -- su Vil il markdown passava da `page:0268` a
+        # `page:0270` senza dirlo, e il numero stampato delle successive non
+        # tornava piu' con l'indice. Fallire e' giusto quando l'alternativa e'
+        # inventare; qui la pagina **e'** bianca, e renderla bianca e' cio' che
+        # la sorgente dice.
+        #
+        # Il testo del nodo e' quello **verbatim** delle primitive, non la
+        # stringa vuota: il contratto vieta `text` vuoto (`ir2_model`, «text must
+        # not be empty») e lo spazio e' comunque piu' fedele -- la pagina
+        # contiene uno spazio, e il nodo lo dice invece di dire niente.
+        #
+        # Non stampa nulla di visibile: uno spazio in Markdown e' una riga
+        # bianca, quindi l'uscita guadagna il commento di pagina e nient'altro.
+        spaziatura = "".join(q.text for q in carried)
+        if spaziatura:
+            paragraphs.append((spaziatura, tuple(carried), (), False, False, None))
             carried = []
 
     # I paragrafi NON si riordinano: l'ordine ricevuto e' l'ordine di lettura, e
