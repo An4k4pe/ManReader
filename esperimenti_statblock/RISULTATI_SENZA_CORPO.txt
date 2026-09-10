@@ -1,0 +1,44 @@
+etichette ricorrenti (>=20 occorrenze) senza usare la dimensione: 8
+    ['ATK', 'Diffi culty', 'Experience', 'Gain advantage on', 'Make a', 'Momentum - Reaction', 'Motives & Tactics', '•']
+regioni trovate senza dimensione: 305
+di cui contengono 'Difficulty:': 148   (attese 148)
+regioni di riferimento (con dimensione): 148
+
+su 148 schede di riferimento:
+   righe perse in TESTA (la riga-nome e simili): 530
+   righe perse in CODA  (features, prosa):       2291
+   regioni con estensione IDENTICA:              0
+
+==================================================================
+SECONDA PROVA — i confini dalle SOLE localizzazioni, per affiancamento.
+Predizione: se le etichette localizzano tutti i record, allora il record N
+va dalla fine del record N-1 all'inizio del record N+1, e la dimensione
+non serve piu' nemmeno per l'estensione.
+
+su 148 schede di riferimento:
+   scarto totale in testa: 2105 righe   in coda: 1938 righe
+   regioni con estensione IDENTICA al riferimento: 0
+   distribuzione scarto testa: {0: 14, 1: 2, 2: 1, 3: 1, 4: 1, 5: 1}
+   distribuzione scarto coda:  {-50: 1, -45: 1, -44: 1, -43: 1, -39: 1, -38: 1}
+
+   copertura del testo pagine 37-55: 154999/154999 (100.0%)
+stili che precedono un nucleo, per distanza (primi 8):
+   ('QuestaSans-LightItalic', 8.0, 0)  a 1 righe prima:  127 volte
+   ('QuestaSans-Light', 8.0, 0)  a 4 righe prima:  100 volte
+   ('EvelethCleanRegular', 12.0, 0)  a 3 righe prima:  90 volte
+   ('QuestaSlab-BoldItalic', 9.0, 0)  a 2 righe prima:  89 volte
+   ('QuestaSans-Light', 9.0, 0)  a 3 righe prima:  75 volte
+   ('QuestaSans-Light', 9.0, 0)  a 1 righe prima:  62 volte
+   ('QuestaSans-Light', 9.0, 0)  a 4 righe prima:  55 volte
+   ('QuestaSans-Light', 9.0, 0)  a 2 righe prima:  53 volte
+
+stili candidati ad apertura (mai dentro un nucleo):
+   ('QuestaSans-LightItalic', 8.0, 0): 209
+   ('QuestaSlab-BoldItalic', 9.0, 0): 140
+   ('EvelethCleanRegular', 12.0, 0): 137
+   ('QuestaSans-Bold', 11.0, 0): 65
+   ('QuestaSans-Regular', 8.0, 0): 11
+
+>>> stile di apertura DERIVATO: ('QuestaSans-LightItalic', 8.0, 0)
+    regioni totali: 313   di cui vere: 147 (attese 148)
+    regioni IDENTICHE al riferimento a dimensione: 0/148

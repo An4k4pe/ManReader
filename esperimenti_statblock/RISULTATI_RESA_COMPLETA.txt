@@ -1,0 +1,95 @@
+RISULTATI — la resa consumando tutti i producer.
+Criterio: CRITERIO_RESA_COMPLETA.md.   Bersaglio: il Markdown.
+
+  python3 markdown_ir.py <Dragonbane-Quickstart.pdf> --out <dir>            (47 pagine)
+  python3 markdown_ir.py <Dragonbane-Quickstart.pdf> --out <dir> --da 28 --a 35
+
+Sei producer consumati: column_band (ordine), table_candidate (tabelle),
+embedded_visual e interior_visual_frame (riquadri), page_covering_visual e
+page_edge_visual (sfondi e bordi). Markdown da `markdown_builder` del repo,
+invariato. Nessuna modifica a producer, soglie o renderer.
+47 pagine in 1m40s.
+
+================================================================
+S1 — conservazione.  REGGE
+================================================================
+  86.809 caratteri non-spazio dalle primitive, 86.809 nei blocchi di contenuto,
+  su tutte le 47 pagine. Le note sono blocchi marcati e restano fuori dal
+  confronto, come dichiarato.
+
+================================================================
+S2 — i confini dal riquadro disegnato.  4 SU 4, come predetto
+================================================================
+  Ogni scheda comincia ORA sulla riga del nome:
+     pag 29  RAGNO GIGANTE / Ferocia: 2  Taglia: Normale / Movimento: 24 ...
+     pag 31  PIPISTRELLI VAMPIRO / ...
+     pag 33  LA SIGNORA / La Signora e' il fantasma traslucido ...
+     pag 35  IL WIGHT / Il wight e' un enorme guerriero ...
+  Era 2 su 4 con la pila di testa. Le due che fallivano — nome centrato sopra
+  due colonne — sono esattamente quelle che il riquadro risolve, perche' il
+  riquadro contiene il nome e la pila non poteva raggiungerlo contando righe
+  dentro una colonna.
+
+  Il criterio «questo riquadro e' una scheda» non passa dalla frequenza:
+  **un riquadro che contiene almeno due righe con almeno due coppie
+  etichetta/valore**. E' `State.md:903` alla lettera. Il rilevatore serve solo a
+  dare il NOME al template nella nota.
+
+  Su tutto il manuale: 5 regioni scheda = le 4 vere piu' una falsa (il riquadro
+  di AZIONI, un elenco puntato le cui righe hanno due coppie). 4 su 4 di
+  richiamo, 1 falso positivo su 47 pagine.
+
+================================================================
+S3 — la frase spezzata.  SPARITA
+================================================================
+  «...impossibile muoversi. Liberarsi richiede di superare un tiro di FOR con un
+  castigo (azione). Gli altri possono aiutare.» ora e' continua, e la tabella
+  del d6 degli attacchi e' UN blocco delimitato dal producer `table_candidate`
+  invece di essere tagliata a meta' da una testa spuria.
+
+================================================================
+S4 — l'onesta' costa.  43 PAGINE SU 47, peggio del predetto (>30)
+================================================================
+  43 pagine portano la nota «ordine di lettura non stabilito per N span su M».
+  Solo 4 pagine su 47 hanno tutto il testo dentro le bande di colonna.
+  Pagina indice 29: 61 span su 61 fuori dalle bande — zero bande emesse.
+
+  E' il numero piu' importante del giro. Il testo «schiacciato» non era la resa
+  ne' il renderer: e' che su quasi tutte le pagine una parte del testo non ha un
+  ordine di colonna stabilito e finisce ordinata per y, cioe' con le colonne
+  interlacciate riga per riga. Adesso almeno lo dice invece di farlo in silenzio.
+
+================================================================
+Le tabelle: misura per il prossimo giro
+================================================================
+  20 regioni tabella emesse (verbatim, delimitate, con la nota).
+  Estrazione celle di pdfplumber confrontata coi caratteri della pagina:
+  **206 tabelle su 248 conformi** (83%). Cioe' su 4 tabelle su 5 una tabella
+  Markdown vera sarebbe senza perdita; sulle altre 42 no, e vanno guardate
+  prima di emetterle. Il contratto vieta comunque il CSV definitivo prima di
+  Resolution: questo e' un dato, non una decisione.
+
+================================================================
+Le note degli asset: fatte, e non scalano
+================================================================
+  1.902 note di immagine, 971 file estratti, 262 file distinti sul disco (15 MB),
+  59 note di sfondo/bordo. Le occorrenze con lo stesso `content_digest`
+  condividono un file e UNA nota che dice quante volte ricorre in pagina:
+  senza quel raggruppamento le note erano 3.071.
+  Restano ~40 note per pagina, e la ragione e' misurabile: le immagini inline
+  non portano `content_digest`, quindi la ripetizione non e' rilevabile per
+  loro e ognuna prende la sua nota. E' lo stesso fatto gia' noto sul conteggio
+  asset di Fab. Le raster senza xref risolvibile NON vengono rasterizzate dalla
+  pagina: la nota dichiara che l'asset non e' stato estratto, invece di
+  spacciare una fotografia della pagina per l'immagine incorporata.
+
+================================================================
+VERDETTO
+================================================================
+S1 era la condizione: regge, il giro si accetta. S2 e S3 confermano che il
+confine di una scheda non va dedotto: e' disegnato sulla pagina, e i producer
+che lo trovano erano gia' in produzione da Milestone 28 e 31.
+
+Il problema aperto si e' spostato, ed e' uno solo: **l'ordine di lettura**.
+43 pagine su 47 hanno testo fuori dalle bande. Finche' resta cosi', qualunque
+lavoro sulle schede rifinisce un pezzo che sta dentro una pagina letta male.

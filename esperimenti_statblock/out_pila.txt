@@ -1,0 +1,113 @@
+file: /root/.claude/uploads/bf3622c8-0f6b-51f8-8f58-2201291c077f/2261baf5-DaggerheartSRD90925.pdf
+etichette di schema indotte: 50
+   ['A weapon’s', 'ATK', 'CLASS ITEMS -', 'Carrier', 'Choose either the', 'Cloaked', 'Cumbersome', 'DOMAINS -', 'Diffi culty', 'Effect', 'Experience', 'Gain advantage on', 'Group Attack - Action', 'Heavy']
+
+gruppi con >= 5 nuclei: 25
+
+  gruppo 0: 129 nuclei, profondita' di testa dedotta = 3
+      strato a 1 righe prima: ('QuestaSans-LightItalic', 8.0, 0)  (127/129, lift 9.6x)
+      strato a 2 righe prima: ('QuestaSlab-BoldItalic', 9.0, 0)  (89/129, lift 14.2x)
+      strato a 3 righe prima: ('EvelethCleanRegular', 12.0, 0)  (89/129, lift 13.1x)
+      firma: ['ATK', 'Diffi culty', 'Experience', 'Motives & Tactics', 'Relentless (3) - Passive']
+
+  gruppo 1: 72 nuclei, profondita' di testa dedotta = 0
+      firma: ['Stress', '•']
+
+  gruppo 2: 39 nuclei, profondita' di testa dedotta = 3
+      strato a 1 righe prima: ('QuestaSans-Bold', 9.0, 0)  (34/39, lift 6.0x)
+      strato a 2 righe prima: ('QuestaSans-Bold', 9.0, 0)  (34/39, lift 6.0x)
+      strato a 3 righe prima: ('QuestaSans-Bold', 11.0, 0)  (34/39, lift 12.5x)
+      firma: ['Make a', 'take']
+
+  gruppo 3: 27 nuclei, profondita' di testa dedotta = 0
+      firma: ['Momentum - Reaction', 'Vulnerable']
+
+  gruppo 4: 19 nuclei, profondita' di testa dedotta = 4
+      strato a 1 righe prima: ('QuestaSans-LightItalic', 8.0, 0)  (19/19, lift 21.0x)
+      strato a 2 righe prima: ('QuestaSans-LightItalic', 8.0, 0)  (13/19, lift 14.3x)
+      strato a 3 righe prima: ('QuestaSlab-BoldItalic', 9.0, 0)  (13/19, lift 31.7x)
+      strato a 4 righe prima: ('EvelethCleanRegular', 12.0, 0)  (14/19, lift 24.0x)
+      firma: ['Diffi culty', 'Impulses', 'Potential Adversaries']
+
+  gruppo 5: 18 nuclei, profondita' di testa dedotta = 8
+      strato a 1 righe prima: ('QuestaSans-LightItalic', 9.0, 0)  (14/18, lift 12.7x)
+      strato a 2 righe prima: ('QuestaSans-LightItalic', 9.0, 0)  (14/18, lift 12.7x)
+      strato a 3 righe prima: ('QuestaSans-Light', 9.0, 0)  (15/18, lift 2.9x)
+      strato a 4 righe prima: ('QuestaSans-Bold', 11.0, 0)  (14/18, lift 15.0x)
+      strato a 5 righe prima: ('QuestaSans-Light', 9.0, 0)  (12/18, lift 2.3x)
+      strato a 6 righe prima: ('QuestaSans-Light', 9.0, 0)  (14/18, lift 2.7x)
+      strato a 7 righe prima: ('QuestaSans-Light', 9.0, 0)  (15/18, lift 2.9x)
+      strato a 8 righe prima: ('QuestaSans-Light', 9.0, 0)  (14/18, lift 2.7x)
+      firma: ['Gain advantage on', 'temporarily']
+
+  gruppo 6: 16 nuclei, profondita' di testa dedotta = 0
+      firma: ['Group Attack - Action']
+
+  gruppo 7: 14 nuclei, profondita' di testa dedotta = 0
+      firma: ['Heavy', 'Reliable']
+
+  gruppo 8: 13 nuclei, profondita' di testa dedotta = 0
+      firma: ['Stress', 'succeeds against take']
+
+  gruppo 9: 13 nuclei, profondita' di testa dedotta = 0
+      firma: ['can']
+
+  gruppo 10: 12 nuclei, profondita' di testa dedotta = 0
+      firma: ['Note']
+
+  gruppo 11: 11 nuclei, profondita' di testa dedotta = 0
+      firma: ['Momentum - Reaction', 'you can']
+
+  gruppo 12: 10 nuclei, profondita' di testa dedotta = 3
+      strato a 1 righe prima: ('QuestaSans-Bold', 9.0, 0)  (9/10, lift 4.3x)
+      strato a 2 righe prima: ('QuestaSans-Bold', 9.0, 0)  (10/10, lift 4.7x)
+      strato a 3 righe prima: ('QuestaSans-Bold', 11.0, 0)  (9/10, lift 8.9x)
+      firma: ['Spend a Hope']
+
+  gruppo 13: 9 nuclei, profondita' di testa dedotta = 0
+      firma: ['CLASS ITEMS -', 'DOMAINS -', 'STARTING EVASION -', 'STARTING HIT POINTS -']
+
+  gruppo 14: 9 nuclei, profondita' di testa dedotta = 0
+      firma: ['Cumbersome', 'Quick']
+
+  gruppo 15: 9 nuclei, profondita' di testa dedotta = 0
+      firma: ['Powerful', 'Versatile']
+
+  gruppo 16: 9 nuclei, profondita' di testa dedotta = 1
+      strato a 1 righe prima: ('EvelethCleanRegular', 12.0, 0)  (9/9, lift 98.1x)
+      firma: ['Choose either the']
+
+  gruppo 17: 7 nuclei, profondita' di testa dedotta = 0
+      firma: ['Make a', 'While']
+
+  gruppo 18: 6 nuclei, profondita' di testa dedotta = 2
+      strato a 1 righe prima: ('QuestaSans-LightItalic', 9.0, 0)  (6/6, lift 6.1x)
+      strato a 2 righe prima: ('QuestaSans-LightItalic', 9.0, 0)  (6/6, lift 6.1x)
+      firma: ['Carrier', 'Gain advantage on', 'you can']
+
+  gruppo 19: 6 nuclei, profondita' di testa dedotta = 3
+      strato a 1 righe prima: ('QuestaSans-Bold', 9.0, 0)  (5/6, lift 3.6x)
+      strato a 2 righe prima: ('QuestaSans-Bold', 9.0, 0)  (5/6, lift 3.6x)
+      strato a 3 righe prima: ('QuestaSans-Bold', 11.0, 0)  (5/6, lift 7.4x)
+      firma: ['Mark a Stress', '•']
+
+  gruppo 20: 6 nuclei, profondita' di testa dedotta = 0
+      firma: ['mark a Stress']
+
+  gruppo 21: 6 nuclei, profondita' di testa dedotta = 3
+      strato a 1 righe prima: ('QuestaSans-Bold', 9.0, 0)  (6/6, lift 4.3x)
+      strato a 2 righe prima: ('QuestaSans-Bold', 9.0, 0)  (6/6, lift 4.3x)
+      strato a 3 righe prima: ('QuestaSans-Bold', 11.0, 0)  (6/6, lift 8.7x)
+      firma: ['Once per long rest,']
+
+  gruppo 22: 5 nuclei, profondita' di testa dedotta = 0
+      firma: ['Restrained']
+
+  gruppo 23: 5 nuclei, profondita' di testa dedotta = 0
+      firma: ['Cloaked']
+
+  gruppo 24: 5 nuclei, profondita' di testa dedotta = 0
+      firma: ['Returning']
+
+record emessi: 474
+record che soddisfano la verita' 'difficulty:': 148

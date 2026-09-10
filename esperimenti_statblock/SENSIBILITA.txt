@@ -1,0 +1,65 @@
+configurazione usata: riconosciute=148/148  falsi positivi=0  schemi=2
+
+costante             valore   ric./148  falsi+  schemi
+----------------------------------------------------------
+col_gap                  10        148       0       2
+col_gap                  20        148       0       2
+col_gap                  30        148       0       2 <-- usato
+col_gap                  40        148       0       2
+col_gap                  60        148       0       2
+col_gap                 100        148       0       2
+
+open_delta              0.5        115       0       2   DIVERSO
+open_delta              1.0        148       0       2 <-- usato
+open_delta              1.5        148       0       2
+open_delta              2.0        148      11       3   DIVERSO
+open_delta              3.0         10       6       2   DIVERSO
+
+lab_delta               0.0        148       0       2
+lab_delta               0.3        148       0       2
+lab_delta               0.6        148       0       2 <-- usato
+lab_delta               1.0        148       0       2
+lab_delta               2.0        148       0       2
+
+lab_ric                   2        148       0       2
+lab_ric                   3        148       0       2 <-- usato
+lab_ric                   5        129       0       1   DIVERSO
+lab_ric                  10        129       0       1   DIVERSO
+lab_ric                  20        129       0       1   DIVERSO
+
+nucleo_ratio            0.2        148       0       2
+nucleo_ratio            0.3        148       0       2
+nucleo_ratio            0.5        148       0       2 <-- usato
+nucleo_ratio            0.7        129       0       1   DIVERSO
+
+condivise_frac         0.02        129       7       2   DIVERSO
+condivise_frac         0.05        148       0       2 <-- usato
+condivise_frac          0.1        129       0       1   DIVERSO
+condivise_frac          0.2        129       0       1   DIVERSO
+
+jaccard                 0.2        148       0       2
+jaccard                 0.3        148       0       2
+jaccard                 0.4        148       0       2 <-- usato
+jaccard                 0.5        148       0       2
+jaccard                 0.7          0       0       0   DIVERSO
+
+obbl_frac               0.7        148       4       3   DIVERSO
+obbl_frac               0.8        148       0       2
+obbl_frac               0.9        148       0       2 <-- usato
+obbl_frac              0.95        148       0       2
+obbl_frac               1.0        148       0       2
+
+min_gruppo                2        148       0       2
+min_gruppo                3        148       0       2
+min_gruppo                5        148       0       2 <-- usato
+min_gruppo               10        148       0       2
+min_gruppo               20        129       0       1   DIVERSO
+
+lift                    1.0        129       0       1   DIVERSO
+lift                    1.2        148       0       2
+lift                    1.5        148       0       2 <-- usato
+lift                    2.0        148       0       2
+lift                    3.0        148       0       2
+lift                    5.0        148      26       3   DIVERSO
+lift                   10.0        148      36       4   DIVERSO
+

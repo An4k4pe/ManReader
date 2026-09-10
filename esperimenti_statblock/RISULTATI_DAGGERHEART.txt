@@ -1,0 +1,62 @@
+stile di corpo dedotto: ('QuestaSans-Light', 9.0, 0)   (dimensione 9.0)
+zone candidate su tutto il documento: 1022
+zone che contengono 'Difficulty:' (verita'): 148
+schede attese dalla verita' testuale: 148
+zone vere che ne contengono PIU' DI UNA (aperture mancate): 0
+
+======================================================================
+nucleo per l'induzione: 236 zone   (di cui vere: 146)
+etichette condivise nel nucleo: 20
+gruppi di template: 40
+  gruppo 0:  129 zone (129 vere)  firma: ['1d4', 'ATK', 'Diffi culty', 'Experience', 'HP', 'Mark a Stress', 'Motives & Tactics', 'Spend a Fear', 'Stress', 'Thresholds', 'Vulnerable', 'spend a Fear']
+  gruppo 1:   18 zone (0 vere)  firma: ['Spellcast Roll', 'mark a Stress']
+  gruppo 2:   17 zone (17 vere)  firma: ['Diffi culty', 'Impulses', 'Potential Adversaries', 'Restrained', 'Spend a Fear']
+  gruppo 3:   12 zone (0 vere)  firma: ['Gain advantage on', 'Mark a Stress']
+
+schemi indotti (gruppi con >=5 zone): 2
+  schema 0 (n=129) obbligatori: ['ATK', 'Diffi culty', 'HP', 'Motives & Tactics', 'Stress', 'Thresholds']
+  schema 1 (n= 17) obbligatori: ['Diffi culty', 'Impulses', 'Potential Adversaries']
+
+  verdetto       vere  non vere
+  SCHEDA          148         0
+  INCOMPLETA        0         0
+  SCARTATA          0       874
+
+  su 148 schede vere: 148 riconosciute, 0 incomplete, 0 RIFIUTATE
+  falsi positivi: 0
+
+======================================================================
+PROVA 1 — tolgo 'Diffi culty' dallo schema: il risultato dipende dalla
+          stringa che definisce anche la verita'?
+   SCHEDA: 148 vere / 0 non vere;  SCARTATE vere: 0
+   obbligatori residui: [['ATK', 'HP', 'Motives & Tactics', 'Stress', 'Thresholds'], ['Impulses', 'Potential Adversaries']]
+
+PROVA 2 — i CONFINI: la zona copre la scheda e non sborda?
+   caratteri sulle pagine 37-55: 154999   coperti dalle zone: 154999  (100.0%)
+   coperti dalle sole zone-SCHEDA: 150738 (97.3%)
+   zone non-scheda su quelle pagine: 40
+
+PROVA 3 — una zona, per intero, a occhio:
+     COURTIER
+     Tier  Social
+     An ambitious and ostentatiously dressed socialite.
+     Motives & Tactics: Discredit, gain favor, maneuver, scheme
+     Diffi culty: 12 | Thresholds: 4/8 | HP: 3 | Stress: 4
+     ATK: −4 | Daggers: Melee | 1d4+2 phy
+     Experience: Socialite +3
+     FEATURES
+     Mockery - Action:Mark a Stress to say something mocking and
+     force a target within Close range to make a Presence Reaction
+     Roll (14) to see if they can save face. On a failure, the target
+     must mark 2 Stress and is Vulnerable until the scene ends.
+     Scapegoat - Action:Spend a Fear and target a PC. The Courtier
+     convinces a crowd or prominent individual that the target is the
+     cause of their current confl ict or misfortune.
+
+PROVA 4 — ogni scheda finisce nel template giusto?
+   (tipo reale, schema assegnato) -> conteggio: {('avversario', 0): 129, ('ambiente', 1): 19}
+
+PROVA 5 — difetti di testo misurabili sulle pagine 37-55
+   glifi in area privata (persi in estrazione): 161
+   parole spezzate da spazi spuri (es. 'Diffi  culty'): 0
+   etichette indotte che contengono uno spazio spurio: 640

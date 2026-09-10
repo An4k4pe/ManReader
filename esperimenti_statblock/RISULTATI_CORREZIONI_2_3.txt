@@ -1,0 +1,114 @@
+RISULTATI — correzioni 2 e 3.  Criterio: CRITERIO_CORREZIONI_2_3.md
+Eseguito con python 3.14 + PyMuPDF 1.28.0.  Nessuna costante spostata.
+
+  python3 pila2.py <Daggerheart-SRD-9-09-25.pdf>   --verita difficulty:
+  python3 pila2.py <Dragonbane-Quickstart.pdf>     --verita ferocia:
+  python3 misure_correzioni_2_3.py <Dragonbane-Quickstart.pdf>
+
+Manuale 1 e 2 sono banco di SVILUPPO, gia' bruciati. Nessun numero qui sotto
+vale come validazione. Il terzo manuale (Draw Steel: Monsters) non e' stato
+aperto.
+
+================================================================
+M1 — manuale 1 (Daggerheart SRD, 68 pagine).  P1: REGGE
+================================================================
+                                pila.py      pila2.py
+  etichette di schema indotte      50           66
+  gruppi con >= 5 nuclei           25           30
+  record emessi                   474          477
+  record che soddisfano
+      la verita' 'difficulty:'    148          148     <- invariato
+
+  gruppo 0: 129 nuclei, profondita' di testa 3   (identico a pila.py)
+  gruppo 5: 19 nuclei,  profondita' di testa 4   (era gruppo 4, identico)
+
+  La firma degli avversari passa da
+      ATK, Difficulty, Experience, Motives & Tactics, Relentless (3) - Passive
+  a
+      ATK, Claws, Difficulty, Experience, HP, Motives & Tactics,
+      Relentless (3) - Passive, Stress, Thresholds
+  cioe' ricompaiono HP e Thresholds, che stanno sulla stessa riga di Difficulty
+  (`Difficulty: 12 | Thresholds: 4/8 | HP: 3`) e che la versione a una etichetta
+  per riga perdeva. Sono due dei sei obbligatori registrati in
+  PASSAGGIO_DI_CONSEGNE.md §3: il metodo li trovava per altra via, ora li vede.
+
+================================================================
+M2 — occorrenze viste, manuale 2 (Dragonbane Quickstart, 47 pagine)
+P2: FALSIFICATA IN PARTE
+================================================================
+  etichetta   pila.py   pila2.py   predetto   vere sulle schede
+  Ferocia        4         4          4              4
+  Taglia         0         4          4              4
+  Movimento      7         7          -              4
+  Armatura       1         5          4              4
+  PF             3        11          4              4
+
+  L'estrazione multipla per riga recupera i campi persi: previsto e avvenuto.
+  Ma avevo predetto 4 per Armatura e PF assumendo che comparissero SOLO sulle
+  schede mostro, e non e' vero: PF compare 11 volte, di cui 4 sulle schede e le
+  altre sulle schede personaggio (pagina indice 18 da sola ne ha 4). La
+  predizione era sbagliata; la correzione fa cio' che doveva.
+
+================================================================
+M3 — nome e campi nella stessa colonna, manuale 2.  P3: FALSIFICATA
+================================================================
+  pagina  nome                   col   campi col   esito     (prima, COL_GAP)
+    29    RAGNO GIGANTE           0        0       STESSA     diverse
+    31    PIPISTRELLI VAMPIRO     1        1       STESSA     stessa
+    33    LA SIGNORA              0        1       DIVERSE    diverse
+    35    IL WIGHT                0        2       DIVERSE    stessa
+                                                   2 su 4     2 su 4
+
+  Stesso conteggio di prima, ma NON sulle stesse pagine. La pagina 29 guadagna:
+  il separatore a 30pt la spezzava in 4 colonne spurie e il nome finiva altrove,
+  ora nome e campi stanno insieme. La pagina 35 perde.
+
+  La causa della perdita e' un fatto che il verdetto non aveva isolato: su 33 e
+  35 il nome e' un TITOLO CENTRATO SOPRA UN CORPO A DUE COLONNE (x 271,8 e
+  280,1, contro corpo a x 79,6 e 306,4). `column_band` lo mette in una banda
+  propria — che e' la lettura corretta della pagina, non un difetto del
+  producer — e la pila di testa, che cammina all'indietro DENTRO una colonna
+  per righe, non puo' raggiungerlo per costruzione. La grossolanita' del
+  vecchio COL_GAP a volte li metteva insieme per caso: su pagina 35 il caso era
+  favorevole, e si perde.
+
+================================================================
+P4 — «il template dei mostri non deve formarsi».  FALSIFICATA
+================================================================
+  Si forma:  gruppo con firma {Armatura, Movimento, PF}, 5 nuclei,
+             profondita' di testa dedotta 4.
+      pag 29 'Movimento: 24 Armatura: — PF: 36'    <- scheda
+      pag 31 'Movimento: 24 Armatura: — PF: 18'    <- scheda
+      pag 32 'Movimento: 12 Danno Bonus:AGI +D4'   <- SCHEDA PERSONAGGIO, falso
+      pag 33 'Movimento: 12 Armatura: — PF: 27'    <- scheda
+      pag 35 'Movimento: 10 Armatura: 8 PF: 38'    <- scheda
+
+  Da dove viene, dichiarato prima di accettarlo: NON da un cambio di soglia.
+  La correzione 2 porta Armatura da 1 a 5 e PF da 3 a 11, e con
+  MIN_RICORRENZA = 5 entrambe entrano nello schema. Ma ci entrano grazie a
+  occorrenze che schede mostro NON sono (PF: 4 su 11). Il template si forma per
+  un conteggio gonfiato da altro materiale, non perche' il criterio di
+  ricorrenza sia diventato adatto ai template piccoli. Non e' la correzione 1,
+  e non va scambiata per quella.
+
+  Risultato: 4 schede su 4 dentro il gruppo, piu' 1 falso positivo (pag 32).
+  Sulle pagine 29 e 31 il record emesso comincia esattamente sulla riga del
+  nome — la pila di testa raggiunge la testa su un manuale su cui non e' stata
+  sviluppata. Sulle 33 e 35 comincia in mezzo alla prosa della descrizione.
+
+================================================================
+VERDETTO contro il criterio di accettazione
+================================================================
+Il criterio chiedeva P1 + P2 + P3. P2 regge in parte, P3 no: quindi
+LE CORREZIONI NON SONO ACCETTATE COME FORMULATE, e nessuna costante e' stata
+toccata per recuperarle.
+
+Il difetto che ciascuna correzione doveva togliere e' tolto:
+ - i campi 2-3 per riga non si perdono piu' (M2, e su manuale 1 la firma degli
+   avversari ricompone HP e Thresholds senza costo: 148/148 invariato);
+ - la costante in punti non spezza piu' le pagine (pagina 29).
+Ma «il difetto e' tolto» non era il criterio, e la differenza sta tutta nella
+riga che ho scritto male: il criterio predice l'esito del CASO, e sotto la
+causa 3 ce n'era una seconda che nessuno aveva isolato — il titolo centrato
+sopra due colonne, irraggiungibile da un modello di testa che conta righe
+dentro una colonna.

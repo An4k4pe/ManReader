@@ -1,0 +1,91 @@
+RISULTATI — correzione 4, la misura di copertura.  Criterio: CRITERIO_COPERTURA.md
+La misura riporta e non decide: nessuna soglia abbassata, nessun template
+promosso, i due rilevatori restano quelli del giro precedente.
+
+  python3 copertura.py <Dragonbane-Quickstart.pdf> --congelato   <- il retro-test
+  python3 copertura.py <Dragonbane-Quickstart.pdf>
+  python3 copertura.py <Daggerheart-SRD-9-09-25.pdf>
+
+================================================================
+A1 — IL RETRO-TEST: la misura avrebbe fatto scattare l'allarme?
+Manuale 2, rilevatore CONGELATO `pila.py`, cioe' il giro che ha fallito
+in silenzio.  REGGE
+================================================================
+  C2 — firme rare ricorrenti su >= 3 pagine, su tutto il manuale:  DUE VOCI.
+
+     4 pagine,   4 corse   pagine [29, 31, 33, 35]
+          firma: ['Ferocia', 'Resistenza']
+     3 pagine,   4 corse   pagine [1, 2, 4]
+          firma: ['Dragonbane']
+
+  La prima voce sono le quattro schede mostro, sulle quattro pagine esatte della
+  verita' di riferimento. Il giro precedente aveva riportato 16 gruppi e 34
+  etichette di schema senza dire niente; questo elenco ha due righe e la prima
+  e' il template mancato.
+
+  A1b (leggibilita', limite dichiarato prima: 30 voci): 2 voci. Ampio margine.
+
+================================================================
+A3 — il residuo non si svuota quando un template vicino si forma
+Manuale 2, rilevatore corretto `pila2.py`.  REGGE
+================================================================
+     4 pagine,   4 corse   pagine [29, 31, 33, 35]
+          firma: ['Ferocia', 'Resistenza', 'Taglia']
+     3 pagine,   4 corse   pagine [1, 2, 4]
+          firma: ['Dragonbane']
+
+  `Ferocia` e `Taglia` hanno 4 occorrenze e restano sotto MIN_RICORRENZA = 5:
+  la firma resta nel residuo anche ora che il gruppo {Armatura, Movimento, PF}
+  si e' formato. La misura continua a dire «qui c'e' materiale che nessuno
+  schema spiega» proprio dove il rilevatore crede di aver capito.
+
+================================================================
+A2 — la misura discrimina, o grida ovunque?
+Manuale 1 (Daggerheart SRD, 68 pagine), rilevatore `pila2.py`.  REGGE
+================================================================
+  Il gruppo piu' numeroso (129 nuclei, gli avversari, 148/148 riconosciute)
+  vive su 14 pagine su 68, cioe' il 20,6%.
+  Delle 10 pagine con piu' corse residue, quelle del gruppo sono 2: [44, 48].
+  Attese per puro caso su 10 pagine: 2,1.  Osservate: 2.
+
+  Il residuo sulle pagine che il metodo spiega e' esattamente al livello del
+  caso: la misura non grida dove il rilevatore ha ragione.
+
+  C2 su manuale 1 — SEI voci su 68 pagine, e sono informative:
+     4 pagine   ['Massive']
+     3 pagine   ['Brutal', 'Deadly']
+     3 pagine   ['Minion (6) - Passive']
+     3 pagine   ['Minion (3) - Passive']
+     3 pagine   ['Once per rest,', 'spend any number of tokens to roll ...']
+     3 pagine   ['A']
+  Le prime quattro sono capacita' rare di avversario: ricorrono, restano sotto
+  la soglia, e sono esattamente il caso registrato in
+  COMPITO_APERTO_schede_rare.md. La misura le trova senza che nessuno gliele
+  abbia indicate.
+
+================================================================
+C1 — copertura del testo dai record (descrittiva, nessun criterio attaccato)
+================================================================
+  manuale 1, pila2.py     307.178 / 412.223 caratteri non-spazio   74,5%
+  manuale 2, pila.py       45.582 /  86.809                        52,5%
+  manuale 2, pila2.py      42.090 /  86.809                        48,5%
+
+  Il 74,5% del manuale 1 va guardato con sospetto piu' che con soddisfazione:
+  con 30 gruppi e 477 record il rilevatore rivendica tre quarti di un manuale
+  come «record». Non e' falso — tabelle di armi e carte dominio SONO strutture
+  ripetute — ma «record» li' dentro vuol dire molte cose diverse, e la copertura
+  alta non e' una prova di niente. E' il numero che serve a impedire il guasto
+  opposto (un metodo che spiega tutto), non a promuovere questo.
+
+================================================================
+VERDETTO contro il criterio di accettazione
+================================================================
+Il criterio chiedeva A1 e A2. Reggono entrambe, e reggono anche A1b e A3.
+LA MISURA E' ACCETTATA.
+
+Cosa e' cambiato in concreto: il fallimento del manuale 2 **non poteva** essere
+silenzioso con questa misura accesa. Due righe di elenco, la prima delle quali
+indica le quattro pagine giuste.
+
+Cosa NON dimostra: che il metodo funzioni. Dimostra che, quando non funziona,
+adesso lo dice. E resta una misura sviluppata su due manuali gia' bruciati.
