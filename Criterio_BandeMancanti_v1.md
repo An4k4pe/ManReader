@@ -1,4 +1,4 @@
-# Milestone 42 — perche' `column_band` non emette bande. Criterio pre-registrato
+# Milestone 43 — perche' `column_band` non emette bande. Criterio pre-registrato
 
 Scritto **prima** di guardare qualunque numero di scarto, come chiede
 `AGENTS.MD` §Regole operative punto 15 e `CLAUDE.md`.

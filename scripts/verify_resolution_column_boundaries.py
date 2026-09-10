@@ -1,12 +1,12 @@
-"""Verifica l'oracolo della Milestone 43, Fase 2, sulla catena vera.
+"""Verifica l'oracolo della Milestone 44, Fase 2, sulla catena vera.
 
-La regola V4 e' gia' stata misurata nella Milestone 42 con uno script che
+La regola V4 e' gia' stata misurata nella Milestone 43 con uno script che
 ricomponeva la decisione sopra il profilo del producer. Qui la stessa domanda
 passa invece dai moduli di produzione -- `column_band_gutter_rows`,
 `measure_rejected_gutters`, `build_table_candidate_page_analysis`,
 `resolve_column_boundaries` -- e i numeri devono coincidere.
 
-Oracolo, dal verbale della Milestone 42:
+Oracolo, dal verbale della Milestone 43:
     DB.pdf   126 pagine   +31 corridoi ammessi da V4, 0 fuori da una tabella
     Apo.pdf  148 pagine   +22 corridoi ammessi da V4, 0 fuori da una tabella
 

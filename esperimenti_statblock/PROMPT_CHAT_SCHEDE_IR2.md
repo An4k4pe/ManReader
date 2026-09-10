@@ -30,8 +30,10 @@ farle uscire in Markdown attraverso **IR 2**, che è il percorso di produzione.
 - `claude/ir2-porta-42-43` — le milestone sull'ordine di lettura portate su IR 2
   più l'innesto dei confini di Resolution. **È la base da cui partire.**
 
-Prima di numerare una milestone controlla i numeri **su tutti i rami**: due
-Milestone 42 diverse esistono già, ed è costata una rinumerazione.
+Prima di numerare una milestone controlla i numeri **su tutti i rami**. È già
+successo: due Milestone 42 diverse, nate su rami che non si conoscevano, e la
+rinumerazione a 43 e 44 ha toccato una quindicina di file su due rami. Le
+milestone sull'ordine di lettura sono la **43** e la **44** ovunque.
 
 ## Il compito, in due parti
 

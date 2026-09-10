@@ -299,7 +299,7 @@ class _FlankingProfile:
         self.left_wordy = left_wordy
         self.right_wordy = right_wordy
         # I caratteri SOMMATI per lato. Nessun criterio di ammissione li legge:
-        # esistono perche' la misura dei corridoi respinti (Milestone 43) possa
+        # esistono perche' la misura dei corridoi respinti (Milestone 44) possa
         # riportarli senza ripartire i fianchi una seconda volta, che sarebbe
         # una seconda implementazione della stessa cosa.
         self.left_chars_total = left_chars_total
@@ -411,7 +411,7 @@ def _is_too_short(rect: _GapRect, *, line_height: float, min_gutter_lines: float
     """Il criterio di altezza, estratto per poterlo chiedere anche fuori da
     `_reject_reason`, che si ferma al primo motivo che scatta.
 
-    Serve a Milestone 43: un corridoio etichettato `too_few_wordy_lines` puo'
+    Serve a Milestone 44: un corridoio etichettato `too_few_wordy_lines` puo'
     essere ANCHE troppo basso, e chi legge il motivo da solo non lo sa. Chiederlo
     qui evita che il criterio venga riscritto altrove -- cioe' che la stessa
     soglia viva in due posti."""
@@ -1064,7 +1064,7 @@ def _judge_gutters(
     stesso ordine (per altezza decrescente), stesse chiamate, stesse costanti.
     L'albero prende da qui i soli ammessi, esattamente come prima.
 
-    Esiste perche' il verdetto di scarto non venga piu' buttato. Milestone 43:
+    Esiste perche' il verdetto di scarto non venga piu' buttato. Milestone 44:
     un corridoio respinto e' materiale per chi viene dopo -- lo dice gia' la
     docstring di `_reject_reason` -- e finora spariva dentro una variabile
     locale. Qui non si decide niente di nuovo: si smette di perdere cio' che era

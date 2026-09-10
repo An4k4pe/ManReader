@@ -1,6 +1,6 @@
-"""Milestone 43, Fase 3: la lettura per righe su una pagina reale.
+"""Milestone 44, Fase 3: la lettura per righe su una pagina reale.
 
-Criterio di accettazione della fase, da `Criterio_Milestone43_V4_v1.md`: «su una
+Criterio di accettazione della fase, da `Criterio_Milestone44_V4_v1.md`: «su una
 pagina di tabella verificata a vista, l'ordine emesso e' per righe e non per
 colonne».
 

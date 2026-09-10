@@ -1,6 +1,6 @@
 """I corridoi che l'ammissione di `layout.column_band` ha respinto.
 
-Milestone 43, Fase 1. Osserva, non decide: qui non si dice che un corridoio
+Milestone 44, Fase 1. Osserva, non decide: qui non si dice che un corridoio
 respinto avrebbe dovuto essere una banda, si dice soltanto che **c'era** e
 perche' e' stato respinto.
 

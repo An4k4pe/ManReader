@@ -1,6 +1,6 @@
 """La lettura per righe di una regione di tabella.
 
-Milestone 43, Fase 3. Il caso che conta e' il primo: la riga del numero e la
+Milestone 44, Fase 3. Il caso che conta e' il primo: la riga del numero e la
 prima riga della descrizione hanno `y` che differiscono di frazioni di punto, e
 ordinando per `y` il numero finisce dentro la frase. Gli altri verificano che la
 cella che va a capo non rompa le righe, che una riga a tutta larghezza resti al

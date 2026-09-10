@@ -954,19 +954,26 @@ a mancare del terzo invariante sull'ordine.
 Suite: 1263 test verdi. Quattro criteri di accettazione pre-registrati e
 committati prima dell'implementazione, più quello del wiring.
 
-## Milestone 42 — perché `column_band` non emette bande (diagnostica pura) — completata
+## Milestone 43 — perché `column_band` non emette bande (diagnostica pura) — completata
 
-**Nota sulla numerazione**, perché il salto da 37 a 42 non è un errore: le
-Milestone 38-41 esistono su altri rami — IR 2 minima con bersaglio Markdown, la
-tabella in IR 2, l'uscita leggibile e i titoli per fascia stanno su
+**Nota sulla numerazione, e una collisione sanata.** Le Milestone 38-42 vivono su
+altri rami — IR 2 minima con bersaglio Markdown, la tabella in IR 2, l'uscita
+leggibile, i titoli per fascia e quel che resta dopo di essi, su
 `claude/asset-note-visibility-e14deb` e `claude/markdown-readability-text-form-184fa3`.
-Questo ramo riparte da 37 e prende il primo numero libero. La duplicazione fra i
-due percorsi Markdown è reale e resta da sanare.
+Questo ramo, derivato da Milestone 37, aveva numerato **42 e 43** senza
+conoscerle, e la 42 collideva con una 42 già pubblicata. Rinumerate a **43 e 44**
+il 10 settembre 2026, qui e sul ramo su cui erano state portate: i numeri sono i
+primi liberi sulla linea unita, e le due copie ora coincidono.
+
+Da qui in avanti: prima di numerare una milestone, controllare i numeri su
+**tutti** i rami, non solo sul proprio. La duplicazione fra i due percorsi
+Markdown resta invece da sanare.
 
 Diagnostica sola: nessun producer modificato, nessuna soglia toccata, nessun
 wiring. Criterio pre-registrato in `Criterio_BandeMancanti_v1.md` (Fasi 1, 2 e 3,
 ognuna scritta prima dei propri dati), script committati
 `scripts/scan_missing_column_bands.py` e `scripts/compare_flanking_char_sum.py`.
+Verbale in `Verbale_Milestone43_v1.md`.
 Campione: Dragonbane Quickstart per intero — il caso d'origine — più DB, Fab,
 Dag, Apo e Lan.
 
@@ -1038,11 +1045,11 @@ non quella del blocco.
 Resta aperto e non deciso qui: la frammentazione delle bande; il caso `too_short`
 sul filo; le pagine senza bande che sono frontespizi.
 
-## Milestone 43 — V4 in Resolution e la lettura per righe delle tabelle — completata
+## Milestone 44 — V4 in Resolution e la lettura per righe delle tabelle — completata
 
-Piano e criteri di accettazione in `Criterio_Milestone43_V4_v1.md`, scritti prima
-dell'implementazione con i numeri della Milestone 42 come **oracolo**: non si
-rimisura niente, si rispetta. Verbale in `Verbale_Milestone43_v1.md`.
+Piano e criteri di accettazione in `Criterio_Milestone44_V4_v1.md`, scritti prima
+dell'implementazione con i numeri della Milestone 43 come **oracolo**: non si
+rimisura niente, si rispetta. Verbale in `Verbale_Milestone44_v1.md`.
 
 **Fase 1 — i corridoi respinti smettono di sparire.** Il verdetto su un corridoio
 non ammesso viveva dentro una variabile locale: quando il producer aveva finito,
@@ -1070,7 +1077,7 @@ Quattro esiti, e ogni corridoio respinto ne riceve uno:
 **L'oracolo è centrato**, verificato con
 `scripts/verify_resolution_column_boundaries.py` che fa passare la domanda dai
 moduli di produzione: DB 326 + **31** = 357, Apo 47 + **22** = 69, esattamente i
-numeri della Milestone 42, e zero confini ammessi fuori da una tabella. Su Apo i
+numeri della Milestone 43, e zero confini ammessi fuori da una tabella. Su Apo i
 33 `outside_table_candidate` sono gli elenchi puntati che V3 avrebbe preso per
 colonne: rifiutati per nome, con il motivo scritto.
 

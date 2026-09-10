@@ -1,4 +1,4 @@
-"""Milestone 42, diagnostica: perche' `column_band` non emette bande.
+"""Milestone 43, diagnostica: perche' `column_band` non emette bande.
 
 Criterio pre-registrato in `Criterio_BandeMancanti_v1.md`. Diagnostica pura:
 nessun producer, nessuna soglia toccata, nessun `RegionCandidate`, nessun

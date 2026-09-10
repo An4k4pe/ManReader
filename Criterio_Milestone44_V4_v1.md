@@ -1,7 +1,7 @@
-# Milestone 43 — V4: le colonne di tabella diventano bande. Piano e criteri
+# Milestone 44 — V4: le colonne di tabella diventano bande. Piano e criteri
 
-Aperta su decisione dell'utente dopo la chiusura diagnostica della Milestone 42
-(`Verbale_Milestone42_v1.md`). Questa e' **implementazione**, non diagnostica: i
+Aperta su decisione dell'utente dopo la chiusura diagnostica della Milestone 43
+(`Verbale_Milestone43_v1.md`). Questa e' **implementazione**, non diagnostica: i
 numeri ci sono gia' e non vanno rimisurati, vanno rispettati.
 
 ## Obiettivo unico

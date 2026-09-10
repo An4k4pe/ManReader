@@ -178,9 +178,10 @@ Altri numeri utili:
 
 ## 5. Cosa e' successo dopo, e perche' riguarda le schede
 
-Il «43 pagine su 47» ha aperto le Milestone 42, 43 e 44 sull'**ordine di
-lettura**, che sono state fatte e chiuse (vedi `State.md`). Per le schede contano
-tre cose:
+Il «43 pagine su 47» ha aperto le **Milestone 43 e 44** sull'**ordine di
+lettura**, fatte e chiuse (vedi `State.md`). Nascevano numerate 42 e 43 e sono
+state rinumerate il 10 settembre 2026, perche' la 42 collideva con una gia'
+pubblicata sul ramo dei titoli. Per le schede contano tre cose:
 
 1. **La causa non era quella che sembrava.** Il danno reale (testo affiancato
    letto senza colonne) e' fra lo 0% e il 5,2% del testo di pagina, non il 90%.

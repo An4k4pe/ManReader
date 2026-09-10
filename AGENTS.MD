@@ -173,7 +173,7 @@ osservazione backend
 - Un candidato tabella non rimuove testo e non produce CSV definitivo prima della resolution.
 - L'isolamento fra producer è una proprietà voluta, non un limite da superare: la relazione fra candidati di producer diversi si decide in Resolution o nel consumer, mai dentro un producer. Fino ai candidati ragionare a pezzi isolati è corretto; dal consumer in poi la combinazione è inevitabile, perché una regione influisce sull'altra.
 - Il precedente è ratificato due volte: Milestone 24 (`page_edge_visual`/`side_band`) e Milestone 30 (`interior_visual_frame`/`embedded_visual`, esplicitamente "stesso precedente" di Milestone 24). Milestone 33 ha invece **rinviato** la sovrapposizione banda/`table_candidate`/`embedded_visual` alla futura milestone del producer: è un rinvio, non una ratifica.
-- Questione **risolta per il caso che la sollevava**, non ancora in generale: se un producer possa filtrare i propri candidati per anticipare una decisione del consumer. Il caso era `column_band`, che con `too_few_wordy_lines` può accettare come banda la colonna dei numeri di una tabella (misurato su Vil p.223, tabella di dadi) oppure scartarla, a seconda di quanti caratteri portano quei numeri. **Milestone 42 lo chiude con l'evidenza**: su 15 pagine di DB marcate a mano dall'utente il giudizio a vista coincide col meccanismo 10 corridoi su 10, e dice che la colonna dei numeri è un separatore di colonna a tutti gli effetti — quindi il corridoio **va emesso**, non filtrato. Il discriminatore che serve (c'è una tabella qui?) **non sta nel profilo del corridoio**: sulla somma dei caratteri di fianco la colonna D6 di DB 121 e il punto elenco di Apo si sovrappongono (3 contro 2-4) e nessuna soglia le separa. Sta nei candidati di `table_candidate`, cioè fuori dal producer, dove questo stesso elenco lo colloca. Milestone 43 lo implementa: misura dei corridoi respinti più regola in Resolution. Una versione precedente di questo bullet citava un esempio diverso, poi **ritirato perché falso** (su DB p.18 il gutter scartato era un rientro sospeso, non una colonna di tabella), e un criterio `too_few_chars` che nel codice non esiste più. **Resta aperto** il caso che la complica, e non è stato toccato: `embedded_visual`, già wired, filtra il proprio output con soglie duplicate localmente da `page_covering_visual` e `page_edge_visual` — alla lettera un filtro su criterio altrui, nello spirito ciò che tiene isolati i due producer. Finché quel caso non è formulato, la regola generale non è applicabile e non va trattata come vincolante.
+- Questione **risolta per il caso che la sollevava**, non ancora in generale: se un producer possa filtrare i propri candidati per anticipare una decisione del consumer. Il caso era `column_band`, che con `too_few_wordy_lines` può accettare come banda la colonna dei numeri di una tabella (misurato su Vil p.223, tabella di dadi) oppure scartarla, a seconda di quanti caratteri portano quei numeri. **Milestone 43 lo chiude con l'evidenza**: su 15 pagine di DB marcate a mano dall'utente il giudizio a vista coincide col meccanismo 10 corridoi su 10, e dice che la colonna dei numeri è un separatore di colonna a tutti gli effetti — quindi il corridoio **va emesso**, non filtrato. Il discriminatore che serve (c'è una tabella qui?) **non sta nel profilo del corridoio**: sulla somma dei caratteri di fianco la colonna D6 di DB 121 e il punto elenco di Apo si sovrappongono (3 contro 2-4) e nessuna soglia le separa. Sta nei candidati di `table_candidate`, cioè fuori dal producer, dove questo stesso elenco lo colloca. Milestone 44 lo implementa: misura dei corridoi respinti più regola in Resolution. Una versione precedente di questo bullet citava un esempio diverso, poi **ritirato perché falso** (su DB p.18 il gutter scartato era un rientro sospeso, non una colonna di tabella), e un criterio `too_few_chars` che nel codice non esiste più. **Resta aperto** il caso che la complica, e non è stato toccato: `embedded_visual`, già wired, filtra il proprio output con soglie duplicate localmente da `page_covering_visual` e `page_edge_visual` — alla lettera un filtro su criterio altrui, nello spirito ciò che tiene isolati i due producer. Finché quel caso non è formulato, la regola generale non è applicabile e non va trattata come vincolante.
 
 ### Coverage e ownership
 
@@ -858,12 +858,14 @@ estendibile con una soglia unica. L'ottava — contenimento
 guardare per prima — è caduta contro criterio pre-registrato: 1,94×/1,24× su Fab contro una
 barra di 3×, e il 40,6% d'origine si è rivelato prodotto per il 90% da due pagine su quaranta.
 
-## Milestone 42 - perché `column_band` non emette bande (diagnostica pura) — completata
+## Milestone 43 - perché `column_band` non emette bande (diagnostica pura) — completata
 
-Numerazione: le Milestone 38-41 stanno su altri rami (IR 2 minima con bersaglio
-Markdown, la tabella in IR 2, l'uscita leggibile, i titoli per fascia). Questo
-ramo riparte da 37 e prende il primo numero libero; la duplicazione fra i due
-percorsi Markdown è reale e resta da sanare.
+Numerazione: le Milestone 38-42 stanno su altri rami. Questo ramo, derivato da
+Milestone 37, le aveva numerate 42 e 43 senza conoscerle, e la 42 collideva con
+una 42 già pubblicata: rinumerate a 43 e 44 il 10 settembre 2026, qui e sul ramo
+su cui erano state portate. **Prima di numerare una milestone, controllare i
+numeri su tutti i rami.** La duplicazione fra i due percorsi Markdown resta da
+sanare.
 
 Diagnostica sola: nessun producer modificato, nessuna soglia toccata, nessun
 wiring — stesso perimetro di Milestone 25, 29 e 32. Criterio pre-registrato in
@@ -891,11 +893,11 @@ colonne. Misurare un manuale solo avrebbe dato la risposta sbagliata.
 Restano fuori scope: la frammentazione delle bande; il caso `too_short` sul filo;
 le pagine senza bande che sono frontespizi.
 
-## Milestone 43 - V4 in Resolution e la lettura per righe delle tabelle — completata
+## Milestone 44 - V4 in Resolution e la lettura per righe delle tabelle — completata
 
-Implementazione con i numeri della Milestone 42 come **oracolo**: non si rimisura,
-si rispetta. Piano e criteri in `Criterio_Milestone43_V4_v1.md`, verbale in
-`Verbale_Milestone43_v1.md`.
+Implementazione con i numeri della Milestone 43 come **oracolo**: non si rimisura,
+si rispetta. Piano e criteri in `Criterio_Milestone44_V4_v1.md`, verbale in
+`Verbale_Milestone44_v1.md`.
 
 Tre moduli nuovi e un solo file preesistente toccato
 (`page_analysis_column_band.py`, di cui la maggior parte è estrazione a

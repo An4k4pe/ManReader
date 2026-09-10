@@ -1,6 +1,6 @@
 """Leggere per RIGHE una regione di tabella, non per colonne.
 
-Milestone 43, Fase 3. Senza questa, la Fase 2 peggiora le tabelle invece di
+Milestone 44, Fase 3. Senza questa, la Fase 2 peggiora le tabelle invece di
 migliorarle: un consumer che prendesse i confini di colonna ammessi da
 Resolution e li usasse come colonne leggerebbe una tabella come «tutti i numeri,
 poi tutte le descrizioni».
@@ -9,12 +9,12 @@ poi tutte le descrizioni».
 `table_candidate`. Fuori, l'ordine per colonne e' quello giusto e non va
 toccato: due colonne di prosa si leggono una dopo l'altra, e leggerle per righe
 le interlaccerebbe -- che e' esattamente il difetto da cui e' partita la
-Milestone 42.
+Milestone 43.
 
 **Come si formano le righe, senza costanti.** Due righe tipografiche stanno
 nella stessa riga di tabella se le loro estensioni verticali **si sovrappongono**.
 E' una relazione fra due rettangoli, non una grandezza da tarare, ed e' la stessa
-con cui la Milestone 42 ha misurato il testo affiancato.
+con cui la Milestone 43 ha misurato il testo affiancato.
 
 La cella che va a capo non rompe niente: le sue righe successive non si
 sovrappongono alla prima, quindi formano gruppi propri, che contengono solo la

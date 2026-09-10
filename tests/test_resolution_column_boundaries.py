@@ -1,6 +1,6 @@
 """La regola V4 di Resolution: i corridoi respinti dentro una tabella.
 
-Milestone 43, Fase 2. Testano cio' che la regola DECIDE, e i quattro esiti
+Milestone 44, Fase 2. Testano cio' che la regola DECIDE, e i quattro esiti
 possibili: ammesso dentro una tabella, non ammesso perche' fuori, non ammesso
 perche' un lato e' vuoto, non ammesso perche' lo scarto aveva un altro motivo.
 Nessun corridoio respinto resta senza esito.

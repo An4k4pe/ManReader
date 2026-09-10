@@ -1,6 +1,6 @@
 """Resolution: quali corridoi respinti valgono comunque come confine di colonna.
 
-Milestone 43, Fase 2. La regola e' V4, misurata nella Milestone 42: **dentro un
+Milestone 44, Fase 2. La regola e' V4, misurata nella Milestone 43: **dentro un
 `table_candidate`, un corridoio respinto solo per mancanza di parole ai fianchi
 vale come confine di colonna, a meno che un lato sia del tutto vuoto.** Fuori
 dalle tabelle non cambia niente.
@@ -111,7 +111,7 @@ def _covered_by_a_table(
 ) -> bool:
     """La tabella copre il corridoio: lo contiene in x e lo incrocia in y.
 
-    E' la stessa relazione con cui i numeri della Milestone 42 sono stati
+    E' la stessa relazione con cui i numeri della Milestone 43 sono stati
     misurati, scritta qui perche' l'oracolo di quella milestone resti
     confrontabile. Contenimento in x e sovrapposizione in y, non contenimento
     pieno: una tabella puo' cominciare sotto l'inizio del corridoio."""

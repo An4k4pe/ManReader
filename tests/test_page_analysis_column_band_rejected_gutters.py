@@ -1,6 +1,6 @@
 """I corridoi respinti dall'ammissione di `layout.column_band`.
 
-Milestone 43, Fase 1. Verificano tre cose: che un corridoio respinto non sparisca
+Milestone 44, Fase 1. Verificano tre cose: che un corridoio respinto non sparisca
 piu', che uno ammesso non venga riportato come respinto, e che il record rifiuti
 gli stati impossibili invece di lasciarli passare -- in particolare un respinto
 **senza motivo**, che sarebbe uno scarto silenzioso registrato come tale.
