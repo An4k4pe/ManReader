@@ -78,9 +78,12 @@ from document_text_recurrence_measurements import (  # noqa: E402
 )
 from ir2_builder import (  # noqa: E402
     AssetNoteInput,
+    StatBlockNameInput,
     TableRegionInput,
     body_font,
     build_page_ir2,
+    group_source_lines,
+    redrawn_duplicates,
 )
 from ir2_markdown import (  # noqa: E402
     KIND_ASSET_NOTE,
@@ -107,6 +110,11 @@ from primitive_normalizer import normalize_backend_page_capture  # noqa: E402
 from pymupdf_capture import capture_pymupdf_page  # noqa: E402
 from resolution_column_boundaries import resolve_column_boundaries  # noqa: E402
 from resolution_page_candidates import resolve_page_candidates  # noqa: E402
+from stat_block_regions import (  # noqa: E402
+    FrameInput,
+    crosses_a_stat_block,
+    stat_block_regions,
+)
 
 
 def _fail(message: str, code: int) -> None:
@@ -870,11 +878,69 @@ def run(
             page_label = deduced_labels[page_index]
             page_label_deduced = True
 
+        # --- Le schede statistiche (`Criterio_SchedaInIR2_v1.md`) ---
+        #
+        # Consumer, non producer: i riquadri arrivano da due producer gia' wired,
+        # e che un riquadro sia una scheda lo decide `stat_block_regions` sulle
+        # righe nell'ordine di lettura qui sopra -- le stesse che il costruttore
+        # vedra', ridisegni tolti, o un grassetto simulato conterebbe una riga di
+        # campi due volte. Il nome prende il livello sotto la fascia di titolo
+        # piu' profonda del documento, non un numero fisso.
+        frame_producers = ("page_analysis.embedded_visual", "page_analysis.interior_visual_frame")
+        frames = tuple(
+            FrameInput(
+                candidate_id=candidate.candidate_id,
+                bbox=candidate.bbox,
+                primitive_ids=candidate.primitive_ids,
+            )
+            for analysis in analyses
+            if analysis.provenance.producer_name in frame_producers
+            for candidate in analysis.candidates
+        )
+        visual_boxes = {
+            primitive.primitive_id: primitive.bbox
+            for primitive in (*primitive_page.drawing_primitives, *primitive_page.image_primitives)
+        }
+        deduplicated, _redraws = redrawn_duplicates(ordered_primitives)
+        reading_lines = [line.primitives for line in group_source_lines(deduplicated)]
+        stat_blocks = stat_block_regions(frames, visual_boxes, reading_lines)
+        name_level = min(6, max(levels.values(), default=0) + 1)
+        stat_block_names = tuple(
+            StatBlockNameInput(
+                primitive_ids=tuple(
+                    primitive.primitive_id
+                    for index in block.name_line_indices
+                    for primitive in reading_lines[index]
+                ),
+                heading_level=name_level,
+            )
+            for block in stat_blocks
+            if block.name_line_indices
+        )
+        # Con le tabelle accese, una regione che attraversa il confine di una
+        # scheda non si costruisce: su Daggerheart `table_candidate` copre
+        # colonne intere di tre schede. Una tabella dentro la scheda resta.
+        built_tables = [
+            region
+            for region in table_regions
+            if not crosses_a_stat_block(region.bbox, stat_blocks)
+        ]
+        print(
+            f"schede: {len(stat_blocks)} regioni, {len(stat_block_names)} con nome, "
+            f"titolo h{name_level}"
+            + (
+                f", {len(table_regions) - len(built_tables)} tabelle attraverso una scheda"
+                if enable_tables
+                else ""
+            ),
+            file=sys.stderr,
+        )
+
         ir2_page = build_page_ir2(
             page_id=page_id,
             ordered_text_primitives=ordered_primitives,
             asset_notes=notes,
-            table_regions=table_regions if enable_tables else (),
+            table_regions=built_tables if enable_tables else (),
             page_label=page_label,
             page_label_deduced=page_label_deduced,
             list_markers=markers,
@@ -882,6 +948,7 @@ def run(
             prose_sizes=prose,
             heading_levels=levels,
             heading_max_length=scan.heading_max_length,
+            stat_block_names=stat_block_names,
         )
         validate_page_ir2_against_primitive_page(ir2_page, primitive_page)
 

@@ -119,6 +119,23 @@ class TableRegionInput:
 
 
 @dataclass(frozen=True, slots=True)
+class StatBlockNameInput:
+    """The source lines that name one stat block, and the heading level they take.
+
+    Nothing here is decided by this module. Which lines name a stat block comes
+    from ``stat_block_regions`` -- a drawn frame holding at least two lines of
+    label/value pairs, whose first unlabelled line is the name -- and the level
+    from the caller, which knows the document's heading bands
+    (`Criterio_SchedaInIR2_v1.md`). The lines are given by **primitive id**, not
+    by position: this module drops redrawn duplicates and table cells before it
+    groups lines, so positions are its own.
+    """
+
+    primitive_ids: tuple[str, ...]
+    heading_level: int
+
+
+@dataclass(frozen=True, slots=True)
 class _SourceLine:
     block: str
     line: str
@@ -647,6 +664,7 @@ def build_page_ir2(
     prose_sizes: frozenset[float] = frozenset(),
     heading_levels: dict[float, int] | None = None,
     heading_max_length: float | None = None,
+    stat_block_names: Sequence[StatBlockNameInput] = (),
 ) -> PageIR2:
     """Build one IR 2 page. Reading order is the caller's; this only groups."""
 
@@ -745,6 +763,20 @@ def build_page_ir2(
         for position, group in enumerate(group_of)
         if group in merged_levels
     }
+    # Il nome di una scheda e' un titolo, e il livello lo decide il chiamante:
+    # `Criterio_SchedaInIR2_v1.md`. Le righe si riconoscono per primitiva, perche'
+    # le posizioni sono di questo modulo. `name_of_position` dice a quale scheda
+    # appartiene la riga, cosi' due nomi in fila restano due titoli. **Non
+    # scavalca il livello per dimensione**: un nome che e' gia' un titolo di
+    # sezione resta al suo livello. Scavalcarlo declassava da h1 a h4 i nomi a 34
+    # pt del bestiario di DB, accanto a `# TROLL` che restava h1.
+    name_of_position: dict[int, int] = {}
+    for scheda, name in enumerate(stat_block_names):
+        name_ids = frozenset(name.primitive_ids)
+        for position, line in enumerate(bound_lines):
+            if any(primitive.primitive_id in name_ids for primitive in line.primitives):
+                name_of_position[position] = scheda
+                heading_flags.setdefault(position, name.heading_level)
     # Le voci numerate hanno un segnale proprio -- gli interi consecutivi -- e non
     # passano dai marcatori, che sono caratteri non alfanumerici.
     ordered_flags = numbered_item_flags(keyed)
@@ -802,12 +834,26 @@ def build_page_ir2(
         breaks_for_heading = group_of[position] != group_of[position - 1] and (
             position in heading_flags or (position - 1) in heading_flags
         )
-        if breaks_for_heading or breaks_paragraph(
-            previous_line,
-            source_line,
-            page_body_font,
-            list_markers,
-            item_flags[position] or ordered_flags[position],
+        # Il nome di una scheda: il paragrafo si chiude prima e dopo, e le righe
+        # dello stesso nome restano unite anche fra due blocchi -- un nome che va
+        # a capo e' un nome solo. Senza nomi entrambe sono False e la regola e'
+        # quella di prima, valutata nello stesso ordine.
+        same_name = name_of_position.get(position, -1) == name_of_position.get(
+            position - 1, -2
+        )
+        name_boundary = not same_name and (
+            position in name_of_position or (position - 1) in name_of_position
+        )
+        if not same_name and (
+            name_boundary
+            or breaks_for_heading
+            or breaks_paragraph(
+                previous_line,
+                source_line,
+                page_body_font,
+                list_markers,
+                item_flags[position] or ordered_flags[position],
+            )
         ):
             _emit(
                 pending_text.strip(),
