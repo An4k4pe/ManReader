@@ -50,7 +50,14 @@ _RUN_KEYS = frozenset({"text", "traits"})
 _STRUCTURE_KEYS = frozenset({"kind", "rows"})
 _CELL_KEYS = frozenset({"row", "column", "text", "primitive_ids"})
 _ASSET_KEYS = frozenset(
-    {"digest", "file_name", "bbox", "occurrence_count", "proposed_structural_kind"}
+    {
+        "digest",
+        "file_name",
+        "bbox",
+        "occurrence_count",
+        "proposed_structural_kind",
+        "stat_block_name",
+    }
 )
 
 
@@ -125,6 +132,7 @@ def _asset_to_dict(asset: AssetRefIR2) -> dict[str, object]:
         "bbox": list(asset.bbox),
         "occurrence_count": asset.occurrence_count,
         "proposed_structural_kind": asset.proposed_structural_kind,
+        "stat_block_name": asset.stat_block_name,
     }
 
 
@@ -272,6 +280,7 @@ def _parse_asset(value: object, path: str) -> AssetRefIR2:
         proposed_structural_kind=_optional_str(
             data, "proposed_structural_kind", f"{path}.proposed_structural_kind"
         ),
+        stat_block_name=_optional_str(data, "stat_block_name", f"{path}.stat_block_name"),
     )
 
 

@@ -75,11 +75,18 @@ _UNCLASSIFIED_PHRASE = "immagine non classificata"
 def render_asset_note(asset: AssetRefIR2) -> str:
     """One short line saying what was removed, how big it was, and where it is."""
 
-    phrase = (
-        _UNCLASSIFIED_PHRASE
-        if asset.proposed_structural_kind is None
-        else _KIND_PHRASES.get(asset.proposed_structural_kind, _UNCLASSIFIED_PHRASE)
-    )
+    # Lo sfondo di una scheda si dice per quello che e': lo ha riconosciuto il
+    # consumer (`Criterio_NotaSfondoScheda_v1.md`), e dirlo col kind proposto dal
+    # candidato scambiava il ritratto con la pergamena da una pagina all'altra.
+    # Il nome e' quello del titolo che la scheda porta.
+    if asset.stat_block_name is not None:
+        phrase = f"sfondo della scheda {asset.stat_block_name}"
+    else:
+        phrase = (
+            _UNCLASSIFIED_PHRASE
+            if asset.proposed_structural_kind is None
+            else _KIND_PHRASES.get(asset.proposed_structural_kind, _UNCLASSIFIED_PHRASE)
+        )
     width = asset.bbox[2] - asset.bbox[0]
     height = asset.bbox[3] - asset.bbox[1]
     repeated = (

@@ -25,9 +25,14 @@ coppie sono relazioni o fatti della pagina.
    `esperimenti_statblock/pila2.py`. Con una coppia sola per riga passano
    prosa e tabelle: `RISULTATI_UNA_COPPIA.txt`, non accettato al giudizio a
    vista dell'utente.
-3. **Fra riquadri sovrapposti vince quello con piu' righe, e ogni riga sta in
-   al piu' una scheda**: la scheda e' l'oggetto intero, non il suo blocco dei
-   campi.
+3. **Fra riquadri sovrapposti vince il piu' stretto che contiene un nome, e
+   senza nome il piu' ampio; ogni riga sta in al piu' una scheda.** La scheda
+   e' l'oggetto intero, non il suo blocco dei campi, che il nome non lo contiene.
+   La prima forma -- «vince quello con piu' righe» -- e' caduta al passo 3b
+   (`Esito_NotaSfondoScheda_v1.md`): su Dragonbane idx 31 l'illustrazione del
+   pipistrello copre la pergamena della scheda e anche il testo della stanza
+   accanto, 56 righe contro 28, e vinceva lei. Sulle 141 schede dei tre
+   intervalli di sviluppo e' l'unica che cambia.
 
 Il **nome** e' la prima riga della scheda, se non porta coppie, piu' le righe
 che la seguono **subito**, nell'ordine di lettura, nello stesso stile -- un
@@ -43,6 +48,10 @@ titolo l'etichetta della prima riga di una tabella. Misurato sui tre intervalli
 di sviluppo: lo stile del nome non ricompare nella scheda in 136 schede su 136 di
 Daggerheart e Dragonbane. Dove sbagliano, sbagliano verso nessun titolo invece
 che verso un titolo falso.
+
+Ogni scheda porta anche i **membri del suo riquadro** (`frame_primitive_ids`):
+sono le primitive che la nota dello sfondo sostituisce
+(`Criterio_NotaSfondoScheda_v1.md`).
 """
 
 from __future__ import annotations
@@ -72,11 +81,14 @@ class StatBlockRegion:
     ``line_indices`` e ``name_line_indices`` indicizzano le righe ricevute, in
     ordine di lettura. ``candidate_id`` e' il riquadro da cui la scheda viene:
     separare un candidato fuso non ne inventa uno nuovo, quindi piu' schede
-    possono portare lo stesso.
+    possono portare lo stesso. ``frame_primitive_ids`` sono i membri del pezzo:
+    tutti quelli del candidato se non si e' separato, i massimali del pezzo se
+    si e' separato.
     """
 
     bbox: BBox
     candidate_id: str
+    frame_primitive_ids: tuple[str, ...]
     line_indices: tuple[int, ...]
     name_line_indices: tuple[int, ...]
 
@@ -165,24 +177,28 @@ def split_frame(
     frame: FrameInput,
     visual_boxes: Mapping[str, BBox],
     line_boxes: Sequence[BBox | None],
-) -> list[BBox]:
-    """I riquadri dentro un candidato, o il candidato stesso se ce n'e' uno.
+) -> list[tuple[BBox, tuple[str, ...]]]:
+    """I riquadri dentro un candidato, ciascuno coi suoi membri, o il candidato
+    stesso se ce n'e' uno.
 
     I **massimali** sono i membri il cui bbox non sta dentro quello di un altro
     membro con bbox diverso: due membri con lo stesso bbox -- il fondo e il suo
     contorno -- restano entrambi, e condividendo le righe si uniscono. Contano
     solo i massimali che contengono almeno una riga. Se ne restano almeno due il
-    candidato si separa; altrimenti resta **com'e'**, e il suo bbox non cambia.
+    candidato si separa; altrimenti resta **com'e'**, col suo bbox e tutti i suoi
+    membri.
     """
 
-    members = [visual_boxes[pid] for pid in frame.primitive_ids if pid in visual_boxes]
-    maximal = [
-        box
-        for box in members
-        if not any(other != box and _contains(other, box) for other in members)
+    members = [
+        (pid, visual_boxes[pid]) for pid in frame.primitive_ids if pid in visual_boxes
     ]
-    groups: list[tuple[BBox, set[int]]] = []
-    for box in maximal:
+    maximal = [
+        (pid, box)
+        for pid, box in members
+        if not any(other != box and _contains(other, box) for _other_pid, other in members)
+    ]
+    groups: list[tuple[BBox, set[int], list[str]]] = []
+    for pid, box in maximal:
         inside = {
             index
             for index, line_box in enumerate(line_boxes)
@@ -191,14 +207,17 @@ def split_frame(
         if not inside:
             continue
         merged = box
+        ids = [pid]
         for group in [group for group in groups if group[1] & inside]:
             groups.remove(group)
             merged = _union(merged, group[0])
             inside |= group[1]
-        groups.append((merged, inside))
+            ids = group[2] + ids
+        groups.append((merged, inside, ids))
     if len(groups) < 2:
-        return [frame.bbox]
-    return [box for box, _inside in sorted(groups, key=lambda group: (group[0][1], group[0][0]))]
+        return [(frame.bbox, frame.primitive_ids)]
+    groups.sort(key=lambda group: (group[0][1], group[0][0]))
+    return [(box, tuple(sorted(ids))) for box, _inside, ids in groups]
 
 
 def _name_lines(
@@ -244,21 +263,30 @@ def stat_block_regions(
     pairs = [label_pairs(line) for line in lines]
     field_lines = {index for index, count in enumerate(pairs) if count >= 2}
 
-    proposals: list[tuple[BBox, str, tuple[int, ...]]] = []
+    proposals: list[tuple[BBox, str, tuple[str, ...], tuple[int, ...], tuple[int, ...]]] = []
     for frame in frames:
-        for piece in split_frame(frame, visual_boxes, line_boxes):
+        for piece, members in split_frame(frame, visual_boxes, line_boxes):
             inside = tuple(
                 index
                 for index, line_box in enumerate(line_boxes)
                 if line_box is not None and _centre_inside(piece, line_box)
             )
             if len(field_lines.intersection(inside)) >= 2:
-                proposals.append((piece, frame.candidate_id, inside))
+                proposals.append(
+                    (piece, frame.candidate_id, members, inside, _name_lines(lines, inside, pairs))
+                )
 
-    proposals.sort(key=lambda proposal: (-len(proposal[2]), proposal[2][0]))
+    # Prima le proposte con un nome, dalla piu' stretta; poi quelle senza, dalla
+    # piu' ampia. A parita', l'ordine di lettura.
+    proposals.sort(
+        key=lambda proposal: (
+            (0, len(proposal[3])) if proposal[4] else (1, -len(proposal[3])),
+            proposal[3][0],
+        )
+    )
     taken: set[int] = set()
     regions: list[StatBlockRegion] = []
-    for piece, candidate_id, inside in proposals:
+    for piece, candidate_id, members, inside, name in proposals:
         if taken.intersection(inside):
             continue
         taken.update(inside)
@@ -266,8 +294,9 @@ def stat_block_regions(
             StatBlockRegion(
                 bbox=piece,
                 candidate_id=candidate_id,
+                frame_primitive_ids=members,
                 line_indices=inside,
-                name_line_indices=_name_lines(lines, inside, pairs),
+                name_line_indices=name,
             )
         )
     regions.sort(key=lambda region: region.line_indices[0])

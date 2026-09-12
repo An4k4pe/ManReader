@@ -29,7 +29,7 @@ import json
 import sys
 from collections import Counter
 from contextlib import ExitStack
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import fitz
@@ -83,6 +83,7 @@ from ir2_builder import (  # noqa: E402
     body_font,
     build_page_ir2,
     group_source_lines,
+    join_lines,
     redrawn_duplicates,
 )
 from ir2_markdown import (  # noqa: E402
@@ -917,6 +918,29 @@ def run(
             for block in stat_blocks
             if block.name_line_indices
         )
+        # Lo sfondo di una scheda con nome e' una nota che lo dice
+        # (`Criterio_NotaSfondoScheda_v1.md`): sono le immagini fra i membri del
+        # suo riquadro. Solo le schede con nome, perche' il nome e' la prova che
+        # il riquadro intesta qualcosa: a DB idx 99 la regione senza nome e'
+        # un'illustrazione con sopra anche prosa. Il nome e' il testo del titolo,
+        # unito con la stessa regola del costruttore.
+        backgrounds: dict[str, str] = {}
+        for block in stat_blocks:
+            if not block.name_line_indices:
+                continue
+            name = ""
+            for index in block.name_line_indices:
+                line_text = "".join(primitive.text for primitive in reading_lines[index])
+                name = join_lines(name, line_text) if name else line_text
+            for primitive_id in block.frame_primitive_ids:
+                backgrounds[primitive_id] = name.strip()
+        notes = [
+            replace(note, stat_block_name=backgrounds[note.primitive_id])
+            if note.primitive_id in backgrounds
+            else note
+            for note in notes
+        ]
+
         # Con le tabelle accese, una regione che attraversa il confine di una
         # scheda non si costruisce: su Daggerheart `table_candidate` copre
         # colonne intere di tre schede. Una tabella dentro la scheda resta.
@@ -932,7 +956,8 @@ def run(
                 f", {len(table_regions) - len(built_tables)} tabelle attraverso una scheda"
                 if enable_tables
                 else ""
-            ),
+            )
+            + f", {sum(1 for note in notes if note.stat_block_name)} sfondi",
             file=sys.stderr,
         )
 

@@ -97,6 +97,7 @@ class AssetNoteInput:
     proposed_structural_kind: str | None = None
     candidate_ids: tuple[str, ...] = ()
     resolution: str | None = None
+    stat_block_name: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1032,6 +1033,7 @@ def build_page_ir2(
                     bbox=note.bbox,
                     occurrence_count=note.occurrence_count,
                     proposed_structural_kind=note.proposed_structural_kind,
+                    stat_block_name=note.stat_block_name,
                 ),
                 candidate_ids=note.candidate_ids,
                 resolution=note.resolution,

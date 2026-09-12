@@ -103,6 +103,14 @@ class AssetRefIR2:
     ``proposed_structural_kind`` is reported from the governing candidate and is
     a proposal, never a decision -- ``RegionCandidate`` is by contract an
     unapproved structural proposal.
+
+    ``stat_block_name`` is set when the asset is the drawn background of a stat
+    block that has a name, and carries that name. It is a field of its own and
+    not a value of ``proposed_structural_kind`` because the two say different
+    things: that one reports what a candidate proposed, this one what the
+    consumer recognised (``stat_block_regions``). Without it, on Dragonbane the
+    portrait read ``riquadro`` and the parchment ``immagine inserita`` on one
+    page, and the other way round on the next. `Criterio_NotaSfondoScheda_v1.md`.
     """
 
     digest: str
@@ -110,6 +118,7 @@ class AssetRefIR2:
     bbox: BBox
     occurrence_count: int
     proposed_structural_kind: str | None = None
+    stat_block_name: str | None = None
 
     def __post_init__(self) -> None:
         _validate_non_empty_string(self.digest, "digest")
@@ -120,6 +129,8 @@ class AssetRefIR2:
             raise ValueError("occurrence_count must be at least 1")
         if self.proposed_structural_kind is not None:
             _validate_kind(self.proposed_structural_kind)
+        if self.stat_block_name is not None:
+            _validate_non_empty_string(self.stat_block_name, "stat_block_name")
 
 
 @dataclass(frozen=True, slots=True)

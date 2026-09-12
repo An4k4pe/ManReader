@@ -90,11 +90,11 @@ class SplitFrameTest(unittest.TestCase):
         frame = _frame("c", (0.0, 0.0, 300.0, 128.0), "d:1", "d:2")
         lines = [(10.0, 20.0, 200.0, 30.0), (10.0, 90.0, 200.0, 100.0)]
         pieces = split_frame(frame, {"d:1": BOX_1, "d:2": BOX_2}, lines)
-        self.assertEqual(pieces, [BOX_1, BOX_2])
+        self.assertEqual(pieces, [(BOX_1, ("d:1",)), (BOX_2, ("d:2",))])
 
     def test_a_box_with_its_outline_and_inner_panel_stays_whole(self) -> None:
         # Fondo, contorno e fondino dei campi: un solo massimale, nessuna
-        # separazione, e il bbox resta quello del candidato.
+        # separazione, e il candidato resta com'e', coi suoi membri.
         frame = _frame("c", BOX_1, "d:fondo", "d:contorno", "d:campi")
         boxes = {
             "d:fondo": BOX_1,
@@ -102,18 +102,18 @@ class SplitFrameTest(unittest.TestCase):
             "d:campi": (5.0, 25.0, 295.0, 55.0),
         }
         pieces = split_frame(frame, boxes, [(10.0, 30.0, 200.0, 40.0)])
-        self.assertEqual(pieces, [BOX_1])
+        self.assertEqual(pieces, [(BOX_1, ("d:fondo", "d:contorno", "d:campi"))])
 
     def test_maximal_boxes_sharing_a_line_are_one_box(self) -> None:
         frame = _frame("c", (0.0, 0.0, 300.0, 100.0), "d:a", "d:b")
         boxes = {"d:a": (0.0, 0.0, 200.0, 100.0), "d:b": (100.0, 0.0, 300.0, 100.0)}
         pieces = split_frame(frame, boxes, [(100.0, 40.0, 200.0, 50.0)])
-        self.assertEqual(pieces, [(0.0, 0.0, 300.0, 100.0)])
+        self.assertEqual(pieces, [((0.0, 0.0, 300.0, 100.0), ("d:a", "d:b"))])
 
     def test_a_box_without_lines_does_not_split(self) -> None:
         frame = _frame("c", (0.0, 0.0, 300.0, 128.0), "d:1", "d:2")
         pieces = split_frame(frame, {"d:1": BOX_1, "d:2": BOX_2}, [(10.0, 20.0, 200.0, 30.0)])
-        self.assertEqual(pieces, [(0.0, 0.0, 300.0, 128.0)])
+        self.assertEqual(pieces, [((0.0, 0.0, 300.0, 128.0), ("d:1", "d:2"))])
 
 
 class StatBlockRegionsTest(unittest.TestCase):
@@ -124,6 +124,7 @@ class StatBlockRegionsTest(unittest.TestCase):
         self.assertEqual(regions[0].line_indices, (0, 1, 2))
         self.assertEqual(regions[0].name_line_indices, (0,))
         self.assertEqual(regions[0].candidate_id, "c")
+        self.assertEqual(regions[0].frame_primitive_ids, ("d",))
 
     def test_one_field_line_is_not_enough(self) -> None:
         prose = _line(2, 45.0, ("Il ragno attacca con le zampe.", BODY))
@@ -144,6 +145,8 @@ class StatBlockRegionsTest(unittest.TestCase):
         self.assertEqual([r.name_line_indices for r in regions], [(0,), (3,)])
         self.assertEqual([r.bbox for r in regions], [BOX_1, BOX_2])
         self.assertEqual({r.candidate_id for r in regions}, {"fuso"})
+        # Ogni scheda porta i membri del SUO pezzo, non quelli del candidato fuso.
+        self.assertEqual([r.frame_primitive_ids for r in regions], [("d:1",), ("d:2",)])
 
     def test_the_frame_with_more_lines_wins_and_each_line_is_taken_once(self) -> None:
         # Il riquadro dei soli campi sta dentro la scheda: vince la scheda intera.
@@ -152,6 +155,25 @@ class StatBlockRegionsTest(unittest.TestCase):
         frames = [_frame("campi", inner, "d:campi"), _frame("scheda", BOX_1, "d:scheda")]
         regions = stat_block_regions(frames, {"d:campi": inner, "d:scheda": BOX_1}, lines)
         self.assertEqual([r.candidate_id for r in regions], ["scheda"])
+
+    def test_an_illustration_over_the_stat_block_does_not_win_it(self) -> None:
+        # Dragonbane idx 31: l'illustrazione del pipistrello copre la pergamena
+        # e anche il testo accanto. Entrambe cominciano dal nome; vince la piu'
+        # stretta, e lo sfondo della scheda e' la pergamena.
+        lines = [
+            _name(0, 10.0, "PIPISTRELLI VAMPIRO"),
+            _fields(1, 30.0),
+            _fields(2, 45.0),
+            _line(3, 80.0, ("5. CRIPTA DELLA SERVITU'", BODY)),
+            _line(4, 95.0, ("Una camera buia e umida.", BODY)),
+        ]
+        parchment = BOX_1
+        illustration = (0.0, 0.0, 400.0, 110.0)
+        frames = [_frame("illustrazione", illustration, "i:1"), _frame("pergamena", parchment, "i:2")]
+        regions = stat_block_regions(frames, {"i:1": illustration, "i:2": parchment}, lines)
+        self.assertEqual([r.candidate_id for r in regions], ["pergamena"])
+        self.assertEqual(regions[0].frame_primitive_ids, ("i:2",))
+        self.assertEqual(regions[0].name_line_indices, (0,))
 
     def test_a_wrapped_name_is_one_name(self) -> None:
         tier = _line(2, 30.0, ("Tier", BOLD), (" 4 Solo", BODY))
@@ -175,7 +197,6 @@ class StatBlockRegionsTest(unittest.TestCase):
         regions = stat_block_regions([_frame("c", BOX_1, "d")], {"d": BOX_1}, lines)
         self.assertEqual(regions[0].line_indices, (1, 2, 3))
         self.assertEqual(regions[0].name_line_indices, (1,))
-
 
     def test_a_style_that_recurs_in_the_stat_block_is_not_a_name(self) -> None:
         # DB p.98: un'illustrazione con sopra anche prosa passa da scheda, e la
@@ -216,7 +237,11 @@ class StatBlockRegionsTest(unittest.TestCase):
 
 class CrossesAStatBlockTest(unittest.TestCase):
     REGION = StatBlockRegion(
-        bbox=(0.0, 0.0, 300.0, 200.0), candidate_id="c", line_indices=(0,), name_line_indices=()
+        bbox=(0.0, 0.0, 300.0, 200.0),
+        candidate_id="c",
+        frame_primitive_ids=("d",),
+        line_indices=(0,),
+        name_line_indices=(),
     )
 
     def test_a_table_inside_the_stat_block_stays(self) -> None:
