@@ -210,3 +210,24 @@ class SizesThatCarryHeadingsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StructureNameLevelTest(unittest.TestCase):
+    """L'eccezione dichiarata per i nomi delle strutture riconosciute."""
+
+    def test_a_structure_name_at_prose_size_takes_the_level_below_the_bands(self) -> None:
+        from document_heading_policy import structure_name_level
+
+        self.assertEqual(structure_name_level("RAGNO GIGANTE", {28.0: 1, 17.0: 2}), 3)
+        self.assertEqual(structure_name_level("RAGNO GIGANTE", {}), 1)
+
+    def test_the_other_heading_filters_still_apply(self) -> None:
+        from document_heading_policy import structure_name_level
+
+        levels = {28.0: 1}
+        self.assertIsNone(structure_name_level("X", levels))
+        self.assertIsNone(structure_name_level("Capitolo 1 .......... 12", levels))
+        self.assertIsNone(structure_name_level("PIE' DI PAGINA", levels, excluded=frozenset({"PIE' DI PAGINA"})))
+        long_prose = "riposa nelle nicchie del sotterraneo mentre gli altri vagano"
+        self.assertIsNone(structure_name_level(long_prose, levels, max_length=40.0))
+        self.assertEqual(structure_name_level("GRUNTA", levels, max_length=40.0), 2)

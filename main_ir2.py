@@ -75,6 +75,7 @@ from prototype_ir2_page import (  # noqa: E402
     OpenedSource,
     capture_document,
     run,
+    stat_block_line_facts_of_page,
 )
 
 from document_asset_catalogue import (  # noqa: E402
@@ -94,6 +95,7 @@ from ir2_model import DocumentIR2, IR2Provenance  # noqa: E402
 from ir2_serialization import document_ir2_from_dict, document_ir2_to_dict  # noqa: E402
 from job_source_snapshot import inspect_source_file  # noqa: E402
 from pymupdf_asset_extraction import extract_occurrence_raster  # noqa: E402
+from stat_block_regions import LineFacts, RepeatedStructure, repeated_structures  # noqa: E402
 
 
 # **Lo stato dei processi figli, ereditato per `fork` e mai serializzato.**
@@ -119,6 +121,10 @@ class _Lavoro:
     # 379 pagine di Dag. Con `fork` i figli le ereditano senza copiarle.
     bands: HeadingBands | None = None
     opened: OpenedSource | None = None
+    # IN PROVA, `--schede-struttura`: le strutture ripetute del documento,
+    # calcolate prima del fork della resa come le fasce dei titoli. `None` lascia
+    # la regola delle schede di 3a.
+    strutture_schede: tuple[RepeatedStructure, ...] | None = None
 
 
 _LAVORO: _Lavoro | None = None
@@ -151,12 +157,25 @@ def _rendi_pagina(page_index: int) -> tuple[int, object, str | None]:
             opened=_LAVORO.opened,
             captured_document=_LAVORO.captured,
             bands=_LAVORO.bands,
+            stat_block_document=_LAVORO.strutture_schede,
         ), None
     except Exception as errore:  # noqa: BLE001
         # Una pagina che cade non deve fermare il documento: si registra e si
         # prosegue. Tre crash di questo giro venivano da pagine singole, e
         # perdere l'intero manuale per una di esse costa piu' di quanto protegga.
         return page_index, None, f"{type(errore).__name__}: {errore}"
+
+
+def _righe_di_pagina(page_index: int) -> tuple[int, tuple[LineFacts, ...], str | None]:
+    """Prima passata di `--schede-struttura`, dentro un processo figlio."""
+
+    assert _LAVORO is not None and _LAVORO.opened is not None
+    try:
+        return page_index, stat_block_line_facts_of_page(
+            _LAVORO.opened.document, _LAVORO.opened.plumber, page_index
+        ), None
+    except Exception as errore:  # noqa: BLE001
+        return page_index, (), f"{type(errore).__name__}: {errore}"
 
 
 _STATO = "stato.json"
@@ -205,7 +224,7 @@ def _impronta_del_codice() -> str:
 
 
 def _stato_atteso(
-    pdf: Path, finestra: int, tabelle: bool
+    pdf: Path, finestra: int, tabelle: bool, schede_struttura: bool = False
 ) -> dict[str, dict[str, object]]:
     """La sorgente **verificata** e le opzioni che cambiano l'uscita.
 
@@ -226,7 +245,11 @@ def _stato_atteso(
             "size_bytes": riferimento.size_bytes,
             "original_name": riferimento.original_name,
         },
-        "opzioni": {"finestra": finestra, "tabelle": tabelle},
+        "opzioni": {
+            "finestra": finestra,
+            "tabelle": tabelle,
+            "schede_struttura": schede_struttura,
+        },
         "codice": {"sha256": _impronta_del_codice()},
     }
 
@@ -430,6 +453,11 @@ def main() -> int:
     )
     parser.add_argument("--tabelle", action="store_true")
     parser.add_argument(
+        "--schede-struttura", action="store_true",
+        help="IN PROVA: schede riconosciute dalla struttura ricorrente e dalle "
+        "colonne di tabella, invece che dalla regola di 3a. Una passata in piu'.",
+    )
+    parser.add_argument(
         "--rifai", action="store_true",
         help="ignora quanto gia' prodotto e ricomincia da capo.",
     )
@@ -444,7 +472,9 @@ def main() -> int:
     percorso_stato = arguments.out / _STATO
 
     # --- Lo stato: si riprende solo da una corsa sulla STESSA sorgente ---
-    atteso = _stato_atteso(arguments.pdf, arguments.finestra, arguments.tabelle)
+    atteso = _stato_atteso(
+        arguments.pdf, arguments.finestra, arguments.tabelle, arguments.schede_struttura
+    )
     riprendi = False
     produttori_salvati: tuple[str, ...] = ()
     if percorso_stato.is_file() and not arguments.rifai:
@@ -543,6 +573,34 @@ def main() -> int:
         da_fare = [i for i in wanted if i not in gia_fatte]
 
         processi = arguments.processi or (os.cpu_count() or 1)
+        if arguments.schede_struttura and da_fare:
+            # La struttura ripetuta e' un fatto di DOCUMENTO: le righe si
+            # raccolgono su tutte le pagine catturate, non solo sull'intervallo.
+            tutte = sorted(captured.pages)
+            print(f"schede, prima passata: righe di {len(tutte)} pagine...", flush=True)
+            righe: list[tuple[int, tuple[LineFacts, ...], str | None]] = []
+            if min(processi, len(tutte)) == 1:
+                _LAVORO.opened = OpenedSource(document=document, plumber=plumber)
+                righe = [_righe_di_pagina(i) for i in tutte]
+            else:
+                with ProcessPoolExecutor(
+                    max_workers=min(processi, len(tutte)),
+                    mp_context=get_context("fork"),
+                    initializer=_prepara_figlio,
+                ) as pool:
+                    righe = list(pool.map(_righe_di_pagina, tutte, chunksize=1))
+            cadute = [(i, e) for i, _r, e in righe if e is not None]
+            _LAVORO.strutture_schede = repeated_structures(
+                {i: fatti for i, fatti, e in righe if e is None}
+            )
+            _LAVORO.opened = None
+            print(
+                f"  {len(_LAVORO.strutture_schede)} strutture ripetute"
+                + (f", {len(cadute)} pagine cadute" if cadute else ""),
+                flush=True,
+            )
+            for struttura in _LAVORO.strutture_schede:
+                print(f"    {sorted(struttura.labels)[:8]}", flush=True)
         processi = max(1, min(processi, max(1, len(da_fare))))
         print(
             f"rendo {len(da_fare)} pagine su {processi} "

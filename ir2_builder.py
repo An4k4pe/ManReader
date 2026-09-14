@@ -40,7 +40,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from document_heading_measurements import SizedLine  # noqa: I001
-from document_heading_policy import heading_lines, merge_wrapped  # noqa: I001
+from document_heading_policy import (  # noqa: I001
+    heading_lines,
+    merge_wrapped,
+    structure_name_level,
+)
 from document_list_policy import (  # noqa: I001
     list_item_flags,
     numbered_item_flags,
@@ -120,19 +124,17 @@ class TableRegionInput:
 
 @dataclass(frozen=True, slots=True)
 class StatBlockNameInput:
-    """The source lines that name one stat block, and the heading level they take.
+    """The source lines that name one stat block.
 
-    Nothing here is decided by this module. Which lines name a stat block comes
-    from ``stat_block_regions`` -- a drawn frame holding at least two lines of
-    label/value pairs, whose first unlabelled line is the name -- and the level
-    from the caller, which knows the document's heading bands
-    (`Criterio_SchedaInIR2_v1.md`). The lines are given by **primitive id**, not
-    by position: this module drops redrawn duplicates and table cells before it
-    groups lines, so positions are its own.
+    Which lines name a stat block comes from ``stat_block_regions``. Whether the
+    name becomes a heading, and at which level, is decided by the heading policy
+    (``document_heading_policy.structure_name_level``), as a declared exception
+    to the size rule -- not here and not by the caller. The lines are given by
+    **primitive id**, not by position: this module drops redrawn duplicates and
+    table cells before it groups lines, so positions are its own.
     """
 
     primitive_ids: tuple[str, ...]
-    heading_level: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -763,20 +765,35 @@ def build_page_ir2(
         for position, group in enumerate(group_of)
         if group in merged_levels
     }
-    # Il nome di una scheda e' un titolo, e il livello lo decide il chiamante:
-    # `Criterio_SchedaInIR2_v1.md`. Le righe si riconoscono per primitiva, perche'
-    # le posizioni sono di questo modulo. `name_of_position` dice a quale scheda
-    # appartiene la riga, cosi' due nomi in fila restano due titoli. **Non
-    # scavalca il livello per dimensione**: un nome che e' gia' un titolo di
-    # sezione resta al suo livello. Scavalcarlo declassava da h1 a h4 i nomi a 34
-    # pt del bestiario di DB, accanto a `# TROLL` che restava h1.
+    # Il nome di una scheda diventa titolo se lo dice lo script dei titoli, come
+    # eccezione dichiarata alla regola della dimensione
+    # (`document_heading_policy.structure_name_level`). Le righe si riconoscono
+    # per primitiva, perche' le posizioni sono di questo modulo.
+    # `name_of_position` dice a quale scheda appartiene la riga, cosi' due nomi in
+    # fila restano due titoli. Un nome che non passa i filtri dei titoli non e' un
+    # nome: il paragrafo non si spezza intorno a lui. **Non scavalca il livello
+    # per dimensione**: un nome che e' gia' un titolo di sezione resta al suo
+    # livello -- scavalcarlo declassava da h1 a h4 i nomi a 34 pt del bestiario di
+    # DB, accanto a `# TROLL` che restava h1.
     name_of_position: dict[int, int] = {}
     for scheda, name in enumerate(stat_block_names):
         name_ids = frozenset(name.primitive_ids)
-        for position, line in enumerate(bound_lines):
-            if any(primitive.primitive_id in name_ids for primitive in line.primitives):
-                name_of_position[position] = scheda
-                heading_flags.setdefault(position, name.heading_level)
+        positions = [
+            position
+            for position, line in enumerate(bound_lines)
+            if any(primitive.primitive_id in name_ids for primitive in line.primitives)
+        ]
+        text = ""
+        for position in positions:
+            text = join_lines(text, bound_lines[position].text) if text else bound_lines[position].text
+        level = structure_name_level(
+            text, heading_levels or {}, max_length=heading_max_length
+        )
+        if level is None:
+            continue
+        for position in positions:
+            name_of_position[position] = scheda
+            heading_flags.setdefault(position, level)
     # Le voci numerate hanno un segnale proprio -- gli interi consecutivi -- e non
     # passano dai marcatori, che sono caratteri non alfanumerici.
     ordered_flags = numbered_item_flags(keyed)

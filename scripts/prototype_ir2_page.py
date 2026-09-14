@@ -68,6 +68,7 @@ from document_heading_band_policy import HeadingBands, heading_bands  # noqa: E4
 from document_heading_measurements import (  # noqa: E402
     measure_font_sizes,
 )
+from document_heading_policy import structure_level  # noqa: E402
 from document_line_start_measurements import (  # noqa: E402
     count_block_signatures,
     measure_document_line_starts,
@@ -112,8 +113,12 @@ from resolution_column_boundaries import resolve_column_boundaries  # noqa: E402
 from resolution_page_candidates import resolve_page_candidates  # noqa: E402
 from stat_block_regions import (  # noqa: E402
     FrameInput,
-    crosses_a_stat_block,
+    LineFacts,
+    RepeatedStructure,
+    crossed_stat_blocks,
+    line_facts,
     stat_block_regions,
+    stat_blocks_from_structures,
 )
 
 
@@ -618,6 +623,162 @@ def review_lines_for(
     return review_lines
 
 
+@dataclass(frozen=True)
+class PageReadingFacts:
+    """Cio' che una pagina e' prima di diventare IR 2: primitive, candidati di
+    tutti i producer, ordine di lettura, confini di colonna ammessi.
+
+    Estratto da `run` perche' la prima passata di `main_ir2 --schede-struttura`
+    ne ha bisogno per ogni pagina, e una seconda copia della catena si
+    scollerebbe dalla prima: e' successo al progetto piu' di una volta."""
+
+    page: fitz.Page
+    primitive_page: NormalizedPrimitivePage
+    analyses: tuple
+    band_analysis: object
+    band_measures: tuple
+    ordered_primitives: list
+    admitted_boundaries: tuple
+
+
+def page_reading_facts(
+    document: fitz.Document,
+    plumber_pdf: object,
+    page_index: int,
+    *,
+    interrupt_corridor: str = "",
+) -> PageReadingFacts:
+    """La catena di `run` fino all'ordine di lettura e ai confini ammessi."""
+
+    page_id = f"page:{page_index + 1:04d}"
+    generation_id = f"generation:ir2:{page_index + 1:04d}"
+    page = document[page_index]
+    if not passes_page_guard(page):
+        _fail("page guard: rotation or mediabox != cropbox", 3)
+
+    capture = capture_pymupdf_page(
+        page,
+        source_id="diagnostic-source",
+        page_id=page_id,
+        capture_id=f"ir2:pymupdf:{page_id}",
+    )
+    primitive_page = normalize_backend_page_capture(capture)
+
+    analyses = _build_all_analyses(
+        primitive_page,
+        plumber_page=plumber_pdf.pages[page_index],  # type: ignore[attr-defined]
+        generation_id=generation_id,
+    )
+
+    # --- L'ORDINE DI LETTURA, preso dal percorso che ha prodotto la base ---
+    band_analysis, band_measures = build_column_band_page_analysis_with_measurements(
+        primitive_page, generation_id=generation_id
+    )
+    tree = _tree_rows_from_contract(band_analysis.candidates, band_measures)
+    if interrupt_corridor:
+        # Diagnostico, spento di default. Milestone 37 misuro' che la meta'
+        # filetti regge e la meta' embedded_visual annienta (DB p.50 da 83
+        # primitive in banda a 0), e lascio' il flag spento.
+        blockers = _corridor_blockers(
+            primitive_page=primitive_page,
+            analyses=analyses,
+            sources=interrupt_corridor,
+        )
+        cut = _split_bands_at_crossings(tree, blockers)
+        print(
+            f"corridor_interrupt: blockers={len(blockers)} bands={len(tree)}->{len(cut)}",
+            file=sys.stderr,
+        )
+        tree = cut
+    ordered, _inside = _tree_aware_order(list(primitive_page.text_primitives), tree)
+    ordered_primitives = [primitive for primitive, _group in ordered]
+
+    # I confini che RESOLUTION ammette dentro le tabelle (Milestone 44).
+    # Sono corridoi che `column_band` scarta perche' un lato non porta
+    # parole -- la colonna dei numeri di dado -- e che il giudizio a vista
+    # dell'utente su 15 pagine ha dichiarato separatori di colonna a tutti
+    # gli effetti, 10 corridoi su 10. Senza di loro i numeri e la
+    # descrizione finiscono nella stessa cella, o la regione non ha due
+    # confini e nessuna tabella viene costruita.
+    #
+    # Niente e' deciso qui: gli intervalli arrivano gia' ammessi, e la
+    # decisione ha guardato l'uscita di due producer, che e' il posto dove
+    # `AGENTS.MD` la colloca.
+    candidati_tabella = tuple(
+        candidate
+        for analysis in analyses
+        if analysis.provenance.producer_name == "table_candidate"
+        for candidate in analysis.candidates
+    )
+    confini_ammessi = resolve_column_boundaries(
+        page_id=primitive_page.page_id,
+        rejected_gutters=measure_rejected_gutters(
+            primitive_page.page_id, column_band_gutter_rows(primitive_page)
+        ),
+        table_candidates=candidati_tabella,
+    ).admitted
+    return PageReadingFacts(
+        page=page,
+        primitive_page=primitive_page,
+        analyses=analyses,
+        band_analysis=band_analysis,
+        band_measures=band_measures,
+        ordered_primitives=ordered_primitives,
+        admitted_boundaries=tuple(confini_ammessi),
+    )
+
+
+def stat_block_inputs(
+    facts: PageReadingFacts,
+) -> tuple[tuple[FrameInput, ...], dict[str, tuple[float, float, float, float]], list, tuple[tuple[float, float, float, float], ...]]:
+    """I riquadri, le visuali, le righe nell'ordine di lettura e i confini di
+    colonna con la loro estensione verticale: cio' che `stat_block_regions`
+    legge. Le righe sono quelle che il costruttore vedra', ridisegni tolti, o
+    un grassetto simulato conterebbe una riga di campi due volte."""
+
+    frame_producers = ("page_analysis.embedded_visual", "page_analysis.interior_visual_frame")
+    frames = tuple(
+        FrameInput(
+            candidate_id=candidate.candidate_id,
+            bbox=candidate.bbox,
+            primitive_ids=candidate.primitive_ids,
+        )
+        for analysis in facts.analyses
+        if analysis.provenance.producer_name in frame_producers
+        for candidate in analysis.candidates
+    )
+    visual_boxes = {
+        primitive.primitive_id: primitive.bbox
+        for primitive in (
+            *facts.primitive_page.drawing_primitives,
+            *facts.primitive_page.image_primitives,
+        )
+    }
+    deduplicated, _redraws = redrawn_duplicates(facts.ordered_primitives)
+    reading_lines = [line.primitives for line in group_source_lines(deduplicated)]
+    band_box = {
+        candidate.candidate_id: candidate.bbox
+        for candidate in facts.band_analysis.candidates  # type: ignore[attr-defined]
+    }
+    gutters: tuple[tuple[float, float, float, float], ...] = tuple(
+        (x0, x1, band_box[measure.candidate_id][1], band_box[measure.candidate_id][3])
+        for measure in facts.band_measures
+        for x0, x1 in measure.gutter_x_intervals
+    ) + tuple((b.x0, b.x1, b.y0, b.y1) for b in facts.admitted_boundaries)
+    return frames, visual_boxes, reading_lines, gutters
+
+
+def stat_block_line_facts_of_page(
+    document: fitz.Document, plumber_pdf: object, page_index: int
+) -> tuple[LineFacts, ...]:
+    """La prima passata di `main_ir2 --schede-struttura`: i fatti di ogni riga
+    della pagina, nell'ordine di lettura che la resa usera'."""
+
+    facts = page_reading_facts(document, plumber_pdf, page_index)
+    _frames, _visual_boxes, reading_lines, _gutters = stat_block_inputs(facts)
+    return tuple(line_facts(line) for line in reading_lines)
+
+
 def run(
     pdf_path: Path,
     page_number: int,
@@ -631,6 +792,7 @@ def run(
     opened: OpenedSource | None = None,
     captured_document: CapturedDocument | None = None,
     bands: HeadingBands | None = None,
+    stat_block_document: tuple[RepeatedStructure, ...] | None = None,
 ) -> BuiltPage | None:
     """Costruisce e scrive una pagina; restituisce cio' che ha costruito.
 
@@ -653,23 +815,16 @@ def run(
             plumber_pdf = stack.enter_context(pdfplumber.open(pdf_path))
         else:
             document, plumber_pdf = opened.document, opened.plumber
-        page = document[page_index]
-        if not passes_page_guard(page):
-            _fail("page guard: rotation or mediabox != cropbox", 3)
-
-        capture = capture_pymupdf_page(
-            page,
-            source_id="diagnostic-source",
-            page_id=page_id,
-            capture_id=f"ir2:pymupdf:{page_id}",
+        facts = page_reading_facts(
+            document, plumber_pdf, page_index, interrupt_corridor=interrupt_corridor
         )
-        primitive_page = normalize_backend_page_capture(capture)
+        page = facts.page
+        primitive_page = facts.primitive_page
+        analyses = facts.analyses
+        band_measures = facts.band_measures
+        ordered_primitives = facts.ordered_primitives
+        confini_ammessi = facts.admitted_boundaries
 
-        analyses = _build_all_analyses(
-            primitive_page,
-            plumber_page=plumber_pdf.pages[page_index],
-            generation_id=generation_id,
-        )
         bound = bind_co_referenced_page_analyses(
             primitive_page,
             co_referenced_page_analyses=build_co_referenced_page_analyses(analyses),
@@ -679,29 +834,6 @@ def run(
             (o.candidate_reference.producer_name, o.candidate_reference.candidate_id): o.outcome
             for o in resolved.outcomes
         }
-
-        # --- L'ORDINE DI LETTURA, preso dal percorso che ha prodotto la base ---
-        band_analysis, band_measures = build_column_band_page_analysis_with_measurements(
-            primitive_page, generation_id=generation_id
-        )
-        tree = _tree_rows_from_contract(band_analysis.candidates, band_measures)
-        if interrupt_corridor:
-            # Diagnostico, spento di default. Milestone 37 misuro' che la meta'
-            # filetti regge e la meta' embedded_visual annienta (DB p.50 da 83
-            # primitive in banda a 0), e lascio' il flag spento.
-            blockers = _corridor_blockers(
-                primitive_page=primitive_page,
-                analyses=analyses,
-                sources=interrupt_corridor,
-            )
-            cut = _split_bands_at_crossings(tree, blockers)
-            print(
-                f"corridor_interrupt: blockers={len(blockers)} bands={len(tree)}->{len(cut)}",
-                file=sys.stderr,
-            )
-            tree = cut
-        ordered, _inside = _tree_aware_order(list(primitive_page.text_primitives), tree)
-        ordered_primitives = [primitive for primitive, _group in ordered]
 
         # --- Le regioni tabella ---
         #
@@ -715,31 +847,8 @@ def run(
         gutters = tuple(
             interval for measure in band_measures for interval in measure.gutter_x_intervals
         )
-
-        # I confini che RESOLUTION ammette dentro le tabelle (Milestone 44).
-        # Sono corridoi che `column_band` scarta perche' un lato non porta
-        # parole -- la colonna dei numeri di dado -- e che il giudizio a vista
-        # dell'utente su 15 pagine ha dichiarato separatori di colonna a tutti
-        # gli effetti, 10 corridoi su 10. Senza di loro i numeri e la
-        # descrizione finiscono nella stessa cella, o la regione non ha due
-        # confini e nessuna tabella viene costruita.
-        #
-        # Niente e' deciso qui: gli intervalli arrivano gia' ammessi, e la
-        # decisione ha guardato l'uscita di due producer, che e' il posto dove
-        # `AGENTS.MD` la colloca.
-        candidati_tabella = tuple(
-            candidate
-            for analysis in analyses
-            if analysis.provenance.producer_name == "table_candidate"
-            for candidate in analysis.candidates
-        )
-        confini_ammessi = resolve_column_boundaries(
-            page_id=primitive_page.page_id,
-            rejected_gutters=measure_rejected_gutters(
-                primitive_page.page_id, column_band_gutter_rows(primitive_page)
-            ),
-            table_candidates=candidati_tabella,
-        ).admitted
+        # I confini ammessi da Resolution dentro le tabelle: calcolati in
+        # `page_reading_facts`, con la loro storia (Milestone 44).
         gutters = gutters + tuple((b.x0, b.x1) for b in confini_ammessi)
 
         table_regions: list[TableRegionInput] = []
@@ -881,30 +990,24 @@ def run(
         # --- Le schede statistiche (`Criterio_SchedaInIR2_v1.md`) ---
         #
         # Consumer, non producer: i riquadri arrivano da due producer gia' wired,
-        # e che un riquadro sia una scheda lo decide `stat_block_regions` sulle
-        # righe nell'ordine di lettura qui sopra -- le stesse che il costruttore
-        # vedra', ridisegni tolti, o un grassetto simulato conterebbe una riga di
-        # campi due volte. Il nome prende il livello sotto la fascia di titolo
-        # piu' profonda del documento, non un numero fisso.
-        frame_producers = ("page_analysis.embedded_visual", "page_analysis.interior_visual_frame")
-        frames = tuple(
-            FrameInput(
-                candidate_id=candidate.candidate_id,
-                bbox=candidate.bbox,
-                primitive_ids=candidate.primitive_ids,
+        # e che un riquadro sia una scheda lo decide `stat_block_regions`. Il
+        # nome prende il livello sotto la fascia di titolo piu' profonda del
+        # documento, non un numero fisso.
+        #
+        # Con ``stat_block_document`` la regola e' quella IN PROVA, dalla
+        # struttura ripetuta e senza riquadri: le strutture del documento le
+        # calcola `main_ir2` in una prima passata (`repeated_structures`), e qui
+        # si trovano le loro istanze sulla pagina. Senza, e' la regola di 3a.
+        frames, visual_boxes, reading_lines, _extent_gutters = stat_block_inputs(facts)
+        if stat_block_document is None:
+            stat_blocks = stat_block_regions(frames, visual_boxes, reading_lines)
+            structure_note = ""
+        else:
+            stat_blocks = stat_blocks_from_structures(
+                [line_facts(line) for line in reading_lines], stat_block_document
             )
-            for analysis in analyses
-            if analysis.provenance.producer_name in frame_producers
-            for candidate in analysis.candidates
-        )
-        visual_boxes = {
-            primitive.primitive_id: primitive.bbox
-            for primitive in (*primitive_page.drawing_primitives, *primitive_page.image_primitives)
-        }
-        deduplicated, _redraws = redrawn_duplicates(ordered_primitives)
-        reading_lines = [line.primitives for line in group_source_lines(deduplicated)]
-        stat_blocks = stat_block_regions(frames, visual_boxes, reading_lines)
-        name_level = min(6, max(levels.values(), default=0) + 1)
+            structure_note = f", struttura: {len(stat_block_document)} strutture nel documento"
+        name_level = structure_level(levels)
         stat_block_names = tuple(
             StatBlockNameInput(
                 primitive_ids=tuple(
@@ -912,7 +1015,6 @@ def run(
                     for index in block.name_line_indices
                     for primitive in reading_lines[index]
                 ),
-                heading_level=name_level,
             )
             for block in stat_blocks
             if block.name_line_indices
@@ -920,19 +1022,26 @@ def run(
         # Con le tabelle accese, una regione che attraversa il confine di una
         # scheda non si costruisce: su Daggerheart `table_candidate` copre
         # colonne intere di tre schede. Una tabella dentro la scheda resta.
-        built_tables = [
-            region
-            for region in table_regions
-            if not crosses_a_stat_block(region.bbox, stat_blocks)
-        ]
+        # (Variante misurata il 13 settembre: togliere alla tabella le righe della
+        # scheda invece di bloccarla faceva ricostruire tabelle rotte da
+        # `build_table` -- una vuota su Daggerheart, gli attacchi di Dragonbane
+        # spezzati fra cella e paragrafo.)
+        built_tables = []
+        crossing = 0
+        for region in table_regions:
+            if crossed_stat_blocks(region.bbox, stat_blocks):
+                crossing += 1
+                continue
+            built_tables.append(region)
         print(
             f"schede: {len(stat_blocks)} regioni, {len(stat_block_names)} con nome, "
             f"titolo h{name_level}"
             + (
-                f", {len(table_regions) - len(built_tables)} tabelle attraverso una scheda"
+                f", {crossing} tabelle attraverso una scheda"
                 if enable_tables
                 else ""
-            ),
+            )
+            + structure_note,
             file=sys.stderr,
         )
 

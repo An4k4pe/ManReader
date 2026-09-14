@@ -287,6 +287,45 @@ def heading_lines(
     return found
 
 
+def structure_level(levels: dict[float, int]) -> int:
+    """Il livello dei nomi di struttura: uno sotto la fascia piu' profonda."""
+
+    return min(6, max(levels.values(), default=0) + 1)
+
+
+def structure_name_level(
+    text: str,
+    levels: dict[float, int],
+    *,
+    max_length: float | None = None,
+    excluded: frozenset[str] = frozenset(),
+) -> int | None:
+    """Il livello di titolo del nome di una struttura riconosciuta, o ``None``.
+
+    **Eccezione dichiarata al punto fisso di Milestone 41**, «cio' che e' prosa
+    non e' mai un titolo», decisa dall'utente il 13 settembre 2026. I nomi delle
+    schede statistiche stanno alla dimensione della prosa -- misurato: su
+    Daggerheart tutti e 147 a 12,0 pt con il tetto a 12,0, su Dragonbane a 10,0
+    come il corpo -- quindi l'asse della dimensione non li puo' promuovere. E' il
+    debito di Milestone 42: sotto il tetto i titoli non si separano dal resto
+    del non-flusso, e il riconoscimento della scheda (`stat_block_regions`) e' il
+    discriminante che mancava.
+
+    **L'eccezione e' solo sulla dimensione.** Gli altri filtri di
+    `heading_lines` restano: una riga di un solo carattere, l'arredo, una voce di
+    sommario, un testo piu' lungo di una riga di prosa non sono titoli. E'
+    quest'ultimo che toglie il titolo falso dei goblin su DB, un paragrafo di
+    prosa preso per nome. Il livello lo decide questo modulo: uno sotto la fascia
+    piu' profonda del documento."""
+
+    text = text.strip()
+    if len(text) <= 1 or text in excluded or has_leader(text):
+        return None
+    if max_length is not None and len(text) > max_length:
+        return None
+    return structure_level(levels)
+
+
 def merge_wrapped(
     lines: Sequence[SizedLine],
     breaks: frozenset[int] = frozenset(),

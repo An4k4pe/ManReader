@@ -1,7 +1,9 @@
 """Il nome di una scheda diventa un titolo: `Criterio_SchedaInIR2_v1.md`.
 
-Quali righe sono il nome lo decide `stat_block_regions`, e il livello il
-chiamante; il costruttore fa soltanto del nome **un** nodo `text.heading` e
+Quali righe sono il nome lo decide `stat_block_regions`; se diventa titolo, e a
+quale livello, lo decide lo script dei titoli
+(`document_heading_policy.structure_name_level`), come eccezione dichiarata alla
+regola della dimensione. Il costruttore fa del nome **un** nodo `text.heading` e
 chiude il paragrafo prima e dopo. Senza nomi la pagina non cambia.
 """
 
@@ -14,6 +16,10 @@ from ir2_model import KIND_TEXT_HEADING, KIND_TEXT_PARAGRAPH
 from primitive_model import TextPrimitive
 
 PAGE = "page:0030"
+# Le fasce di Daggerheart (h1 28 pt, h2 17 pt) e di DB (h1, h2, h3): i nomi
+# prendono il livello sotto la piu' profonda.
+TWO_BANDS = {28.0: 1, 17.0: 2}
+THREE_BANDS = {34.0: 1, 30.0: 2, 20.0: 3}
 
 
 def _span(block: int, line: int, text: str, y: float) -> TextPrimitive:
@@ -28,10 +34,8 @@ def _span(block: int, line: int, text: str, y: float) -> TextPrimitive:
     )
 
 
-def _name(*spans: TextPrimitive, level: int = 3) -> StatBlockNameInput:
-    return StatBlockNameInput(
-        primitive_ids=tuple(span.primitive_id for span in spans), heading_level=level
-    )
+def _name(*spans: TextPrimitive) -> StatBlockNameInput:
+    return StatBlockNameInput(primitive_ids=tuple(span.primitive_id for span in spans))
 
 
 def _shape(page) -> list[tuple[str, str | None, int | None]]:
@@ -54,7 +58,10 @@ class StatBlockNameTest(unittest.TestCase):
         self.assertEqual(_shape(before), [(KIND_TEXT_PARAGRAPH, "COURTIER Tier 1 Social", None)])
 
         page = build_page_ir2(
-            page_id=PAGE, ordered_text_primitives=spans, stat_block_names=(_name(spans[0]),)
+            page_id=PAGE,
+            ordered_text_primitives=spans,
+            stat_block_names=(_name(spans[0]),),
+            heading_levels=TWO_BANDS,
         )
         self.assertEqual(
             _shape(page),
@@ -68,7 +75,10 @@ class StatBlockNameTest(unittest.TestCase):
             _span(1, 2, "Tier 1 Skulk", 24.0),
         ]
         page = build_page_ir2(
-            page_id=PAGE, ordered_text_primitives=spans, stat_block_names=(_name(spans[1]),)
+            page_id=PAGE,
+            ordered_text_primitives=spans,
+            stat_block_names=(_name(spans[1]),),
+            heading_levels=TWO_BANDS,
         )
         self.assertEqual(
             _shape(page),
@@ -89,7 +99,8 @@ class StatBlockNameTest(unittest.TestCase):
         page = build_page_ir2(
             page_id=PAGE,
             ordered_text_primitives=spans,
-            stat_block_names=(_name(spans[0], spans[1], level=4),),
+            stat_block_names=(_name(spans[0], spans[1]),),
+            heading_levels=THREE_BANDS,
         )
         self.assertEqual(
             _shape(page),
@@ -105,11 +116,29 @@ class StatBlockNameTest(unittest.TestCase):
             page_id=PAGE,
             ordered_text_primitives=spans,
             stat_block_names=(_name(spans[0]), _name(spans[1])),
+            heading_levels=TWO_BANDS,
         )
         self.assertEqual(
             _shape(page),
             [(KIND_TEXT_HEADING, "GIANT RAT", 3), (KIND_TEXT_HEADING, "GIANT SCORPION", 3)],
         )
+
+    def test_a_name_longer_than_a_prose_line_is_not_a_heading(self) -> None:
+        # Il titolo falso dei goblin su DB: un paragrafo di prosa preso per nome.
+        # Lo script dei titoli lo rifiuta, e il paragrafo resta com'era.
+        spans = [
+            _span(1, 0, "riposa nelle nicchie del sotterraneo mentre gli altri", 0.0),
+            _span(1, 1, "vagano affaccendati per il castello.", 12.0),
+        ]
+        without = build_page_ir2(page_id=PAGE, ordered_text_primitives=spans)
+        page = build_page_ir2(
+            page_id=PAGE,
+            ordered_text_primitives=spans,
+            stat_block_names=(_name(spans[0], spans[1]),),
+            heading_levels=TWO_BANDS,
+            heading_max_length=40.0,
+        )
+        self.assertEqual(_shape(page), _shape(without))
 
 
 if __name__ == "__main__":

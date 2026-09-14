@@ -153,6 +153,23 @@ class StatBlockRegionsTest(unittest.TestCase):
         regions = stat_block_regions(frames, {"d:campi": inner, "d:scheda": BOX_1}, lines)
         self.assertEqual([r.candidate_id for r in regions], ["scheda"])
 
+    def test_an_illustration_over_the_stat_block_does_not_win_it(self) -> None:
+        # Dragonbane idx 31: l'illustrazione del pipistrello copre la pergamena
+        # e anche il testo accanto. Entrambe cominciano dal nome; vince la piu'
+        # stretta.
+        lines = [
+            _name(0, 10.0, "PIPISTRELLI VAMPIRO"),
+            _fields(1, 30.0),
+            _fields(2, 45.0),
+            _line(3, 80.0, ("5. CRIPTA DELLA SERVITU'", BODY)),
+            _line(4, 95.0, ("Una camera buia e umida.", BODY)),
+        ]
+        illustration = (0.0, 0.0, 400.0, 110.0)
+        frames = [_frame("illustrazione", illustration, "i:1"), _frame("pergamena", BOX_1, "i:2")]
+        regions = stat_block_regions(frames, {"i:1": illustration, "i:2": BOX_1}, lines)
+        self.assertEqual([r.candidate_id for r in regions], ["pergamena"])
+        self.assertEqual(regions[0].name_line_indices, (0,))
+
     def test_a_wrapped_name_is_one_name(self) -> None:
         tier = _line(2, 30.0, ("Tier", BOLD), (" 4 Solo", BODY))
         lines = [
@@ -227,6 +244,79 @@ class CrossesAStatBlockTest(unittest.TestCase):
 
     def test_a_table_elsewhere_is_not_its_business(self) -> None:
         self.assertFalse(crosses_a_stat_block((400.0, 0.0, 500.0, 100.0), [self.REGION]))
+
+
+class RepeatedStructureTest(unittest.TestCase):
+    """La regola dalla struttura ripetuta, senza riquadri: etichette che si contano
+    insieme sulle pagine (`esperimenti_statblock/strutture_contate.py`)."""
+
+    NAME = ("Newzald-Bold", 12.0, None)
+    BODY = ("Berlingske", 7.5, None)
+
+    def _row(self, text, labels=(), x=50.0, y=0.0, style=None):
+        from stat_block_regions import LineFacts
+
+        return LineFacts(
+            style=style or self.BODY,
+            text=text,
+            labels=tuple(labels),
+            label_starts=tuple((x + 20.0 * i, 5.0) for i, _l in enumerate(labels)),
+            bbox=(x, y, x + 200.0, y + 9.0),
+        )
+
+    def _monster(self, name, y):
+        return [
+            self._row(name, style=self.NAME, y=y),
+            self._row("Immunity: —", ["immunity"], y=y + 10),
+            self._row("Movement: —  Weakness: —", ["movement", "weakness"], y=y + 20),
+            self._row("Effect: a thing", ["effect"], y=y + 30),
+            self._row("Effect: another", ["effect"], y=y + 40),
+            self._row("They can still roll.", y=y + 50),
+        ]
+
+    def _pages(self):
+        return {
+            index: [row for k in range(count) for row in self._monster(f"M{index}{k}", 60.0 * k)]
+            for index, count in ((1, 2), (2, 1), (3, 3))
+        }
+
+    def test_labels_counted_together_form_the_structure(self) -> None:
+        from stat_block_regions import repeated_structures
+
+        structures = repeated_structures(self._pages())
+        self.assertEqual(len(structures), 1)
+        # Effect compare due volte per mostro: non conta insieme alle altre.
+        self.assertEqual(structures[0].labels, frozenset({"immunity", "movement", "weakness"}))
+        self.assertEqual(structures[0].head_style, self.NAME)
+
+    def test_each_instance_is_a_stat_block_named_by_the_head_style(self) -> None:
+        from stat_block_regions import repeated_structures, stat_blocks_from_structures
+
+        pages = self._pages()
+        blocks = stat_blocks_from_structures(pages[3], repeated_structures(pages))
+        self.assertEqual([pages[3][b.name_line_indices[0]].text for b in blocks], ["M30", "M31", "M32"])
+        # La scheda arriva fino al nome della successiva, coda compresa.
+        self.assertEqual(blocks[0].line_indices, tuple(range(0, 6)))
+
+    def test_ordered_rows_in_one_column_are_a_table(self) -> None:
+        from stat_block_regions import repeated_structures
+
+        def weapons(index):
+            return [
+                self._row("Longsword", y=10.0),
+                self._row("Heavy: -1 to Evasion", ["heavy"], x=300.0, y=10.0),
+                self._row("Warhammer", y=20.0),
+                self._row("Massive: roll an extra die", ["massive"], x=300.0, y=20.0),
+            ]
+
+        self.assertEqual(repeated_structures({i: weapons(i) for i in (1, 2, 3)}), ())
+
+    def test_a_single_label_is_not_an_instance(self) -> None:
+        from stat_block_regions import repeated_structures, stat_blocks_from_structures
+
+        pages = self._pages()
+        rules = [self._row("Rules text"), self._row("Immunity: see below", ["immunity"])]
+        self.assertEqual(stat_blocks_from_structures(rules, repeated_structures(pages)), ())
 
 
 if __name__ == "__main__":
