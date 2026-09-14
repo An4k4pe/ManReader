@@ -311,6 +311,43 @@ class RepeatedStructureTest(unittest.TestCase):
 
         self.assertEqual(repeated_structures({i: weapons(i) for i in (1, 2, 3)}), ())
 
+    def test_the_last_block_ends_at_a_heading_size_line(self) -> None:
+        # La parte libera continua dopo le etichette e si ferma alla prima riga a
+        # dimensione di titolo: li' comincia la prosa della sezione dopo.
+        from stat_block_regions import repeated_structures, stat_blocks_from_structures
+
+        pages = self._pages()
+        page = pages[2] + [
+            self._row("More ability text.", y=60.0),
+            self._row("ANGULOTLS", style=("Newzald-Bold", 24.0, None), y=80.0),
+            self._row("Prose about angulotls.", y=100.0),
+        ]
+        blocks = stat_blocks_from_structures(page, repeated_structures(pages), heading_sizes=frozenset({24.0}))
+        self.assertEqual(blocks[-1].line_indices, tuple(range(0, 7)))
+
+    def test_the_last_block_ends_at_the_border_of_its_frame(self) -> None:
+        from stat_block_regions import repeated_structures, stat_blocks_from_structures
+
+        pages = self._pages()
+        page = pages[2] + [self._row("Prose outside the box.", y=200.0)]
+        frame = (0.0, -5.0, 400.0, 60.0)
+        blocks = stat_blocks_from_structures(page, repeated_structures(pages), frames=[frame])
+        self.assertEqual(blocks[-1].line_indices, tuple(range(0, 6)))
+
+    def test_a_foreign_box_in_the_middle_is_skipped(self) -> None:
+        # DrM idx 43: nell'ordine di lettura il box laterale sta in mezzo alla scheda.
+        from stat_block_regions import repeated_structures, stat_blocks_from_structures
+
+        pages = self._pages()
+        page = pages[2] + [
+            self._row("Angulotl Tactics", x=450.0, y=300.0),
+            self._row("Prose in the box.", x=450.0, y=310.0),
+            self._row("Noxious Bubble", y=70.0),
+        ]
+        sidebar = (440.0, 290.0, 700.0, 330.0)
+        blocks = stat_blocks_from_structures(page, repeated_structures(pages), frames=[sidebar])
+        self.assertEqual(blocks[-1].line_indices, (0, 1, 2, 3, 4, 5, 8))
+
     def test_a_single_label_is_not_an_instance(self) -> None:
         from stat_block_regions import repeated_structures, stat_blocks_from_structures
 

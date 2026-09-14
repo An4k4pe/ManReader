@@ -547,9 +547,64 @@ def repeated_structures(
     return tuple(result)
 
 
+def _block_tail(
+    lines: Sequence[LineFacts],
+    last: int,
+    limit: int,
+    breaks: frozenset[int],
+    block: BBox,
+    frames: Sequence[BBox],
+) -> list[int]:
+    """Le righe della parte libera: dopo l'ultima riga con etichette la scheda
+    continua fino alla prima **interruzione**, e comunque non oltre ``limit``:
+
+    - una riga in ``breaks``: un nome o una riga a dimensione di titolo;
+    - se la scheda sta in un riquadro, la prima riga fuori dal riquadro;
+    Le righe dentro un **riquadro estraneo** si saltano, senza chiudere la scheda:
+    su DrM idx 43 il box laterale «Angulotl Tactics» sta, nell'ordine di lettura,
+    in mezzo alla scheda di Angulotl Wave. Estraneo vuol dire che porta almeno due
+    righe -- come le due righe del criterio: la fascia dietro il nome di una
+    capacita' di Draw Steel e' di una riga sola -- e non tocca ne' la scheda ne' un
+    riquadro che la tocca: la pergamena degli attacchi dei Pipistrelli esce di 8 pt
+    da quella della scheda, ma la tocca."""
+
+    def overlaps(first: BBox, second: BBox) -> bool:
+        return min(first[2], second[2]) > max(first[0], second[0]) and min(
+            first[3], second[3]
+        ) > max(first[1], second[1])
+
+    own = min(
+        (piece for piece in frames if _contains(piece, block)),
+        key=lambda piece: (piece[2] - piece[0]) * (piece[3] - piece[1]),
+        default=None,
+    )
+    touching = [piece for piece in frames if overlaps(piece, block)]
+    others = [
+        piece
+        for piece in frames
+        if not overlaps(piece, block)
+        and not any(overlaps(outer, piece) for outer in touching)
+        and sum(1 for facts in lines if facts.bbox is not None and _centre_inside(piece, facts.bbox)) >= 2
+    ]
+    tail: list[int] = []
+    for position in range(last + 1, limit + 1):
+        box = lines[position].bbox
+        if position in breaks:
+            break
+        if box is not None:
+            if own is not None and not _centre_inside(own, box):
+                break
+            if any(_centre_inside(piece, box) for piece in others):
+                continue
+        tail.append(position)
+    return tail
+
+
 def stat_blocks_from_structures(
     lines: Sequence[LineFacts],
     structures: Sequence[RepeatedStructure],
+    heading_sizes: frozenset[float] = frozenset(),
+    frames: Sequence[BBox] = (),
 ) -> tuple[StatBlockRegion, ...]:
     """Le schede di una pagina dalle strutture ripetute del documento, senza riquadri.
 
@@ -559,7 +614,16 @@ def stat_blocks_from_structures(
     dello stesso stile sopra di lei: un nome che va a capo e' un nome solo. La
     scheda va dal nome fino alla riga prima della scheda successiva della stessa
     struttura; il ``bbox`` copre il nome e le righe con etichette, non la coda,
-    perche' la tabella degli attacchi che segue la scheda resti una tabella."""
+    perche' la tabella degli attacchi che segue la scheda resti una tabella.
+
+    **La fine della scheda** (`_block_end`, indicazione dell'utente del 14
+    settembre: struttura che si ripete, poi una parte libera, poi la prosa). Gli
+    stili non la separano -- misurato in `esperimenti_statblock/fine_scheda.py`,
+    la parte libera usa gli stili della prosa -- quindi la scheda finisce a cio'
+    che la interrompe: il nome di un'altra scheda, una riga alla dimensione di una
+    fascia di titolo del documento (``heading_sizes``, le fasce dello script dei
+    titoli), il bordo del riquadro che la contiene quando c'e' (``frames``), la
+    scheda successiva, la fine della pagina."""
 
     taken: set[int] = set()
     regions: list[StatBlockRegion] = []
@@ -595,9 +659,21 @@ def stat_blocks_from_structures(
             starts.append(name[0] if name else first)
             names.append(tuple(name))
             previous = last
+        head_positions = frozenset(
+            index
+            for other in structures
+            if other.head_style is not None
+            for index, facts in enumerate(lines)
+            if facts.style == other.head_style
+        )
+        breaks = head_positions | frozenset(
+            index
+            for index, facts in enumerate(lines)
+            if facts.style is not None and facts.style[1] in heading_sizes
+        )
         for position, (_first, last) in enumerate(found):
             start = starts[position]
-            end = starts[position + 1] - 1 if position + 1 < len(found) else last
+            limit = starts[position + 1] - 1 if position + 1 < len(found) else len(lines) - 1
             boxes = [
                 box
                 for index in range(start, last + 1)
@@ -609,7 +685,10 @@ def stat_blocks_from_structures(
             bbox = boxes[0]
             for box in boxes[1:]:
                 bbox = _union(bbox, box)
-            span = tuple(index for index in range(start, max(end, last) + 1) if index not in taken)
+            tail = _block_tail(lines, last, limit, breaks, bbox, frames)
+            span = tuple(
+                index for index in [*range(start, last + 1), *tail] if index not in taken
+            )
             regions.append(
                 StatBlockRegion(
                     bbox=bbox,

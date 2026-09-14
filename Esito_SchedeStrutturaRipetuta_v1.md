@@ -91,12 +91,40 @@ rotta, non si costruisce piu'.
 
 ## 5. Aperto
 
-- **La fine della scheda.** `esperimenti_statblock/fine_scheda.py`: gli stili
-  che stanno in maggioranza dentro le schede delimitate non separano la parte
-  libera dalla prosa -- l'ultima scheda della pagina si ferma subito su tre
-  manuali su quattro, perche' la parte libera usa gli stili della prosa. Da
-  cercare in un'altra direzione (il titolo successivo, il riquadro quando c'e').
+- **La fine della scheda**: vedi §6.
 - **L'ordine dentro la scheda** (3c): su DrM le due meta' del blocco si mescolano
   e i valori restano staccati dalle etichette.
 - Il segnale «da verificare» per le schede personaggio; le strutture di regole
   prese per schede; il verdetto su un sistema non ancora visto.
+
+## 6. La fine della scheda (14 settembre 2026)
+
+Domanda dell'utente: la struttura si ripete, poi c'e' una parte libera; dove
+finisce la scheda e comincia la prosa?
+
+**Gli stili non la separano**, misurato (`esperimenti_statblock/fine_scheda.py`):
+l'ultima scheda della pagina, estesa finche' le righe sono in uno stile che sta in
+maggioranza dentro le schede delimitate, si ferma subito su tre manuali su quattro,
+perche' la parte libera usa gli stili della prosa.
+
+**Regge: la scheda finisce a cio' che la interrompe** (`_block_tail` in
+`stat_block_regions.py`): il nome di un'altra scheda, una riga alla dimensione di
+una fascia di titolo del documento, il bordo del riquadro che la contiene quando
+c'e', la scheda successiva, la fine della pagina. Le righe di un **riquadro
+estraneo** -- almeno due righe, che non tocca ne' la scheda ne' un riquadro che la
+tocca -- si saltano senza chiudere la scheda.
+
+Tre correzioni nello stesso giro, ognuna vista sulle pagine disegnate:
+
+| tentativo | caduto su |
+| --- | --- |
+| una riga dentro un riquadro che non contiene la scheda la chiude | le fasce di una riga dietro i nomi delle capacita' di DrM tagliavano le code; la pergamena degli attacchi dei Pipistrelli, che esce di 8 pt da quella della scheda, li lasciava fuori |
+| il riquadro estraneo chiude la scheda | su DrM idx 43 il box laterale sta, nell'ordine di lettura, in mezzo alla scheda di Angulotl Wave, e ne tagliava la seconda meta' |
+
+Verifica a vista sulle pagine disegnate (DrM idx 41, 43, 59; Daggerheart idx 38,
+52; Quickstart idx 29, 31; DB idx 91, 116): le schede finiscono dove finiscono.
+Resta il numero di pagina in coda all'ultima scheda di DrM, che l'arredo toglie
+dal corpo; e su DB idx 91 il nome e' il titolo della pagina GOBLIN, con la
+descrizione in prosa dentro la prima delle due varianti.
+
+Diagnostica per pagina, fuori dall'IR: `schede.json` nella cartella della pagina.

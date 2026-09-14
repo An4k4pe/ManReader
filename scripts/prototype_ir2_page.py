@@ -117,6 +117,7 @@ from stat_block_regions import (  # noqa: E402
     RepeatedStructure,
     crossed_stat_blocks,
     line_facts,
+    split_frame,
     stat_block_regions,
     stat_blocks_from_structures,
 )
@@ -1003,8 +1004,40 @@ def run(
             stat_blocks = stat_block_regions(frames, visual_boxes, reading_lines)
             structure_note = ""
         else:
+            line_boxes = [line_facts(line) for line in reading_lines]
+            pieces = [
+                piece
+                for frame in frames
+                for piece in split_frame(frame, visual_boxes, [f.bbox for f in line_boxes])
+            ]
             stat_blocks = stat_blocks_from_structures(
-                [line_facts(line) for line in reading_lines], stat_block_document
+                line_boxes,
+                stat_block_document,
+                heading_sizes=frozenset(levels),
+                frames=pieces,
+            )
+            # Diagnostica per pagina, non IR: le schede con le loro righe, per
+            # disegnarle sulla pagina e giudicarne inizio e fine.
+            (output_dir / "schede.json").write_text(
+                json.dumps(
+                    [
+                        {
+                            "name": " ".join(line_boxes[i].text for i in block.name_line_indices),
+                            "lines": [
+                                list(line_boxes[i].bbox)
+                                for i in block.line_indices
+                                if line_boxes[i].bbox is not None
+                            ],
+                            "last_text": next(
+                                (line_boxes[i].text for i in reversed(block.line_indices) if line_boxes[i].text),
+                                "",
+                            ),
+                        }
+                        for block in stat_blocks
+                    ],
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
             )
             structure_note = f", struttura: {len(stat_block_document)} strutture nel documento"
         name_level = structure_level(levels)
