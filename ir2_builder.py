@@ -902,7 +902,7 @@ def build_page_ir2(
         # Le righe di una scheda sono della scheda: una tabella che non le sta
         # dentro non le prende, e la riparazione si ferma a loro.
         unavailable = consumed_ids | _stat_block_primitives(seed_region, stat_block_areas)
-        region = _repaired_region(seed_region, source_lines, unavailable)
+        region = seed_region  # MISURA v2: riparazione scollegata
         x0, y0, x1, y1 = region.bbox
         inside = [
             line

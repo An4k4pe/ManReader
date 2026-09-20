@@ -4,6 +4,7 @@ import unittest
 from ir2_builder import (
     StatBlockAreaInput,
     TableRegionInput,
+    _repaired_region,
     build_page_ir2,
     build_table,
     column_bounds,
@@ -295,13 +296,19 @@ class AdmittedBoundaryTest(unittest.TestCase):
 
 
 class RegionRepairTest(unittest.TestCase):
-    """`Criterio_RiparazioneRegioneIR2_v1.md`: the prototype's two repairs in IR 2."""
+    """`Criterio_RiparazioneRegioneIR2_v1.md`: the prototype's two repairs in IR 2.
+
+    **La riparazione non e' collegata**: il suo veto e' caduto due volte
+    (`Esito_RiparazioneRegioneIR2_v1.md` e `_v2.md`), e `build_page_ir2` usa la
+    regione grezza. Il codice resta in albero con il suo verbale, e questi test
+    provano la funzione applicandola qui invece che nella pipeline."""
 
     def _table(self, spans, bbox=(0.0, 0.0, 200.0, 30.0)):
+        riparata = _repaired_region(_region(bbox=bbox), group_source_lines(spans), set())
         page = build_page_ir2(
             page_id=PAGE,
             ordered_text_primitives=spans,
-            table_regions=[_region(bbox=bbox)],
+            table_regions=[riparata],
         )
         tables = [n for n in page.nodes if n.structure is not None]
         paragraphs = [n.text for n in page.nodes if n.text]
