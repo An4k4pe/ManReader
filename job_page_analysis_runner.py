@@ -18,6 +18,7 @@ from page_analysis_interior_visual_frame import build_interior_visual_frame_page
 from page_analysis_model import PageAnalysis
 from page_analysis_page_covering_visual import build_page_covering_visual_page_analysis
 from page_analysis_page_edge_visual import build_page_edge_visual_page_analysis
+from page_analysis_stat_block import build_stat_block_page_analysis
 from page_analysis_table_candidate import build_table_candidate_page_analysis
 from page_analysis_table_candidate_binding import BoundTableCandidatePage
 from primitive_normalizer import (
@@ -77,6 +78,15 @@ _PRODUCER_SPECS: dict[str, _ProducerSpec] = {
         internal_producer_name="page_analysis.interior_visual_frame",
         producer_version="0.1",
         configuration_id="interior-visual-frame-v1",
+        requires_pdfplumber=False,
+    ),
+    "stat_block": _ProducerSpec(
+        internal_producer_name="page_analysis.stat_block",
+        producer_version="0.1",
+        # Le coppie si contano, non si tarano: la configurazione e' la forma
+        # della regola («almeno due righe con almeno due coppie dichiarate»),
+        # non un insieme di soglie.
+        configuration_id="stat_block:declared_field_pairs:v1",
         requires_pdfplumber=False,
     ),
 }
@@ -207,6 +217,14 @@ def run_job_page_analysis(
             )
         elif producer_name == "interior_visual_frame":
             analysis = build_interior_visual_frame_page_analysis(
+                primitive_page,
+                generation_id=generation_id,
+            )
+        elif producer_name == "stat_block":
+            # Propone in eccesso di proposito: la ripetizione nel documento e il
+            # riquadro disegnato stanno fuori da una pagina sola, e a guardarli
+            # e' il consumer.
+            analysis = build_stat_block_page_analysis(
                 primitive_page,
                 generation_id=generation_id,
             )
