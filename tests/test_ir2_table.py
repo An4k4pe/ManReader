@@ -2,6 +2,7 @@ import json
 import unittest
 
 from ir2_builder import (
+    StatBlockAreaInput,
     TableRegionInput,
     build_page_ir2,
     build_table,
@@ -236,6 +237,224 @@ class RenderTest(unittest.TestCase):
             primitive_ids=("p",), page_ids=(PAGE,), structure=table,
         ),))
         self.assertIn("| a |", render_page_markdown(page))
+
+
+class AdmittedBoundaryTest(unittest.TestCase):
+    """`Criterio_ConfiniFase2InIR2_v1.md`: a boundary enters only if no line leaves."""
+
+    def _region(self, admitted, gutters=((100.0, 110.0),)) -> TableRegionInput:
+        return TableRegionInput(
+            bbox=(0.0, 0.0, 200.0, 100.0),
+            gutter_x_intervals=gutters,
+            candidate_ids=("c1",),
+            admitted_boundaries=admitted,
+        )
+
+    def test_a_boundary_no_line_crosses_splits_a_column(self) -> None:
+        lines = group_source_lines([
+            _span(1, 0, "01", 5.0, 0.0, width=20.0),
+            _span(2, 0, "Sacco", 40.0, 0.0, width=50.0),
+            _span(3, 0, "Stress", 120.0, 0.0),
+        ])
+        table, residuals = build_table(self._region(((28.0, 36.0),)), lines)
+        assert table is not None
+        self.assertEqual([c.text for c in table.rows[0]], ["01", "Sacco", "Stress"])
+        self.assertEqual(residuals, [])
+
+    def test_a_boundary_a_line_crosses_is_refused(self) -> None:
+        lines = group_source_lines([
+            _span(1, 0, "01", 5.0, 0.0, width=20.0),
+            _span(2, 0, "Sacco", 40.0, 0.0, width=50.0),
+            _span(3, 0, "prosa che lo attraversa", 5.0, 20.0, width=90.0),
+        ])
+        table, residuals = build_table(self._region(((28.0, 36.0),)), lines)
+        assert table is not None
+        self.assertEqual([c.text for c in table.rows[0]], ["01 Sacco", ""])
+        self.assertEqual([c.text for c in table.rows[1]], ["prosa che lo attraversa", ""])
+        self.assertEqual(residuals, [])
+
+    def test_a_single_column_region_becomes_a_table(self) -> None:
+        lines = group_source_lines([
+            _span(1, 0, "1", 5.0, 0.0, width=10.0),
+            _span(2, 0, "Colpo", 40.0, 0.0),
+        ])
+        table, residuals = build_table(self._region(((20.0, 35.0),), gutters=()), lines)
+        assert table is not None
+        self.assertEqual([c.text for c in table.rows[0]], ["1", "Colpo"])
+        self.assertEqual(residuals, [])
+
+    def test_a_single_column_region_crossed_by_a_line_stays_no_table(self) -> None:
+        lines = group_source_lines([
+            _span(1, 0, "1", 5.0, 0.0, width=10.0),
+            _span(2, 0, "Colpo", 40.0, 0.0),
+            _span(3, 0, "prosa che lo attraversa", 5.0, 20.0, width=90.0),
+        ])
+        table, residuals = build_table(self._region(((20.0, 35.0),), gutters=()), lines)
+        self.assertIsNone(table)
+        self.assertEqual(len(residuals), 3)
+
+
+class RegionRepairTest(unittest.TestCase):
+    """`Criterio_RiparazioneRegioneIR2_v1.md`: the prototype's two repairs in IR 2."""
+
+    def _table(self, spans, bbox=(0.0, 0.0, 200.0, 30.0)):
+        page = build_page_ir2(
+            page_id=PAGE,
+            ordered_text_primitives=spans,
+            table_regions=[_region(bbox=bbox)],
+        )
+        tables = [n for n in page.nodes if n.structure is not None]
+        paragraphs = [n.text for n in page.nodes if n.text]
+        return tables, paragraphs
+
+    def _rows(self):
+        return [
+            _span(1, 0, "1", 10.0, 0.0),
+            _span(2, 0, "Colpo", 120.0, 0.0),
+            _span(3, 0, "2", 10.0, 20.0),
+            _span(4, 0, "Taglio", 120.0, 20.0),
+        ]
+
+    def test_the_last_row_below_the_region_joins_the_table(self) -> None:
+        spans = [*self._rows(), _span(5, 0, "3", 10.0, 40.0), _span(6, 0, "Fendente", 120.0, 40.0)]
+        tables, paragraphs = self._table(spans)
+        self.assertEqual([c.text for c in tables[0].structure.rows[-1]], ["3", "Fendente"])
+        self.assertEqual(paragraphs, [])
+
+    def test_a_header_above_the_region_joins_the_table(self) -> None:
+        spans = [_span(7, 0, "D6", 10.0, -20.0), _span(8, 0, "ATTACCO", 120.0, -20.0), *self._rows()]
+        tables, _ = self._table(spans)
+        self.assertEqual([c.text for c in tables[0].structure.rows[0]], ["D6", "ATTACCO"])
+
+    def test_prose_that_crosses_the_columns_stays_out(self) -> None:
+        prose = _span(0, 0, "Una frase di prosa che attraversa", 10.0, -20.0, width=180.0)
+        tables, paragraphs = self._table([prose, *self._rows()])
+        self.assertEqual(len(tables[0].structure.rows), 2)
+        self.assertEqual(paragraphs, ["Una frase di prosa che attraversa"])
+
+    def test_a_line_sticking_out_of_the_region_is_held_whole(self) -> None:
+        spans = [
+            _span(1, 0, "1", 10.0, 0.0),
+            _span(2, 0, "Colpo molto lungo", 120.0, 0.0, width=120.0),
+            _span(3, 0, "2", 10.0, 20.0),
+            _span(4, 0, "Taglio", 120.0, 20.0),
+        ]
+        tables, paragraphs = self._table(spans)
+        self.assertEqual([c.text for c in tables[0].structure.rows[0]], ["1", "Colpo molto lungo"])
+        self.assertEqual(paragraphs, [])
+
+    def test_a_long_last_row_joins_once_the_region_is_widened(self) -> None:
+        spans = [
+            _span(1, 0, "1", 10.0, 0.0),
+            _span(2, 0, "Colpo molto lungo", 120.0, 0.0, width=120.0),
+            _span(3, 0, "2", 10.0, 20.0),
+            _span(4, 0, "Taglio", 120.0, 20.0),
+            _span(5, 0, "3", 10.0, 40.0),
+            _span(6, 0, "Fendente anche lui lungo", 120.0, 40.0, width=120.0),
+        ]
+        tables, paragraphs = self._table(spans)
+        self.assertEqual(
+            [c.text for c in tables[0].structure.rows[-1]], ["3", "Fendente anche lui lungo"]
+        )
+        self.assertEqual(paragraphs, [])
+
+
+class StatBlockAreaTest(unittest.TestCase):
+    """`Criterio_SchedaControLaTabella_v1.md`: le righe di una scheda sono sue."""
+
+    def _rows(self):
+        return [
+            _span(1, 0, "1", 10.0, 0.0),
+            _span(2, 0, "Colpo", 120.0, 0.0),
+            _span(3, 0, "2", 10.0, 20.0),
+            _span(4, 0, "Taglio", 120.0, 20.0),
+        ]
+
+    def _page(self, spans, areas, bbox=(0.0, 0.0, 200.0, 30.0)):
+        page = build_page_ir2(
+            page_id=PAGE,
+            ordered_text_primitives=spans,
+            table_regions=[_region(bbox=bbox)],
+            stat_block_areas=areas,
+        )
+        tables = [n for n in page.nodes if n.structure is not None]
+        return tables, [n.text for n in page.nodes if n.text]
+
+    def test_a_table_crossing_a_stat_block_does_not_take_its_lines(self) -> None:
+        spans = self._rows()
+        area = StatBlockAreaInput(
+            bbox=(0.0, 15.0, 200.0, 40.0),
+            primitive_ids=(spans[2].primitive_id, spans[3].primitive_id),
+        )
+        tables, paragraphs = self._page(spans, [area])
+        self.assertEqual([[c.text for c in r] for r in tables[0].structure.rows], [["1", "Colpo"]])
+        self.assertEqual(paragraphs, ["2", "Taglio"])
+
+    def test_a_table_inside_a_stat_block_keeps_them(self) -> None:
+        spans = self._rows()
+        area = StatBlockAreaInput(
+            bbox=(-10.0, -10.0, 210.0, 40.0),
+            primitive_ids=tuple(span.primitive_id for span in spans),
+        )
+        tables, paragraphs = self._page(spans, [area])
+        self.assertEqual(len(tables[0].structure.rows), 2)
+        self.assertEqual(paragraphs, [])
+
+    def test_the_repair_stops_at_a_stat_block(self) -> None:
+        spans = [*self._rows(), _span(5, 0, "3", 10.0, 40.0), _span(6, 0, "Fendente", 120.0, 40.0)]
+        area = StatBlockAreaInput(
+            bbox=(0.0, 35.0, 200.0, 60.0),
+            primitive_ids=(spans[4].primitive_id, spans[5].primitive_id),
+        )
+        tables, paragraphs = self._page(spans, [area])
+        self.assertEqual(len(tables[0].structure.rows), 2)
+        self.assertEqual(paragraphs, ["3", "Fendente"])
+
+    def _due_righe_di_scheda(self):
+        """Due righe nello **stesso blocco**: senza segnale il builder le salda,
+        ed e' cio' che succede alle righe di una scheda."""
+        return [
+            _span(7, 0, "Ferocia: 3", 10.0, 0.0, width=80.0),
+            _span(7, 1, "Movimento: 18", 10.0, 20.0, width=80.0),
+        ]
+
+    def _senza_tabella(self, spans, area):
+        return build_page_ir2(
+            page_id=PAGE,
+            ordered_text_primitives=spans,
+            table_regions=[],
+            stat_block_areas=[area],
+        )
+
+    def test_without_record_starts_the_lines_stay_joined(self) -> None:
+        spans = self._due_righe_di_scheda()
+        area = StatBlockAreaInput(
+            bbox=(-10.0, -10.0, 210.0, 40.0),
+            primitive_ids=tuple(span.primitive_id for span in spans),
+        )
+        page = self._senza_tabella(spans, area)
+        self.assertEqual(
+            [n.text for n in page.nodes if n.text], ["Ferocia: 3 Movimento: 18"]
+        )
+
+    def test_a_record_start_opens_its_own_paragraph(self) -> None:
+        """`Criterio_RigheDellaSchedaACapo_v1.md` §2: dentro una scheda una riga
+        che apre un record apre un paragrafo, anche nello stesso blocco."""
+        spans = self._due_righe_di_scheda()
+        area = StatBlockAreaInput(
+            bbox=(-10.0, -10.0, 210.0, 40.0),
+            primitive_ids=tuple(span.primitive_id for span in spans),
+            record_start_ids=(spans[1].primitive_id,),
+        )
+        page = self._senza_tabella(spans, area)
+        self.assertEqual(
+            [n.text for n in page.nodes if n.text], ["Ferocia: 3", "Movimento: 18"]
+        )
+
+    def test_without_stat_blocks_nothing_changes(self) -> None:
+        tables, paragraphs = self._page(self._rows(), [])
+        self.assertEqual(len(tables[0].structure.rows), 2)
+        self.assertEqual(paragraphs, [])
 
 
 if __name__ == "__main__":

@@ -75,6 +75,7 @@ from prototype_ir2_page import (  # noqa: E402
     OpenedSource,
     capture_document,
     run,
+    stat_block_line_facts_of_page,
 )
 
 from document_asset_catalogue import (  # noqa: E402
@@ -94,6 +95,8 @@ from ir2_model import DocumentIR2, IR2Provenance  # noqa: E402
 from ir2_serialization import document_ir2_from_dict, document_ir2_to_dict  # noqa: E402
 from job_source_snapshot import inspect_source_file  # noqa: E402
 from pymupdf_asset_extraction import extract_occurrence_raster  # noqa: E402
+from stat_block_field_lines import recurring_field_combinations  # noqa: E402
+from stat_block_regions import LineFacts, RepeatedStructure, repeated_structures  # noqa: E402
 
 
 # **Lo stato dei processi figli, ereditato per `fork` e mai serializzato.**
@@ -113,11 +116,18 @@ class _Lavoro:
     captured: CapturedDocument
     tabelle: bool
     finestra: int
+    regola_schede: str = "righe"
+    fine_schede: str = "modulo"
     # Le fasce dei titoli si calcolano **una volta**, sul documento intero, prima
     # del fork. `Criterio_TitoliPerFascia_v1.md` §1 le vuole a ambito documento, e
     # ricalcolarle per pagina costerebbe una scansione completa per ognuna delle
     # 379 pagine di Dag. Con `fork` i figli le ereditano senza copiarle.
     bands: HeadingBands | None = None
+    # Le strutture ricorrenti delle schede, con `--schede-struttura`: anche loro
+    # sono un fatto di DOCUMENTO, e si calcolano in una passata prima del fork.
+    # `None` lascia la regola dei riquadri disegnati.
+    strutture_schede: tuple[RepeatedStructure, ...] | None = None
+    combinazioni_schede: frozenset[frozenset[str]] | None = None
     opened: OpenedSource | None = None
 
 
@@ -132,6 +142,19 @@ def _prepara_figlio() -> None:
         document=fitz.open(_LAVORO.pdf),
         plumber=pdfplumber.open(_LAVORO.pdf),
     )
+
+
+def _righe_di_pagina(page_index: int) -> tuple[int, tuple[LineFacts, ...], str | None]:
+    """Prima passata di `--schede-struttura`, dentro un processo figlio: le righe
+    di una pagina come le vedra' la resa."""
+
+    assert _LAVORO is not None and _LAVORO.opened is not None
+    try:
+        return page_index, stat_block_line_facts_of_page(
+            _LAVORO.opened.document, _LAVORO.opened.plumber, page_index
+        ), None
+    except Exception as errore:  # noqa: BLE001
+        return page_index, (), f"{type(errore).__name__}: {errore}"
 
 
 def _rendi_pagina(page_index: int) -> tuple[int, object, str | None]:
@@ -151,6 +174,10 @@ def _rendi_pagina(page_index: int) -> tuple[int, object, str | None]:
             opened=_LAVORO.opened,
             captured_document=_LAVORO.captured,
             bands=_LAVORO.bands,
+            stat_block_document=_LAVORO.strutture_schede,
+            stat_block_combinations=_LAVORO.combinazioni_schede,
+            stat_block_rule=_LAVORO.regola_schede,
+            stat_block_end=_LAVORO.fine_schede,
         ), None
     except Exception as errore:  # noqa: BLE001
         # Una pagina che cade non deve fermare il documento: si registra e si
@@ -430,6 +457,27 @@ def main() -> int:
     )
     parser.add_argument("--tabelle", action="store_true")
     parser.add_argument(
+        "--schede-regola", choices=("righe", "riquadro"), default="righe",
+        help="che cosa fa una scheda a una tabella: «righe» le toglie le righe "
+             "della scheda, «riquadro» non costruisce la tabella che attraversa "
+             "la scheda (la regola della chat delle schede).",
+    )
+    parser.add_argument(
+        "--schede-fine", choices=("modulo", "colonna"), default="modulo",
+        help="dove finisce una scheda: «modulo» come decide il modulo, «colonna» "
+             "alla prima riga che comincia piu' in alto, cioe' al cambio di colonna.",
+    )
+    parser.add_argument(
+        "--schede-campi", action="store_true",
+        help="le schede sono le righe che portano piu' campi insieme, in una "
+             "combinazione che il documento ripete. Una passata in piu'.",
+    )
+    parser.add_argument(
+        "--schede-struttura", action="store_true",
+        help="IN PROVA: le schede si riconoscono dalla struttura ricorrente del "
+             "documento invece che dai riquadri disegnati. Una passata in piu'.",
+    )
+    parser.add_argument(
         "--rifai", action="store_true",
         help="ignora quanto gia' prodotto e ricomincia da capo.",
     )
@@ -529,6 +577,8 @@ def main() -> int:
             captured=captured,
             tabelle=arguments.tabelle,
             finestra=arguments.finestra,
+            regola_schede=arguments.schede_regola,
+            fine_schede=arguments.schede_fine,
             bands=fasce,
         )
         # --- Cio' che una corsa precedente ha gia' prodotto ---
@@ -544,6 +594,43 @@ def main() -> int:
 
         processi = arguments.processi or (os.cpu_count() or 1)
         processi = max(1, min(processi, max(1, len(da_fare))))
+
+        if (arguments.schede_struttura or arguments.schede_campi) and da_fare:
+            # La struttura ripetuta e' un fatto di DOCUMENTO: le righe si
+            # raccolgono su tutte le pagine catturate, non solo sull'intervallo
+            # chiesto, o una scheda che ricorre fuori dall'intervallo non si
+            # vedrebbe. Stessa catena della resa (`stat_block_line_facts_of_page`
+            # chiama `reading_chain`), cosi' le righe sono le stesse.
+            tutte = sorted(captured.pages)
+            print(f"schede, prima passata: righe di {len(tutte)} pagine...", flush=True)
+            righe: list[tuple[int, tuple[LineFacts, ...], str | None]] = []
+            if min(processi, len(tutte)) == 1:
+                _LAVORO.opened = OpenedSource(document=document, plumber=plumber)
+                righe = [_righe_di_pagina(i) for i in tutte]
+            else:
+                with ProcessPoolExecutor(
+                    max_workers=min(processi, len(tutte)),
+                    mp_context=get_context("fork"),
+                    initializer=_prepara_figlio,
+                ) as pool:
+                    righe = list(pool.map(_righe_di_pagina, tutte, chunksize=1))
+            cadute = [(i, e) for i, _r, e in righe if e is not None]
+            raccolte = {i: fatti for i, fatti, e in righe if e is None}
+            if arguments.schede_campi:
+                _LAVORO.combinazioni_schede = recurring_field_combinations(raccolte)
+                print(f"  {len(_LAVORO.combinazioni_schede)} combinazioni di campi", flush=True)
+                for combinazione in sorted(_LAVORO.combinazioni_schede, key=sorted):
+                    print(f"    {sorted(combinazione)}", flush=True)
+            if arguments.schede_struttura:
+                _LAVORO.strutture_schede = repeated_structures(raccolte)
+            _LAVORO.opened = None
+            print(
+                f"  {len(_LAVORO.strutture_schede or ())} strutture ripetute"
+                + (f", {len(cadute)} pagine cadute" if cadute else ""),
+                flush=True,
+            )
+            for struttura in _LAVORO.strutture_schede or ():
+                print(f"    {sorted(struttura.labels)[:8]}", flush=True)
         print(
             f"rendo {len(da_fare)} pagine su {processi} "
             f"process{'o' if processi == 1 else 'i'}...",

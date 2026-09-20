@@ -28,6 +28,7 @@ import argparse
 import json
 import sys
 from collections import Counter
+from collections.abc import Iterable, Sequence
 from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
@@ -78,9 +79,12 @@ from document_text_recurrence_measurements import (  # noqa: E402
 )
 from ir2_builder import (  # noqa: E402
     AssetNoteInput,
+    StatBlockAreaInput,
     TableRegionInput,
     body_font,
     build_page_ir2,
+    group_source_lines,
+    redrawn_duplicates,
 )
 from ir2_markdown import (  # noqa: E402
     KIND_ASSET_NOTE,
@@ -97,11 +101,32 @@ from page_analysis_co_reference import build_co_referenced_page_analyses  # noqa
 from page_analysis_co_reference_binding import bind_co_referenced_page_analyses  # noqa: E402
 from page_analysis_column_band import (  # noqa: E402
     build_column_band_page_analysis_with_measurements,
+    column_band_gutter_rows,
 )
-from primitive_model import NormalizedPrimitivePage  # noqa: E402
+from page_analysis_column_band_rejected_gutters import measure_rejected_gutters  # noqa: E402
+from primitive_model import NormalizedPrimitivePage, TextPrimitive  # noqa: E402
 from primitive_normalizer import normalize_backend_page_capture  # noqa: E402
 from pymupdf_capture import capture_pymupdf_page  # noqa: E402
+from resolution_column_boundaries import (  # noqa: E402
+    ResolvedColumnBoundary,
+    resolve_column_boundaries,
+)
 from resolution_page_candidates import resolve_page_candidates  # noqa: E402
+from stat_block_field_lines import (  # noqa: E402
+    field_line_groups,
+    field_line_indices,
+    opens_a_record,
+)
+from stat_block_regions import (  # noqa: E402
+    FrameInput,
+    LineFacts,
+    RepeatedStructure,
+    crossed_stat_blocks,
+    line_facts,
+    split_frame,
+    stat_block_regions,
+    stat_blocks_from_structures,
+)
 
 
 def _fail(message: str, code: int) -> None:
@@ -605,6 +630,192 @@ def review_lines_for(
     return review_lines
 
 
+@dataclass(frozen=True)
+class ReadingChain:
+    """La catena di `run` fino all'ordine di lettura.
+
+    Estratta perche' la prima passata delle schede dalla struttura ripetuta deve
+    vedere le **stesse** righe della resa: una seconda copia della catena si
+    scollerebbe dalla prima, ed e' gia' successo al progetto
+    (`Verbale_RegioneTabella_v1.md` §11). Stessa ragione, e stessa forma, della
+    `PageReadingFacts` del ramo delle schede.
+    """
+
+    page: object
+    primitive_page: NormalizedPrimitivePage
+    analyses: tuple
+    band_analysis: object
+    band_measures: tuple
+    ordered_primitives: list
+
+
+def reading_chain(
+    document: object,
+    plumber_pdf: object,
+    page_index: int,
+    *,
+    interrupt_corridor: str = "",
+) -> ReadingChain:
+    """Cattura, producer e ordine di lettura di una pagina: quello che `run` fa
+    prima di costruire, e che la prima passata rifa' identico."""
+
+    page_id = f"page:{page_index + 1:04d}"
+    generation_id = f"generation:ir2:{page_index + 1:04d}"
+    page = document[page_index]  # type: ignore[index]
+    if not passes_page_guard(page):
+        _fail("page guard: rotation or mediabox != cropbox", 3)
+
+    capture = capture_pymupdf_page(
+        page,
+        source_id="diagnostic-source",
+        page_id=page_id,
+        capture_id=f"ir2:pymupdf:{page_id}",
+    )
+    primitive_page = normalize_backend_page_capture(capture)
+    analyses = _build_all_analyses(
+        primitive_page,
+        plumber_page=plumber_pdf.pages[page_index],  # type: ignore[attr-defined]
+        generation_id=generation_id,
+    )
+
+    # --- L'ORDINE DI LETTURA, preso dal percorso che ha prodotto la base ---
+    band_analysis, band_measures = build_column_band_page_analysis_with_measurements(
+        primitive_page, generation_id=generation_id
+    )
+    tree = _tree_rows_from_contract(band_analysis.candidates, band_measures)
+    if interrupt_corridor:
+        # Diagnostico, spento di default. Milestone 37 misuro' che la meta'
+        # filetti regge e la meta' embedded_visual annienta (DB p.50 da 83
+        # primitive in banda a 0), e lascio' il flag spento.
+        blockers = _corridor_blockers(
+            primitive_page=primitive_page,
+            analyses=analyses,
+            sources=interrupt_corridor,
+        )
+        cut = _split_bands_at_crossings(tree, blockers)
+        print(
+            f"corridor_interrupt: blockers={len(blockers)} bands={len(tree)}->{len(cut)}",
+            file=sys.stderr,
+        )
+        tree = cut
+    ordered, _inside = _tree_aware_order(list(primitive_page.text_primitives), tree)
+    return ReadingChain(
+        page=page,
+        primitive_page=primitive_page,
+        analyses=analyses,
+        band_analysis=band_analysis,
+        band_measures=band_measures,
+        ordered_primitives=[primitive for primitive, _group in ordered],
+    )
+
+
+def stat_block_inputs(chain: ReadingChain):
+    """I riquadri **disegnati**, le visuali e le righe nell'ordine di lettura:
+    cio' che il riconoscimento delle schede legge.
+
+    Il riquadro di una scheda e' disegnato, e lo dice il modulo stesso: «i
+    confini di una scheda non si deducono, si leggono: il riquadro e' disegnato
+    sulla pagina». Un candidato fatto di un'IMMAGINE e' un'illustrazione, e il
+    testo che ci sta sopra non e' suo: su DB p87 l'illustrazione del drago copre
+    il 72% della pagina, passava per scheda col blocco statistiche dentro, e si
+    portava via la tabella degli attacchi (`Esito_SchedaControLaTabella_v1.md`).
+    Le righe sono quelle che il costruttore vedra', ridisegni tolti.
+    """
+
+    drawing_ids = {
+        primitive.primitive_id for primitive in chain.primitive_page.drawing_primitives
+    }
+    frames = tuple(
+        FrameInput(
+            candidate_id=candidate.candidate_id,
+            bbox=candidate.bbox,
+            primitive_ids=candidate.primitive_ids,
+        )
+        for analysis in chain.analyses
+        if analysis.provenance.producer_name.endswith(
+            ("embedded_visual", "interior_visual_frame")
+        )
+        for candidate in analysis.candidates
+        if candidate.primitive_ids
+        and all(primitive_id in drawing_ids for primitive_id in candidate.primitive_ids)
+    )
+    visual_boxes = {
+        primitive.primitive_id: primitive.bbox
+        for primitive in (
+            *chain.primitive_page.drawing_primitives,
+            *chain.primitive_page.image_primitives,
+        )
+    }
+    deduplicated, _redraws = redrawn_duplicates(chain.ordered_primitives)
+    reading_lines = [line.primitives for line in group_source_lines(deduplicated)]
+    return frames, visual_boxes, reading_lines
+
+
+def _fino_al_cambio_colonna(block, facts):
+    """La scheda tagliata alla prima riga che comincia piu' in alto della
+    precedente: da li' in poi e' un'altra colonna, non la scheda."""
+
+    from dataclasses import replace as _replace
+
+    indici = [j for j in block.line_indices if facts[j].bbox is not None]
+    taglio = next(
+        (
+            posizione
+            for posizione in range(1, len(indici))
+            if facts[indici[posizione]].bbox[1] < facts[indici[posizione - 1]].bbox[1] - 1.0
+        ),
+        None,
+    )
+    if taglio is None:
+        return block
+    tenute = set(indici[:taglio])
+    rimaste = tuple(j for j in block.line_indices if j in tenute)
+    if not rimaste:
+        return block
+    scatole = [facts[j].bbox for j in rimaste if facts[j].bbox is not None]
+    return _replace(
+        block,
+        line_indices=rimaste,
+        bbox=(
+            min(b[0] for b in scatole),
+            min(b[1] for b in scatole),
+            max(b[2] for b in scatole),
+            max(b[3] for b in scatole),
+        ),
+        name_line_indices=tuple(j for j in block.name_line_indices if j in tenute),
+    )
+
+
+def _record_start_ids(
+    reading_facts: Sequence[LineFacts],
+    reading_lines: Sequence[Sequence[TextPrimitive]],
+    indici: Iterable[int],
+) -> tuple[str, ...]:
+    """Le primitive che aprono un record dentro un'area di scheda.
+
+    `Criterio_RigheDellaSchedaACapo_v1.md`: il costruttore rompe il paragrafo
+    li', perche' dentro una scheda una riga e' un record e non un pezzo di
+    frase."""
+
+    return tuple(
+        reading_lines[i][0].primitive_id
+        for i in indici
+        if reading_lines[i] and opens_a_record(reading_facts[i])
+    )
+
+
+def stat_block_line_facts_of_page(
+    document: object, plumber_pdf: object, page_index: int
+) -> tuple[LineFacts, ...]:
+    """La prima passata delle schede dalla struttura ripetuta: i fatti di ogni
+    riga della pagina, nell'ordine di lettura che la resa usera'."""
+
+    _frames, _visual_boxes, reading_lines = stat_block_inputs(
+        reading_chain(document, plumber_pdf, page_index)
+    )
+    return tuple(line_facts(line) for line in reading_lines)
+
+
 def run(
     pdf_path: Path,
     page_number: int,
@@ -618,6 +829,10 @@ def run(
     opened: OpenedSource | None = None,
     captured_document: CapturedDocument | None = None,
     bands: HeadingBands | None = None,
+    stat_block_document: tuple[RepeatedStructure, ...] | None = None,
+    stat_block_rule: str = "righe",
+    stat_block_end: str = "modulo",
+    stat_block_combinations: frozenset[frozenset[str]] | None = None,
 ) -> BuiltPage | None:
     """Costruisce e scrive una pagina; restituisce cio' che ha costruito.
 
@@ -640,23 +855,15 @@ def run(
             plumber_pdf = stack.enter_context(pdfplumber.open(pdf_path))
         else:
             document, plumber_pdf = opened.document, opened.plumber
-        page = document[page_index]
-        if not passes_page_guard(page):
-            _fail("page guard: rotation or mediabox != cropbox", 3)
-
-        capture = capture_pymupdf_page(
-            page,
-            source_id="diagnostic-source",
-            page_id=page_id,
-            capture_id=f"ir2:pymupdf:{page_id}",
+        chain = reading_chain(
+            document, plumber_pdf, page_index, interrupt_corridor=interrupt_corridor
         )
-        primitive_page = normalize_backend_page_capture(capture)
+        page = chain.page
+        primitive_page = chain.primitive_page
+        analyses = chain.analyses
+        band_measures = chain.band_measures
+        ordered_primitives = chain.ordered_primitives
 
-        analyses = _build_all_analyses(
-            primitive_page,
-            plumber_page=plumber_pdf.pages[page_index],
-            generation_id=generation_id,
-        )
         bound = bind_co_referenced_page_analyses(
             primitive_page,
             co_referenced_page_analyses=build_co_referenced_page_analyses(analyses),
@@ -666,29 +873,6 @@ def run(
             (o.candidate_reference.producer_name, o.candidate_reference.candidate_id): o.outcome
             for o in resolved.outcomes
         }
-
-        # --- L'ORDINE DI LETTURA, preso dal percorso che ha prodotto la base ---
-        band_analysis, band_measures = build_column_band_page_analysis_with_measurements(
-            primitive_page, generation_id=generation_id
-        )
-        tree = _tree_rows_from_contract(band_analysis.candidates, band_measures)
-        if interrupt_corridor:
-            # Diagnostico, spento di default. Milestone 37 misuro' che la meta'
-            # filetti regge e la meta' embedded_visual annienta (DB p.50 da 83
-            # primitive in banda a 0), e lascio' il flag spento.
-            blockers = _corridor_blockers(
-                primitive_page=primitive_page,
-                analyses=analyses,
-                sources=interrupt_corridor,
-            )
-            cut = _split_bands_at_crossings(tree, blockers)
-            print(
-                f"corridor_interrupt: blockers={len(blockers)} bands={len(tree)}->{len(cut)}",
-                file=sys.stderr,
-            )
-            tree = cut
-        ordered, _inside = _tree_aware_order(list(primitive_page.text_primitives), tree)
-        ordered_primitives = [primitive for primitive, _group in ordered]
 
         # --- Le regioni tabella ---
         #
@@ -702,6 +886,25 @@ def run(
         gutters = tuple(
             interval for measure in band_measures for interval in measure.gutter_x_intervals
         )
+        # I confini che Resolution ammette fra i corridoi respinti (Milestone 43,
+        # Fase 2). Si calcolano solo a tabelle accese, perche' nessun altro li
+        # legge. A quale regione vanno e' la relazione di `_covered_by_a_table`
+        # -- contenuti in x, sovrapposti in y --; quali entrano davvero lo decide
+        # `build_table`: `Criterio_ConfiniFase2InIR2_v1.md`.
+        admitted: tuple[ResolvedColumnBoundary, ...] = ()
+        if enable_tables:
+            admitted = resolve_column_boundaries(
+                page_id=primitive_page.page_id,
+                rejected_gutters=measure_rejected_gutters(
+                    primitive_page.page_id, column_band_gutter_rows(primitive_page)
+                ),
+                table_candidates=tuple(
+                    candidate
+                    for analysis in analyses
+                    if analysis.provenance.producer_name == "table_candidate"
+                    for candidate in analysis.candidates
+                ),
+            ).admitted
         table_regions: list[TableRegionInput] = []
         for analysis in analyses:
             if analysis.provenance.producer_name != "table_candidate":
@@ -716,6 +919,14 @@ def run(
                         gutter_x_intervals=gutters,
                         candidate_ids=(candidate.candidate_id,),
                         resolution=outcome,
+                        admitted_boundaries=tuple(
+                            (boundary.x0, boundary.x1)
+                            for boundary in admitted
+                            if candidate.bbox[0] <= boundary.x0
+                            and candidate.bbox[2] >= boundary.x1
+                            and candidate.bbox[1] <= boundary.y1
+                            and candidate.bbox[3] >= boundary.y0
+                        ),
                     )
                 )
 
@@ -838,11 +1049,170 @@ def run(
             page_label = deduced_labels[page_index]
             page_label_deduced = True
 
+        # --- Le schede: le loro righe sono loro ---
+        #
+        # `stat_block_regions` e `stat_blocks_from_structures` sono il consumer
+        # della chat delle schede, portato qui come e' scritto. Serve solo alle
+        # tabelle, quindi si calcola solo a tabelle accese; il nome della scheda
+        # come titolo resta lavoro di quel ramo. Che cosa farne lo decide
+        # `build_page_ir2`: `Criterio_SchedaControLaTabella_v1.md`.
+        #
+        # Con ``stat_block_document`` vale la regola dalla **struttura ripetuta**,
+        # che non guarda i riquadri: le strutture del documento le calcola
+        # `main_ir2` in una prima passata, e qui si trovano le loro istanze sulla
+        # pagina. Senza, vale la regola dei riquadri disegnati.
+        stat_block_areas: tuple[StatBlockAreaInput, ...] = ()
+        if enable_tables:
+            frames, visual_boxes, reading_lines = stat_block_inputs(chain)
+            reading_facts = [line_facts(line) for line in reading_lines]
+            # Le due strade sono complementari, misurato il 19 settembre: i
+            # riquadri disegnati sono precisi dove ci sono (Daggerheart, 170
+            # schede con una sola che sconfina) e quasi ciechi altrove (3 schede
+            # su Dragonbane, 0 su Apocalisse); le righe di campi funzionano su
+            # tutti i manuali ma rivendicano solo se' stesse. Si sommano: una
+            # scheda e' cio' che un riquadro delimita OPPURE cio' che una riga di
+            # campi dichiara.
+            if stat_block_combinations is not None:
+                # La scheda e' fatta di RIGHE DI CAMPI: righe che portano piu'
+                # etichette insieme, in una combinazione che il documento ripete
+                # (`stat_block_field_lines`, indicazione dell'utente del 19
+                # settembre). Le righe di una tabella non la producono, e infatti
+                # su Apocalisse — che schede non ne ha — non se ne trova nessuna.
+                gruppi = field_line_groups(
+                    reading_facts, field_line_indices(reading_facts, stat_block_combinations)
+                )
+                aree_dai_campi = []
+                for gruppo in gruppi:
+                    riquadri = [
+                        riquadro
+                        for i in gruppo
+                        if (riquadro := reading_facts[i].bbox) is not None
+                    ]
+                    if len(riquadri) != len(gruppo):
+                        continue
+                    aree_dai_campi.append(
+                        StatBlockAreaInput(
+                            bbox=(
+                                min(b[0] for b in riquadri),
+                                min(b[1] for b in riquadri),
+                                max(b[2] for b in riquadri),
+                                max(b[3] for b in riquadri),
+                            ),
+                            primitive_ids=tuple(
+                                primitive.primitive_id
+                                for i in gruppo
+                                for primitive in reading_lines[i]
+                            ),
+                            record_start_ids=_record_start_ids(
+                                reading_facts, reading_lines, gruppo
+                            ),
+                        )
+                    )
+                stat_block_areas = tuple(aree_dai_campi)
+                blocks = [
+                    block
+                    for block in stat_block_regions(frames, visual_boxes, reading_lines)
+                    if sum(
+                        1
+                        for index in block.line_indices
+                        if len(reading_facts[index].labels) >= 2
+                    )
+                    >= 2
+                ]
+                stat_block_areas += tuple(
+                    StatBlockAreaInput(
+                        bbox=block.bbox,
+                        primitive_ids=tuple(
+                            primitive.primitive_id
+                            for index in block.line_indices
+                            for primitive in reading_lines[index]
+                        ),
+                        record_start_ids=_record_start_ids(
+                            reading_facts, reading_lines, block.line_indices
+                        ),
+                    )
+                    for block in blocks
+                )
+            elif stat_block_document is None:
+                # Una scheda porta CAMPI: «almeno due righe con almeno due coppie
+                # etichetta/valore» e' la regola 2 del modulo stesso. Il
+                # riconoscimento la applica contando le alternanze di stile, e i
+                # punti elenco le imitano: su DB p121 i riquadri disegnati delle
+                # trappole passavano per schede e svuotavano la tabella delle
+                # trappole. Contate sui campi, le schede vere ne hanno due righe
+                # (18 di Daggerheart e 2 di Dragonbane, misurate), le trappole
+                # zero.
+                blocks = [
+                    block
+                    for block in stat_block_regions(frames, visual_boxes, reading_lines)
+                    if sum(
+                        1
+                        for index in block.line_indices
+                        if len(reading_facts[index].labels) >= 2
+                    )
+                    >= 2
+                ]
+            else:
+                pieces = [
+                    piece
+                    for frame in frames
+                    for piece in split_frame(
+                        frame, visual_boxes, [facts.bbox for facts in reading_facts]
+                    )
+                ]
+                blocks = list(
+                    stat_blocks_from_structures(
+                        reading_facts,
+                        stat_block_document,
+                        heading_sizes=frozenset(levels),
+                        frames=pieces,
+                    )
+                )
+                if stat_block_end == "colonna":
+                    # La scheda finisce dove l'ordine di lettura TORNA IN SU:
+                    # una riga che comincia piu' in alto della precedente sta in
+                    # un'altra colonna, e la scheda e' finita. Indicazione
+                    # dell'utente («prova una spaziatura anomala o un cambio di
+                    # formato»), portata dove la misura la manda: su DB p87 il
+                    # salto piu' largo dentro la scheda (35 pt) sta fra la prosa e
+                    # i campi, e il font della tabella degli attacchi e' quello
+                    # del blocco statistiche -- mentre il salto all'indietro cade
+                    # esattamente alla fine dei campi, e nessuna delle 13 schede
+                    # di Daggerheart guardate ne ha uno dentro.
+                    blocks = [_fino_al_cambio_colonna(block, reading_facts) for block in blocks]
+            if stat_block_combinations is None:
+                stat_block_areas = tuple(
+                    StatBlockAreaInput(
+                        bbox=block.bbox,
+                        primitive_ids=tuple(
+                            primitive.primitive_id
+                            for index in block.line_indices
+                            for primitive in reading_lines[index]
+                        ),
+                        record_start_ids=_record_start_ids(
+                            reading_facts, reading_lines, block.line_indices
+                        ),
+                    )
+                    for block in blocks
+                )
+            if stat_block_rule == "riquadro":
+                # La regola della chat delle schede: una tabella che ATTRAVERSA
+                # il riquadro di una scheda non si costruisce, e chi ci sta
+                # dentro resta. E' l'alternativa alla regola delle righe, e sta
+                # qui per poterle misurare sugli stessi dati.
+                table_regions = [
+                    region
+                    for region in table_regions
+                    if not crossed_stat_blocks(region.bbox, blocks)
+                ]
+                stat_block_areas = ()
+
         ir2_page = build_page_ir2(
             page_id=page_id,
             ordered_text_primitives=ordered_primitives,
             asset_notes=notes,
             table_regions=table_regions if enable_tables else (),
+            stat_block_areas=stat_block_areas,
             page_label=page_label,
             page_label_deduced=page_label_deduced,
             list_markers=markers,

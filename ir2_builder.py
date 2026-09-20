@@ -37,7 +37,7 @@ from __future__ import annotations
 import re
 from collections import Counter
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from document_heading_measurements import SizedLine  # noqa: I001
 from document_heading_policy import heading_lines, merge_wrapped  # noqa: I001
@@ -116,6 +116,31 @@ class TableRegionInput:
     gutter_x_intervals: tuple[tuple[float, float], ...] = ()
     candidate_ids: tuple[str, ...] = ()
     resolution: str | None = None
+    # I confini che Resolution ammette fra i corridoi respinti e che cadono in
+    # questa regione (Milestone 43, Fase 2). Non entrano da soli: `build_table`
+    # tiene solo quelli che non fanno uscire nessuna riga dalla tabella.
+    admitted_boundaries: tuple[tuple[float, float], ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class StatBlockAreaInput:
+    """One stat block: its own area and the primitives it holds.
+
+    Nothing here is computed by this module. Both come from `stat_block_regions`,
+    the consumer that reads the drawn frames of two wired producers -- the same
+    module the stat block work uses on its own branch. This module only needs to
+    know **which lines belong to a stat block**, because a table must not take
+    them: `Criterio_SchedaControLaTabella_v1.md`.
+    """
+
+    bbox: BBox
+    primitive_ids: tuple[str, ...] = ()
+    # La prima primitiva di ogni riga che **apre un record**: una riga che
+    # comincia con un'etichetta. Dentro una scheda li' va a capo, perche' una
+    # riga e' un record e non un pezzo di frase:
+    # `Criterio_RigheDellaSchedaACapo_v1.md`. Quali righe siano lo decide chi
+    # riconosce la scheda, come tutto il resto di questa classe.
+    record_start_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -574,12 +599,223 @@ def _column_of(line: _SourceLine, bounds: list[tuple[float, float]]) -> int | No
     return None
 
 
+def _bounds_with_admitted(
+    region: TableRegionInput, lines: Sequence[_SourceLine]
+) -> list[tuple[float, float]]:
+    """The region's column bounds, plus every admitted boundary that ejects no line.
+
+    A boundary admitted by Resolution is as tall as its corridor, not as its
+    table. Across the whole region, a line that crosses it elsewhere would turn
+    into a residual (`_column_of`), and a paragraph would leave the table half in
+    a cell and half out: Dag p115, 28 lines of prose. So a boundary enters only
+    if the lines placed in a column stay as many as they were
+    (`Criterio_ConfiniFase2InIR2_v1.md`). There is no threshold: a line crosses
+    the boundary or it does not.
+    """
+
+    accepted = region
+    bounds = column_bounds(accepted)
+    placed = sum(1 for line in lines if _column_of(line, bounds) is not None)
+    for boundary in sorted(region.admitted_boundaries):
+        trial = replace(accepted, gutter_x_intervals=accepted.gutter_x_intervals + (boundary,))
+        trial_bounds = column_bounds(trial)
+        if sum(1 for line in lines if _column_of(line, trial_bounds) is not None) == placed:
+            accepted, bounds = trial, trial_bounds
+    return bounds
+
+
+def _contains_bbox(outer: BBox, inner: BBox) -> bool:
+    """The outer box holds the inner one: the same relation `stat_block_regions`
+    uses to tell a table **inside** a stat block from one that crosses it."""
+
+    return (
+        outer[0] <= inner[0]
+        and outer[1] <= inner[1]
+        and outer[2] >= inner[2]
+        and outer[3] >= inner[3]
+    )
+
+
+def _stat_block_primitives(
+    region: TableRegionInput, areas: Sequence[StatBlockAreaInput]
+) -> set[str]:
+    """The primitives a stat block keeps for itself, for this table region.
+
+    The lines of a stat block are the stat block's: a table that is not held
+    inside it cannot take them, and the region repair stops at them
+    (`Criterio_SchedaControLaTabella_v1.md`). A table **inside** a stat block --
+    the attack table of a creature -- is content of the stat block and keeps
+    using its lines. The test is containment of the **seed** region, so that a
+    repair growing towards another stat block cannot swallow it either.
+    """
+
+    return {
+        primitive_id
+        for area in areas
+        if not _contains_bbox(area.bbox, region.bbox)
+        for primitive_id in area.primitive_ids
+    }
+
+
+def _is_consumed(line: _SourceLine, consumed_ids: set[str]) -> bool:
+    return any(p.primitive_id in consumed_ids for p in line.primitives)
+
+
+def _row_clusters(lines: Sequence[_SourceLine]) -> list[list[_SourceLine]]:
+    """Candidate table rows: source lines that overlap in y.
+
+    Ported from `scripts/prototype_table_columns_and_rows.py`, with its anchor to
+    the first line of the row: extending the bottom instead would chain rows
+    together by transitivity.
+    """
+
+    if not lines:
+        return []
+    ordered = sorted(lines, key=lambda line: min(p.bbox[1] for p in line.primitives))
+    clusters = [[ordered[0]]]
+    anchor_bottom = max(p.bbox[3] for p in ordered[0].primitives)
+    for line in ordered[1:]:
+        if min(p.bbox[1] for p in line.primitives) < anchor_bottom - 1.0:
+            clusters[-1].append(line)
+        else:
+            clusters.append([line])
+            anchor_bottom = max(p.bbox[3] for p in line.primitives)
+    return clusters
+
+
+def _repair_region_y(
+    region: TableRegionInput, lines: Sequence[_SourceLine], consumed_ids: set[str]
+) -> BBox:
+    """Extend and trim the region in y over the rows that respect its columns.
+
+    Ported from `repair_region_y` in `scripts/prototype_table_columns_and_rows.py`,
+    never wired before. One row at a time above and below: a row whose lines all
+    sit in a column belongs to the table, a row with a line crossing a boundary
+    closes it. It brings back the header above the first drawn rule and the last
+    row below the last one -- `text/lines` knows a row only where a rule is drawn
+    -- and keeps out the introductory prose, which crosses the columns. A
+    contiguous run, never a scattered selection.
+
+    Admission is `_column_of` on the columns `build_table` will use: the
+    prototype records, in `_respects`, the two times admitting and assigning
+    disagreed. A row holding a line another table already owns closes the run.
+    """
+
+    x0, y0, x1, y1 = region.bbox
+    seed = [
+        line
+        for line in lines
+        if not _is_consumed(line, consumed_ids)
+        and all(
+            p.bbox[0] >= x0 - 0.5
+            and p.bbox[2] <= x1 + 0.5
+            and p.bbox[1] >= y0 - 0.5
+            and p.bbox[3] <= y1 + 0.5
+            for p in line.primitives
+        )
+    ]
+    if len(seed) < 2:
+        return region.bbox
+    bounds = _bounds_with_admitted(region, seed)
+    if len(bounds) < 2:
+        return region.bbox
+
+    strip = [
+        line
+        for line in lines
+        if any(p.text.strip() and x0 <= (p.bbox[0] + p.bbox[2]) / 2.0 <= x1 for p in line.primitives)
+    ]
+    clusters = _row_clusters(strip)
+
+    def middle(line: _SourceLine) -> float:
+        return (min(p.bbox[1] for p in line.primitives) + max(p.bbox[3] for p in line.primitives)) / 2.0
+
+    inside = [i for i, cluster in enumerate(clusters) if any(y0 <= middle(line) <= y1 for line in cluster)]
+    if not inside:
+        return region.bbox
+
+    def respects(cluster: list[_SourceLine]) -> bool:
+        return all(
+            not _is_consumed(line, consumed_ids) and _column_of(line, bounds) is not None
+            for line in cluster
+        )
+
+    first, last = inside[0], inside[-1]
+    while first > 0 and respects(clusters[first - 1]):
+        first -= 1
+    while last + 1 < len(clusters) and respects(clusters[last + 1]):
+        last += 1
+    kept = [line for cluster in clusters[first : last + 1] for line in cluster]
+    return (
+        x0,
+        min(min(p.bbox[1] for p in line.primitives) for line in kept),
+        x1,
+        max(max(p.bbox[3] for p in line.primitives) for line in kept),
+    )
+
+
+def _repair_region_x(bbox: BBox, lines: Sequence[_SourceLine], consumed_ids: set[str]) -> BBox:
+    """Widen the region in x until it cuts no source line in half.
+
+    Ported from `repair_region_x` in `scripts/prototype_table_columns_and_rows.py`.
+    The principle is conservation, not geometry: a source line with text inside
+    the region belongs to it, and the region must hold it whole. The `text/lines`
+    region stops where the text aligns, and the ends of longer lines stay out --
+    DB p60, seven lines up to x517 against a region ending at x509. Repeated,
+    because widening can bring in lines that begin in the new part; it converges
+    when no line sticks out.
+    """
+
+    x0, y0, x1, y1 = bbox
+    while True:
+        grown_x0, grown_x1 = x0, x1
+        for line in lines:
+            if _is_consumed(line, consumed_ids):
+                continue
+            if any(
+                p.text.strip()
+                and x0 <= (p.bbox[0] + p.bbox[2]) / 2.0 <= x1
+                and y0 <= (p.bbox[1] + p.bbox[3]) / 2.0 <= y1
+                for p in line.primitives
+            ):
+                grown_x0 = min(grown_x0, min(p.bbox[0] for p in line.primitives))
+                grown_x1 = max(grown_x1, max(p.bbox[2] for p in line.primitives))
+        if grown_x0 >= x0 and grown_x1 <= x1:
+            return (x0, y0, x1, y1)
+        x0, x1 = grown_x0, grown_x1
+
+
+def _repaired_region(
+    region: TableRegionInput, lines: Sequence[_SourceLine], consumed_ids: set[str]
+) -> TableRegionInput:
+    """The two repairs, y then x as in the prototype, repeated to a fixed point.
+
+    The prototype runs them once. Once is not enough when the last row has lines
+    longer than the region: y stops at them because they cross its right edge,
+    and x widens the region only afterwards -- on DB p120 `6 Lampadario` would go
+    in and its bullets would stay out. Repeating until nothing changes gives the
+    region both repairs describe (`Criterio_RiparazioneRegioneIR2_v1.md`); a
+    region seen before ends the loop too, so it cannot oscillate.
+    """
+
+    current = region
+    seen = {region.bbox}
+    while True:
+        bbox = _repair_region_x(
+            _repair_region_y(current, lines, consumed_ids), lines, consumed_ids
+        )
+        if bbox in seen:
+            return current
+        seen.add(bbox)
+        current = replace(current, bbox=bbox)
+
+
 def build_table(
     region: TableRegionInput, lines: Sequence[_SourceLine]
 ) -> tuple[TableIR2 | None, list[_SourceLine]]:
     """Build a grid from the region's lines. Returns (table, residual lines)."""
 
-    bounds = column_bounds(region)
+    bounds = _bounds_with_admitted(region, lines)
     if len(bounds) < 2:
         return None, list(lines)
 
@@ -640,6 +876,7 @@ def build_page_ir2(
     ordered_text_primitives: Sequence[TextPrimitive],
     asset_notes: Sequence[AssetNoteInput] = (),
     table_regions: Sequence[TableRegionInput] = (),
+    stat_block_areas: Sequence[StatBlockAreaInput] = (),
     page_label: str | None = None,
     page_label_deduced: bool = False,
     list_markers: frozenset[str] = frozenset(),
@@ -658,13 +895,20 @@ def build_page_ir2(
     source_lines = group_source_lines(ordered_text_primitives)
     tables: list[tuple[int, TableIR2, TableRegionInput, tuple[str, ...]]] = []
     consumed_ids: set[str] = set()
-    for region in table_regions:
+    record_start_ids = {
+        primitive_id for area in stat_block_areas for primitive_id in area.record_start_ids
+    }
+    for seed_region in table_regions:
+        # Le righe di una scheda sono della scheda: una tabella che non le sta
+        # dentro non le prende, e la riparazione si ferma a loro.
+        unavailable = consumed_ids | _stat_block_primitives(seed_region, stat_block_areas)
+        region = _repaired_region(seed_region, source_lines, unavailable)
         x0, y0, x1, y1 = region.bbox
         inside = [
             line
             for line in source_lines
             if all(
-                p.primitive_id not in consumed_ids
+                p.primitive_id not in unavailable
                 and p.bbox[0] >= x0 - 0.5
                 and p.bbox[2] <= x1 + 0.5
                 and p.bbox[1] >= y0 - 0.5
@@ -802,7 +1046,14 @@ def build_page_ir2(
         breaks_for_heading = group_of[position] != group_of[position - 1] and (
             position in heading_flags or (position - 1) in heading_flags
         )
-        if breaks_for_heading or breaks_paragraph(
+        # Dentro una scheda una riga che apre un record apre un paragrafo: le
+        # righe di una scheda stanno nello stesso blocco della sorgente, e
+        # `breaks_paragraph` — che rompe dove il blocco cambia — le salda tutte
+        # insieme. `Criterio_RigheDellaSchedaACapo_v1.md`.
+        breaks_for_record = bool(source_line.primitives) and (
+            source_line.primitives[0].primitive_id in record_start_ids
+        )
+        if breaks_for_heading or breaks_for_record or breaks_paragraph(
             previous_line,
             source_line,
             page_body_font,
