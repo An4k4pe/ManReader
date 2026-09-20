@@ -90,6 +90,8 @@ from document_heading_band_measurements import measure_size_mass  # noqa: E402
 from document_heading_band_policy import HeadingBands, heading_bands  # noqa: E402
 from document_heading_measurements import measure_font_sizes  # noqa: E402
 from document_heading_policy import prose_sizes  # noqa: E402
+from document_stat_block_measurements import measure_field_combinations  # noqa: E402
+from document_stat_block_policy import StatBlockFields, stat_block_fields  # noqa: E402
 from ir2_markdown import render_page_markdown  # noqa: E402
 from ir2_model import DocumentIR2, IR2Provenance  # noqa: E402
 from ir2_serialization import document_ir2_from_dict, document_ir2_to_dict  # noqa: E402
@@ -128,6 +130,7 @@ class _Lavoro:
     # `None` lascia la regola dei riquadri disegnati.
     strutture_schede: tuple[RepeatedStructure, ...] | None = None
     combinazioni_schede: frozenset[frozenset[str]] | None = None
+    campi_schede: StatBlockFields | None = None
     opened: OpenedSource | None = None
 
 
@@ -176,6 +179,7 @@ def _rendi_pagina(page_index: int) -> tuple[int, object, str | None]:
             bands=_LAVORO.bands,
             stat_block_document=_LAVORO.strutture_schede,
             stat_block_combinations=_LAVORO.combinazioni_schede,
+            stat_block_fields=_LAVORO.campi_schede,
             stat_block_rule=_LAVORO.regola_schede,
             stat_block_end=_LAVORO.fine_schede,
         ), None
@@ -473,6 +477,12 @@ def main() -> int:
              "combinazione che il documento ripete. Una passata in piu'.",
     )
     parser.add_argument(
+        "--schede-producer", action="store_true",
+        help="le schede passano dalla strada dell'architettura: il producer "
+             "`page_analysis.stat_block` le propone e il consumer le decide "
+             "contro la policy del documento. Niente prima passata.",
+    )
+    parser.add_argument(
         "--schede-struttura", action="store_true",
         help="IN PROVA: le schede si riconoscono dalla struttura ricorrente del "
              "documento invece che dai riquadri disegnati. Una passata in piu'.",
@@ -556,6 +566,18 @@ def main() -> int:
         fasce = heading_bands(
             measure_size_mass(ordinate), measure_font_sizes(ordinate).median_length
         )
+        campi_schede: StatBlockFields | None = None
+        if arguments.schede_producer:
+            # Fatto di DOCUMENTO, nella forma di `heading_bands`: si misura una
+            # volta sulle pagine gia' catturate e scende nelle pagine. Non
+            # costa una passata in piu' -- le pagine sono gia' in mano.
+            campi_schede = stat_block_fields(measure_field_combinations(ordinate))
+            print(
+                f"schede: {len(campi_schede.combinations)} combinazioni di campi",
+                flush=True,
+            )
+            for combinazione in sorted(campi_schede.combinations, key=sorted):
+                print(f"    {sorted(combinazione)}", flush=True)
         if fasce.ceiling is None:
             print("titoli: nessuna prosa misurata, il meccanismo tace", flush=True)
         else:
@@ -579,6 +601,7 @@ def main() -> int:
             finestra=arguments.finestra,
             regola_schede=arguments.schede_regola,
             fine_schede=arguments.schede_fine,
+            campi_schede=campi_schede,
             bands=fasce,
         )
         # --- Cio' che una corsa precedente ha gia' prodotto ---

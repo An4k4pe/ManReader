@@ -60,7 +60,7 @@ _MINIMO_RIGHE_PER_SCHEDA = 2
 _SALTO_MASSIMO = 2
 
 
-def _source_lines(page: NormalizedPrimitivePage) -> list[list[TextPrimitive]]:
+def source_lines_of_page(page: NormalizedPrimitivePage) -> list[list[TextPrimitive]]:
     """Le primitive raggruppate nella riga di sorgente che le porta.
 
     Il blocco e la riga stanno in `source_observation_id`, come li legge gia'
@@ -118,7 +118,7 @@ def build_stat_block_page_analysis(
 ) -> PageAnalysis:
     """Proponi le schede di una pagina, senza aprire file e senza persistere."""
 
-    righe = _source_lines(primitive_page)
+    righe = source_lines_of_page(primitive_page)
     candidates: list[RegionCandidate] = []
     for numero, gruppo in enumerate(_groups_of_field_lines(righe)):
         # Il gruppo va dalla prima all'ultima riga di campi, quelle in mezzo

@@ -74,6 +74,7 @@ from document_line_start_measurements import (  # noqa: E402
     measure_document_line_starts,
 )
 from document_list_policy import list_markers, value_scale_signatures  # noqa: E402
+from document_stat_block_policy import StatBlockFields  # noqa: E402
 from document_text_recurrence_measurements import (  # noqa: E402
     measure_document_text_recurrence,
 )
@@ -104,6 +105,7 @@ from page_analysis_column_band import (  # noqa: E402
     column_band_gutter_rows,
 )
 from page_analysis_column_band_rejected_gutters import measure_rejected_gutters  # noqa: E402
+from page_analysis_stat_block import build_stat_block_page_analysis  # noqa: E402
 from primitive_model import NormalizedPrimitivePage, TextPrimitive  # noqa: E402
 from primitive_normalizer import normalize_backend_page_capture  # noqa: E402
 from pymupdf_capture import capture_pymupdf_page  # noqa: E402
@@ -804,6 +806,52 @@ def _record_start_ids(
     )
 
 
+def resolved_stat_block_groups(
+    chain: ReadingChain,
+    reading_lines: Sequence[Sequence[TextPrimitive]],
+    fields: StatBlockFields,
+    *,
+    generation_id: str,
+) -> list[tuple[int, ...]]:
+    """Le righe di lettura di ogni scheda **accettata dal consumer**.
+
+    La strada dell'architettura: `page_analysis.stat_block` propone, la policy
+    del documento e `resolve_page_candidates` decidono. Il candidato porta
+    primitive; qui si torna agli indici delle righe di lettura, perche' bbox,
+    primitive e inizi di record dell'area si prendono da quelle — cosi' l'unica
+    cosa che cambia rispetto alla strada vecchia e' **quali** gruppi passano.
+    """
+
+    analysis = build_stat_block_page_analysis(
+        chain.primitive_page, generation_id=generation_id
+    )
+    if not analysis.candidates:
+        return []
+    bound = bind_co_referenced_page_analyses(
+        chain.primitive_page,
+        co_referenced_page_analyses=build_co_referenced_page_analyses((analysis,)),
+    )
+    resolved = resolve_page_candidates(bound, stat_block_fields=fields)
+    accettati = {
+        outcome.candidate_reference.candidate_id
+        for outcome in resolved.outcomes
+        if outcome.outcome == "accepted"
+    }
+    gruppi: list[tuple[int, ...]] = []
+    for candidate in analysis.candidates:
+        if candidate.candidate_id not in accettati:
+            continue
+        suoi = set(candidate.primitive_ids)
+        indici = tuple(
+            indice
+            for indice, riga in enumerate(reading_lines)
+            if any(primitive.primitive_id in suoi for primitive in riga)
+        )
+        if indici:
+            gruppi.append(indici)
+    return gruppi
+
+
 def stat_block_line_facts_of_page(
     document: object, plumber_pdf: object, page_index: int
 ) -> tuple[LineFacts, ...]:
@@ -833,6 +881,7 @@ def run(
     stat_block_rule: str = "righe",
     stat_block_end: str = "modulo",
     stat_block_combinations: frozenset[frozenset[str]] | None = None,
+    stat_block_fields: StatBlockFields | None = None,
 ) -> BuiltPage | None:
     """Costruisce e scrive una pagina; restituisce cio' che ha costruito.
 
@@ -1072,15 +1121,30 @@ def run(
             # tutti i manuali ma rivendicano solo se' stesse. Si sommano: una
             # scheda e' cio' che un riquadro delimita OPPURE cio' che una riga di
             # campi dichiara.
-            if stat_block_combinations is not None:
+            if stat_block_combinations is not None or stat_block_fields is not None:
                 # La scheda e' fatta di RIGHE DI CAMPI: righe che portano piu'
                 # etichette insieme, in una combinazione che il documento ripete
-                # (`stat_block_field_lines`, indicazione dell'utente del 19
-                # settembre). Le righe di una tabella non la producono, e infatti
-                # su Apocalisse — che schede non ne ha — non se ne trova nessuna.
-                gruppi = field_line_groups(
-                    reading_facts, field_line_indices(reading_facts, stat_block_combinations)
-                )
+                # (indicazione dell'utente del 19 settembre). Le righe di una
+                # tabella non la producono, e infatti su Apocalisse — che schede
+                # non ne ha — non se ne trova nessuna.
+                #
+                # Con ``stat_block_fields`` i gruppi arrivano dalla strada
+                # dell'architettura: `page_analysis.stat_block` li propone e
+                # `resolve_page_candidates` li decide contro la policy del
+                # documento (`Criterio_SchedeDalProducerAIR2_v1.md`). Senza,
+                # vale la strada vecchia, che conta le righe qui.
+                if stat_block_fields is not None:
+                    gruppi = resolved_stat_block_groups(
+                        chain,
+                        reading_lines,
+                        stat_block_fields,
+                        generation_id=generation_id,
+                    )
+                else:
+                    gruppi = field_line_groups(
+                        reading_facts,
+                        field_line_indices(reading_facts, stat_block_combinations or frozenset()),
+                    )
                 aree_dai_campi = []
                 for gruppo in gruppi:
                     riquadri = [
@@ -1180,7 +1244,7 @@ def run(
                     # esattamente alla fine dei campi, e nessuna delle 13 schede
                     # di Daggerheart guardate ne ha uno dentro.
                     blocks = [_fino_al_cambio_colonna(block, reading_facts) for block in blocks]
-            if stat_block_combinations is None:
+            if stat_block_combinations is None and stat_block_fields is None:
                 stat_block_areas = tuple(
                     StatBlockAreaInput(
                         bbox=block.bbox,

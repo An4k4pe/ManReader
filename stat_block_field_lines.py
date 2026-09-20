@@ -73,15 +73,15 @@ def recurring_field_combinations(
             if len(etichette) < 2:
                 continue
             quante[etichette] += 1
-            profili.setdefault(etichette, Counter())[_profilo(line, etichette)] += 1
+            profili.setdefault(etichette, Counter())[position_profile(line, etichette)] += 1
     return frozenset(
         combinazione
         for combinazione, n in quante.items()
-        if n >= minimo and _sta_sempre_nello_stesso_posto(profili[combinazione], n)
+        if n >= minimo and stays_in_place(profili[combinazione], n)
     )
 
 
-def _profilo(line: LineFacts, combinazione: frozenset[str]) -> tuple[tuple[str, int], ...]:
+def position_profile(line: LineFacts, combinazione: frozenset[str]) -> tuple[tuple[str, int], ...]:
     """Dove stanno le etichette sulla riga, in larghezze di carattere.
 
     Lo scostamento dal bordo sinistro della riga diviso per la larghezza media di
@@ -98,7 +98,7 @@ def _profilo(line: LineFacts, combinazione: frozenset[str]) -> tuple[tuple[str, 
     )
 
 
-def _sta_sempre_nello_stesso_posto(
+def stays_in_place(
     profili: Counter[tuple[tuple[str, int], ...]], occorrenze: int
 ) -> bool:
     """Un solo profilo copre la maggioranza delle occorrenze.

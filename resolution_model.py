@@ -20,6 +20,10 @@ _VALID_REASON_TOKENS = frozenset(
     {
         "superseded_by_more_specific",
         "no_applicable_rule",
+        # Una scheda proposta le cui etichette il documento non ripete nello
+        # stesso posto: `Criterio_PosizioneRelativaDeiCampi_v1.md`. Il producer
+        # vede una pagina sola e non puo' saperlo, quindi propone in eccesso.
+        "field_combination_not_recurring",
     }
 )
 

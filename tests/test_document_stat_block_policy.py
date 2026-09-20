@@ -1,0 +1,96 @@
+"""La policy di documento delle schede: quali combinazioni contano.
+
+Meta' controlli negativi: la guardia deve vedersi fallire. Le due condizioni
+sono la ripetizione e la posizione, e ognuna si prova da sola.
+"""
+
+from __future__ import annotations
+
+import unittest
+
+from document_stat_block_measurements import (
+    declared_labels,
+    measure_field_combinations,
+)
+from document_stat_block_policy import stat_block_fields
+from primitive_model import NormalizedPrimitivePage, PageGeometry, TextPrimitive
+
+
+def _riga(indice: int, *pezzi: tuple[str, bool]):
+    x = 10.0
+    out = []
+    for numero, (testo, grassetto) in enumerate(pezzi):
+        larghezza = 7.0 * max(len(testo), 1)
+        out.append(
+            TextPrimitive(
+                primitive_id=f"primitive:text:text:b0000:l{indice:04d}:s{numero:04d}",
+                bbox=(x, float(indice * 20), x + larghezza, float(indice * 20) + 10.0),
+                text=testo,
+                source_observation_id=f"text:b0000:l{indice:04d}:s{numero:04d}",
+                font_name="Bold" if grassetto else "Regular",
+                font_size=9.0,
+            )
+        )
+        x += larghezza + 4.0
+    return out
+
+
+def _pagina(numero: int, *righe):
+    return NormalizedPrimitivePage(
+        schema_version="1.0",
+        source_capture_id="capture:1",
+        source_id="source:1",
+        page_id=f"page:{numero:04d}",
+        page_index=numero - 1,
+        page_geometry=PageGeometry(
+            width=600.0, height=800.0, unit="pt", coordinate_system="top_left_y_down"
+        ),
+        capture_to_canonical_transform=(1.0, 0.0, 0.0, 1.0, 0.0, 0.0),
+        text_primitives=tuple(p for riga in righe for p in riga),
+    )
+
+
+def _scheda(valore: str = "3"):
+    return _riga(0, ("Ferocia:", True), (valore, False), ("Taglia:", True), ("Enorme", False))
+
+
+def _ammesse(*pagine):
+    return stat_block_fields(measure_field_combinations(pagine)).combinations
+
+
+class EtichetteDichiarateTest(unittest.TestCase):
+    def test_i_due_punti_fanno_l_etichetta(self) -> None:
+        self.assertEqual(declared_labels(_scheda()), ("ferocia", "taglia"))
+
+    def test_senza_due_punti_non_e_un_campo(self) -> None:
+        riga = _riga(0, ("usando i", False), ("PV", True), ("del creatore", False))
+        self.assertEqual(declared_labels(riga), ())
+
+
+class PolicyTest(unittest.TestCase):
+    def test_tre_ripetizioni_nello_stesso_posto_ammettono(self) -> None:
+        pagine = [_pagina(i + 1, _scheda()) for i in range(3)]
+        self.assertEqual(_ammesse(*pagine), frozenset({frozenset({"ferocia", "taglia"})}))
+
+    def test_due_ripetizioni_non_bastano(self) -> None:
+        pagine = [_pagina(i + 1, _scheda()) for i in range(2)]
+        self.assertEqual(_ammesse(*pagine), frozenset())
+
+    def test_le_etichette_sparse_non_ammettono(self) -> None:
+        """Cinque occorrenze, cinque posti: sono i numeri di un D6 dentro le
+        celle di una tabella, non una scheda."""
+        pagine = [_pagina(i + 1, _scheda("3" * (i + 1))) for i in range(5)]
+        self.assertEqual(_ammesse(*pagine), frozenset())
+
+    def test_una_minoranza_spostata_non_toglie_la_combinazione(self) -> None:
+        pagine = [_pagina(i + 1, _scheda()) for i in range(4)]
+        pagine.append(_pagina(5, _scheda("300000")))
+        self.assertEqual(_ammesse(*pagine), frozenset({frozenset({"ferocia", "taglia"})}))
+
+    def test_una_etichetta_sola_non_fa_combinazione(self) -> None:
+        riga = _riga(0, ("Movimento:", True), ("24", False))
+        self.assertEqual(_ammesse(*[_pagina(i + 1, riga) for i in range(5)]), frozenset())
+
+    def test_un_documento_senza_schede_non_ammette_niente(self) -> None:
+        prosa = _riga(0, ("Una frase di prosa, senza campi dentro.", False))
+        self.assertEqual(_ammesse(*[_pagina(i + 1, prosa) for i in range(5)]), frozenset())

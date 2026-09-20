@@ -7,10 +7,23 @@ of primitives (first_only_primitive_ids == () and second_only_primitive_ids
 specific interior_visual_frame candidate is accepted and the generic
 embedded_visual candidate is rejected as superseded. Every other candidate,
 from any producer, is left unresolved: no other rule exists yet.
+
+**La seconda regola, 20 settembre 2026** (`Criterio_SchedeDalProducerAIR2_v1.md`):
+un candidato `layout.stat_block` e' accettato se una delle sue righe porta una
+combinazione di etichette che la policy del documento ammette, e respinto
+altrimenti. `page_analysis.stat_block` vede una pagina sola e propone in
+eccesso — sulla tabella dei tesori di DB propone le righe `Tira un D6. 1: …
+2: …` — perche' la ripetizione nel documento e' un fatto che una pagina non
+puo' conoscere. E' qui che si decide.
+
+Senza policy la regola tace e quei candidati restano irrisolti come prima: il
+parametro e' facoltativo apposta.
 """
 
 from __future__ import annotations
 
+from document_stat_block_measurements import declared_labels
+from document_stat_block_policy import StatBlockFields
 from page_analysis_co_reference_binding import BoundCoReferencedPageAnalyses
 from page_analysis_co_reference_candidate_primitive_set_measurements import (
     measure_co_referenced_page_candidate_primitive_sets,
@@ -20,19 +33,48 @@ from page_analysis_co_reference_candidate_reference import (
     build_co_referenced_page_candidate_reference,
 )
 from page_analysis_model import PageAnalysis, RegionCandidate
+from page_analysis_stat_block import source_lines_of_page
 from resolution_model import ResolvedCandidateOutcome, ResolvedPageCandidates
 
 _INTERIOR_VISUAL_FRAME_PRODUCER_NAME = "page_analysis.interior_visual_frame"
 _EMBEDDED_VISUAL_PRODUCER_NAME = "page_analysis.embedded_visual"
+_STAT_BLOCK_PRODUCER_NAME = "page_analysis.stat_block"
+
+
+def _carries_an_admitted_combination(
+    bound: BoundCoReferencedPageAnalyses,
+    candidate: RegionCandidate,
+    fields: StatBlockFields,
+) -> bool:
+    """Una riga del candidato porta una combinazione che il documento ripete.
+
+    Basta **una** riga: una scheda dichiara i suoi campi su una riga sola — e
+    quella riga e' cio' che la policy sa riconoscere — mentre le altre righe del
+    blocco portano il nome di un tratto o la prosa descrittiva."""
+
+    suoi = set(candidate.primitive_ids)
+    for riga in source_lines_of_page(bound.primitive_page):
+        if not any(primitive.primitive_id in suoi for primitive in riga):
+            continue
+        if fields.carried_by(frozenset(declared_labels(riga))):
+            return True
+    return False
 
 
 def resolve_page_candidates(
     bound: BoundCoReferencedPageAnalyses,
+    *,
+    stat_block_fields: StatBlockFields | None = None,
 ) -> ResolvedPageCandidates:
-    """Apply the single superseded-by-more-specific rule to one page's candidates."""
+    """Apply the two rules to one page's candidates.
+
+    ``stat_block_fields`` e' la policy del documento. Senza, i candidati di
+    scheda restano irrisolti: e' il comportamento di prima."""
 
     if not isinstance(bound, BoundCoReferencedPageAnalyses):
         raise ValueError("bound must be a BoundCoReferencedPageAnalyses")
+    if stat_block_fields is not None and not isinstance(stat_block_fields, StatBlockFields):
+        raise ValueError("stat_block_fields must be a StatBlockFields or None")
 
     entries: list[
         tuple[PageAnalysis, RegionCandidate, CoReferencedPageCandidateReference]
@@ -77,9 +119,27 @@ def resolve_page_candidates(
                 superseded_references.append(embedded_visual_reference)
                 break
 
+    rejected_stat_block_references: list[CoReferencedPageCandidateReference] = []
+    if stat_block_fields is not None:
+        for analysis, candidate, reference in entries:
+            if analysis.provenance.producer_name != _STAT_BLOCK_PRODUCER_NAME:
+                continue
+            if _carries_an_admitted_combination(bound, candidate, stat_block_fields):
+                accepted_references.append(reference)
+            else:
+                rejected_stat_block_references.append(reference)
+
     outcomes: list[ResolvedCandidateOutcome] = []
     for _, _, reference in entries:
-        if reference in accepted_references:
+        if reference in rejected_stat_block_references:
+            outcomes.append(
+                ResolvedCandidateOutcome(
+                    candidate_reference=reference,
+                    outcome="rejected",
+                    reason_token="field_combination_not_recurring",
+                )
+            )
+        elif reference in accepted_references:
             outcomes.append(
                 ResolvedCandidateOutcome(
                     candidate_reference=reference,
