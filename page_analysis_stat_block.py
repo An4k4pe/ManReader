@@ -4,8 +4,9 @@
 `Ferocia: 3   Taglia: Enorme`, `Movimento: 24   Armatura: 6   PF: 84`,
 `Difficolta': 14 | Soglie: 9/18 | PF: 5 | Stress: 3`. La regola e' quella che il
 modulo delle schede si e' dato per primo e che `State.md:903` scrive alla lettera
-(«campi etichetta:valore da preservare»): **almeno due righe con almeno due
-coppie etichetta/valore**.
+(«campi etichetta:valore da preservare»): **almeno due coppie etichetta/valore
+su una riga**. Quante righe servano non lo decide il producer — vedi
+`_MINIMO_RIGHE_PER_SCHEDA`.
 
 **Perche' il producer non puo' fare di piu'.** Un producer riceve una pagina e
 basta: non vede le altre pagine e non vede i candidati degli altri producer. Le
@@ -48,10 +49,21 @@ from stat_block_regions import field_labels
 
 _OBSERVATION_ID_PATTERN = re.compile(r"^text:b(\d+):l(\d+):s(\d+)$")
 
-# Le due soglie sono la regola 2 del modulo delle schede, non tarature: «almeno
-# due righe con almeno due coppie etichetta/valore».
+# Le coppie per riga sono la regola 2 del modulo delle schede, non una taratura:
+# «almeno due righe con almeno due coppie etichetta/valore».
 _MINIMO_COPPIE_PER_RIGA = 2
-_MINIMO_RIGHE_PER_SCHEDA = 2
+
+# **Una riga sola basta**, `Criterio_SchedaDaUnaRigaSola_v1.md`. Il minimo di due
+# righe era una seconda guardia nel posto sbagliato: chiedeva al producer di
+# distinguere una scheda da una tabella, che e' cio' che il producer non puo'
+# fare — la ripetizione nel documento non si vede da una pagina sola. A
+# scartare le proposte sbagliate e' il consumer. Misurato: i colossi di
+# Daggerheart dichiarano `Soglie: 11/22 | Stress: 6` su una riga che nella
+# pagina sta da sola, e il minimo le faceva sparire.
+#
+# Non e' la regola «una **coppia** per riga», che l'utente ha rifiutato l'11
+# settembre: la riga deve portarne due come prima.
+_MINIMO_RIGHE_PER_SCHEDA = 1
 
 # Due righe di campi separate da piu' di questo non sono la stessa scheda. E' il
 # raggruppamento gia' misurato in `stat_block_field_lines.field_line_groups`: fra

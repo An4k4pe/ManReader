@@ -92,8 +92,16 @@ class ProducerTest(unittest.TestCase):
         self.assertEqual(len(candidati), 1)
         self.assertEqual(candidati[0].proposed_structural_kind, "layout.stat_block")
 
-    def test_una_riga_sola_non_basta(self) -> None:
-        self.assertEqual(self._candidati(_campi(0)), ())
+    def test_una_riga_sola_basta(self) -> None:
+        """`Criterio_SchedaDaUnaRigaSola_v1.md`: i colossi di Daggerheart
+        dichiarano `Soglie: … | Stress: …` su una riga che sta da sola."""
+        self.assertEqual(len(self._candidati(_campi(0))), 1)
+
+    def test_una_riga_con_una_coppia_sola_non_basta(self) -> None:
+        """Controllo negativo: cambia quante RIGHE servono, non quante coppie.
+        «Una coppia per riga» resta rifiutata."""
+        riga = _riga(0, ("Movimento:", True), ("24", False))
+        self.assertEqual(self._candidati(riga), ())
 
     def test_la_prosa_non_propone_niente(self) -> None:
         prosa = _riga(0, ("Una frase intera senza nessun campo dentro.", False))
