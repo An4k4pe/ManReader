@@ -200,6 +200,14 @@ def _union(first: BBox, second: BBox) -> BBox:
     )
 
 
+# Le tre relazioni fra rettangoli servono anche fuori da qui: la Resolution dei
+# riquadri (`resolution_stat_blocks`) decide con le stesse, altrimenti un
+# riquadro apparterrebbe a una scheda per una regola e a un'altra per l'altra.
+centre_inside = _centre_inside
+contains_box = _contains
+line_bbox = _line_bbox
+
+
 def split_frame(
     frame: FrameInput,
     visual_boxes: Mapping[str, BBox],
