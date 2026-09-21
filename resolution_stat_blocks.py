@@ -17,6 +17,15 @@ ed è così che AZIONI e ATTRIBUTI DEI PNG passavano per schede (giudizio
 dell'utente, 12 settembre: «può essere un elemento, ma non lo userei come unico
 discriminante»).
 
+**Il riquadro non si allunga nell'altra colonna** (v2,
+`Criterio_RiquadriNelConsumer_v2.md`). Un pezzo non delimita una scheda se,
+all'altezza della scheda, scavalca un corridoio fra colonne che la scheda stessa
+non scavalca. Su DB idx 92 un pannello `(54,117)-(550,382)` attraversa le due
+colonne, contiene la scheda del grifone a sinistra, e la v1 ci aveva inghiottito
+la tabella degli attacchi a destra. La forma semplice — «non attraversa un
+corridoio» — non va: `column_band` ammette corridoi larghi un punto dentro le
+schede di Daggerheart, dove si allineano i rientri, e le scarterebbe.
+
 **Per intero, e per questo.** Su Dragonbane la pergamena della scheda è raster —
 esclusa, perché un'immagine è un'illustrazione e non un riquadro — e l'unico
 riquadro disegnato vicino è il filetto sotto `Ferocia: 1 Taglia: Enorme`, che
@@ -32,6 +41,7 @@ from dataclasses import dataclass
 
 from geometry_model import BBox
 from page_analysis_co_reference_binding import BoundCoReferencedPageAnalyses
+from page_analysis_column_band import column_band_gutter_rows
 from page_analysis_model import RegionCandidate
 from page_analysis_stat_block import source_lines_of_page
 from primitive_model import TextPrimitive
@@ -99,6 +109,21 @@ def _lines_of(candidate: RegionCandidate, lines: Sequence[Sequence[TextPrimitive
     return {i for i, riga in enumerate(lines) if any(p.primitive_id in suoi for p in riga)}
 
 
+def _reaches_the_other_column(
+    pezzo: BBox, scheda: BBox, corridoi: Sequence[tuple[float, float, float, float]]
+) -> bool:
+    """All'altezza della scheda, il pezzo scavalca un corridoio che la scheda
+    non scavalca: si allunga nell'altra colonna."""
+
+    for x0, y0, x1, y1 in corridoi:
+        all_altezza = scheda[1] < y1 and scheda[3] > y0
+        pezzo_scavalca = pezzo[0] < x0 and pezzo[2] > x1
+        scheda_scavalca = scheda[0] < x0 and scheda[2] > x1
+        if all_altezza and pezzo_scavalca and not scheda_scavalca:
+            return True
+    return False
+
+
 def resolve_stat_blocks(
     bound: BoundCoReferencedPageAnalyses, resolved: ResolvedPageCandidates
 ) -> tuple[ResolvedStatBlock, ...]:
@@ -112,6 +137,12 @@ def resolve_stat_blocks(
         return ()
 
     righe = source_lines_of_page(bound.primitive_page)
+    corridoi = [
+        (float(g["x0"]), float(g["y0"]), float(g["x1"]), float(g["y1"]))  # type: ignore[arg-type]
+        for g in column_band_gutter_rows(bound.primitive_page)
+        if g["reject_reason"] is None
+    ]
+    bbox_di = {c.candidate_id: c.bbox for c in accettate}
     riquadri_righe = [line_bbox(riga) for riga in righe]
     righe_di = {c.candidate_id: _lines_of(c, righe) for c in accettate}
     visual_boxes = {
@@ -138,7 +169,11 @@ def resolve_stat_blocks(
     for pezzo in pezzi:
         sue = dentro(pezzo)
         contenute = tuple(
-            c.candidate_id for c in accettate if righe_di[c.candidate_id] and righe_di[c.candidate_id] <= sue
+            c.candidate_id
+            for c in accettate
+            if righe_di[c.candidate_id]
+            and righe_di[c.candidate_id] <= sue
+            and not _reaches_the_other_column(pezzo, bbox_di[c.candidate_id], corridoi)
         )
         if contenute:
             delimitano.append((pezzo, sue, contenute))

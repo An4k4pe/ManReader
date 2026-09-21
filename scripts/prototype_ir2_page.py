@@ -114,6 +114,7 @@ from resolution_column_boundaries import (  # noqa: E402
     resolve_column_boundaries,
 )
 from resolution_page_candidates import resolve_page_candidates  # noqa: E402
+from resolution_stat_blocks import resolve_stat_blocks  # noqa: E402
 from stat_block_field_lines import (  # noqa: E402
     field_line_groups,
     field_line_indices,
@@ -813,13 +814,14 @@ def resolved_stat_block_groups(
     *,
     generation_id: str,
 ) -> list[tuple[int, ...]]:
-    """Le righe di lettura di ogni scheda **accettata dal consumer**.
+    """Le righe di lettura di ogni scheda **risolta**.
 
     La strada dell'architettura: `page_analysis.stat_block` propone, la policy
-    del documento e `resolve_page_candidates` decidono. Il candidato porta
-    primitive; qui si torna agli indici delle righe di lettura, perche' bbox,
-    primitive e inizi di record dell'area si prendono da quelle — cosi' l'unica
-    cosa che cambia rispetto alla strada vecchia e' **quali** gruppi passano.
+    del documento e `resolve_page_candidates` decidono quali proposte sono
+    schede, e `resolve_stat_blocks` le allarga al riquadro disegnato che le
+    contiene per intero. La scheda porta primitive; qui si torna agli indici
+    delle righe di lettura, perche' bbox, primitive e inizi di record dell'area
+    si prendono da quelle.
     """
 
     analysis = build_stat_block_page_analysis(
@@ -827,21 +829,20 @@ def resolved_stat_block_groups(
     )
     if not analysis.candidates:
         return []
+    # Anche i candidati dei riquadri: il confine della scheda lo da' il disegno
+    # (`Criterio_RiquadriNelConsumer_v2.md`), e a vederli e' la Resolution.
     bound = bind_co_referenced_page_analyses(
         chain.primitive_page,
-        co_referenced_page_analyses=build_co_referenced_page_analyses((analysis,)),
+        co_referenced_page_analyses=build_co_referenced_page_analyses(
+            (*chain.analyses, analysis)
+        ),
     )
-    resolved = resolve_page_candidates(bound, stat_block_fields=fields)
-    accettati = {
-        outcome.candidate_reference.candidate_id
-        for outcome in resolved.outcomes
-        if outcome.outcome == "accepted"
-    }
+    schede = resolve_stat_blocks(
+        bound, resolve_page_candidates(bound, stat_block_fields=fields)
+    )
     gruppi: list[tuple[int, ...]] = []
-    for candidate in analysis.candidates:
-        if candidate.candidate_id not in accettati:
-            continue
-        suoi = set(candidate.primitive_ids)
+    for scheda in schede:
+        suoi = set(scheda.primitive_ids)
         indici = tuple(
             indice
             for indice, riga in enumerate(reading_lines)
@@ -1173,7 +1174,9 @@ def run(
                         )
                     )
                 stat_block_areas = tuple(aree_dai_campi)
-                blocks = [
+                # Con ``stat_block_fields`` il riquadro l'ha gia' visto la
+                # Resolution: sommarlo di nuovo qui lo conterebbe due volte.
+                blocks = [] if stat_block_fields is not None else [
                     block
                     for block in stat_block_regions(frames, visual_boxes, reading_lines)
                     if sum(
