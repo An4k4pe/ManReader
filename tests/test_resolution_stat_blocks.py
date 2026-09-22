@@ -181,33 +181,37 @@ class RiquadriTest(unittest.TestCase):
 
 
 class AltraColonnaTest(unittest.TestCase):
-    """`Criterio_RiquadriNelConsumer_v2.md`: il riquadro non si allunga
-    nell'altra colonna all'altezza della scheda."""
+    """`Criterio_RiquadriNelConsumer_v3.md`: il riquadro si allunga nell'altra
+    colonna se **dall'altra parte del corridoio c'e' suo testo**, non se ci passa
+    il suo bordo."""
 
     CORRIDOIO = (300.0, 80.0, 320.0, 400.0)  # x0, y0, x1, y1
 
-    def _prova(self, pezzo, scheda, corridoi=None):
+    def _prova(self, scheda, righe, corridoi=None):
         from resolution_stat_blocks import _reaches_the_other_column
 
-        return _reaches_the_other_column(pezzo, scheda, corridoi or [self.CORRIDOIO])
+        return _reaches_the_other_column(scheda, righe, corridoi or [self.CORRIDOIO])
 
     def test_il_pannello_del_grifone_si_allunga(self) -> None:
-        """La scheda a sinistra del corridoio, il pannello anche a destra."""
-        self.assertTrue(self._prova((54.0, 117.0, 550.0, 382.0), (79.0, 289.0, 281.0, 320.0)))
+        """La scheda a sinistra del corridoio, la tabella degli attacchi a destra."""
+        scheda = (79.0, 289.0, 281.0, 320.0)
+        tabella = [(344.0, 130.0, 540.0, 145.0), (344.0, 150.0, 540.0, 165.0)]
+        self.assertTrue(self._prova(scheda, [*tabella, scheda]))
 
-    def test_il_riquadro_in_una_colonna_non_si_allunga(self) -> None:
-        self.assertFalse(self._prova((71.0, 85.0, 290.0, 300.0), (83.0, 150.0, 250.0, 170.0)))
+    def test_il_bordo_che_passa_senza_testo_non_conta(self) -> None:
+        """Dag idx 214: il corridoio sta fra il bordo del riquadro e il suo testo."""
+        corridoio = (322.0, 100.0, 324.0, 690.0)
+        scheda = (331.0, 140.0, 500.0, 160.0)
+        righe = [scheda, (331.0, 170.0, 520.0, 185.0)]
+        self.assertFalse(self._prova(scheda, righe, [corridoio]))
 
     def test_un_corridoio_non_all_altezza_della_scheda_non_conta(self) -> None:
         """La sirena: il corridoio dei rientri sta sotto la riga di campi."""
         corridoio_basso = (329.0, 234.0, 330.0, 292.0)
-        self.assertFalse(
-            self._prova((319.0, 57.0, 555.0, 298.0), (331.0, 131.0, 507.0, 151.0), [corridoio_basso])
-        )
+        scheda = (331.0, 131.0, 507.0, 151.0)
+        self.assertFalse(self._prova(scheda, [scheda, (320.0, 240.0, 500.0, 255.0)], [corridoio_basso]))
 
     def test_un_corridoio_che_la_scheda_scavalca_non_conta(self) -> None:
-        """Una pseudo-colonna dentro la riga di campi stessa."""
         interno = (340.0, 100.0, 341.0, 200.0)
-        self.assertFalse(
-            self._prova((319.0, 57.0, 555.0, 540.0), (331.0, 140.0, 480.0, 160.0), [interno])
-        )
+        scheda = (331.0, 140.0, 480.0, 160.0)
+        self.assertFalse(self._prova(scheda, [scheda, (331.0, 170.0, 336.0, 185.0)], [interno]))

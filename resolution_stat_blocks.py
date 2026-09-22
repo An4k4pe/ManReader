@@ -110,16 +110,33 @@ def _lines_of(candidate: RegionCandidate, lines: Sequence[Sequence[TextPrimitive
 
 
 def _reaches_the_other_column(
-    pezzo: BBox, scheda: BBox, corridoi: Sequence[tuple[float, float, float, float]]
+    scheda: BBox,
+    righe_del_pezzo: Sequence[BBox],
+    corridoi: Sequence[tuple[float, float, float, float]],
 ) -> bool:
-    """All'altezza della scheda, il pezzo scavalca un corridoio che la scheda
-    non scavalca: si allunga nell'altra colonna."""
+    """All'altezza della scheda, il pezzo ha TESTO dall'altra parte di un
+    corridoio che la scheda non scavalca: si allunga nell'altra colonna.
+
+    **Conta il contenuto, non il bordo** (v3,
+    `Criterio_RiquadriNelConsumer_v3.md`). La v2 guardava dove passava il bordo
+    del riquadro, e su Dag idx 214 scartava tre schede vere: il corridoio
+    ammesso a x 322-324 e' lo spazio fra il bordo sinistro dei riquadri e il
+    testo dentro, quindi il bordo lo scavalca ma dall'altra parte non c'e'
+    niente. Il pannello del grifone di DB idx 92 dall'altra parte ha invece la
+    tabella degli attacchi."""
 
     for x0, y0, x1, y1 in corridoi:
-        all_altezza = scheda[1] < y1 and scheda[3] > y0
-        pezzo_scavalca = pezzo[0] < x0 and pezzo[2] > x1
-        scheda_scavalca = scheda[0] < x0 and scheda[2] > x1
-        if all_altezza and pezzo_scavalca and not scheda_scavalca:
+        if not (scheda[1] < y1 and scheda[3] > y0):
+            continue
+        if scheda[0] < x0 and scheda[2] > x1:
+            continue  # la scheda stessa lo scavalca: non separa niente
+        if scheda[2] <= x0:
+            altra_parte = [r for r in righe_del_pezzo if (r[0] + r[2]) / 2 >= x1]
+        elif scheda[0] >= x1:
+            altra_parte = [r for r in righe_del_pezzo if (r[0] + r[2]) / 2 <= x0]
+        else:
+            continue  # la scheda sta dentro il corridoio: non c'e' un'altra parte
+        if altra_parte:
             return True
     return False
 
@@ -168,12 +185,19 @@ def resolve_stat_blocks(
     delimitano: list[tuple[BBox, set[int], tuple[str, ...]]] = []
     for pezzo in pezzi:
         sue = dentro(pezzo)
+        righe_del_pezzo = [
+            riquadro
+            for i in sorted(sue)
+            if (riquadro := riquadri_righe[i]) is not None
+        ]
         contenute = tuple(
             c.candidate_id
             for c in accettate
             if righe_di[c.candidate_id]
             and righe_di[c.candidate_id] <= sue
-            and not _reaches_the_other_column(pezzo, bbox_di[c.candidate_id], corridoi)
+            and not _reaches_the_other_column(
+                bbox_di[c.candidate_id], righe_del_pezzo, corridoi
+            )
         )
         if contenute:
             delimitano.append((pezzo, sue, contenute))
