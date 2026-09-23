@@ -49,8 +49,29 @@ mai stato provato.
 **A. Niente cade.** I dodici render arrivano in fondo con uscita 0. Un errore
 non è un fallimento del criterio ma lo interrompe: va guardato prima di tutto.
 
-**B. Le tabelle possono solo perdere righe o sparire.** Una tabella che ne
-**guadagna** è un difetto d'implementazione, e ferma tutto.
+**B. ~~Le tabelle possono solo perdere righe o sparire.~~ EMENDATO il 23
+settembre 2026**, dopo il primo manuale e prima di giudicare qualunque pagina.
+
+La stesura diceva che una tabella che **guadagna** righe è un difetto
+d'implementazione e ferma tutto. È scritto nella moneta sbagliata, e cade su se
+stesso: **`--tabelle` da solo non è «senza schede»**. In
+`scripts/prototype_ir2_page.py:1203` il ramo `elif stat_block_document is None`
+esegue comunque la **vecchia strada dei riquadri** (`stat_block_regions`) e ne
+costruisce aree di scheda. Il riferimento toglie quindi righe alle tabelle per
+conto suo, e la resa con `--schede-producer`, che quella strada la spegne, può
+legittimamente restituirle.
+
+L'emendamento regge senza sapere se il meccanismo passa: è una proprietà del
+codice, letta nel sorgente, non un risultato. Su Wil si è vista per prima — 0
+combinazioni ammesse, quindi nessuna scheda, e 22 tabelle che riprendono righe —
+ma vale su tutti e sei.
+
+**B (emendato). Le tabelle possono cambiare nei due versi**, e ogni cambiamento
+si giudica sull'immagine al §3.C. Una tabella che cresce non è di per sé un
+difetto: può essere una tabella vera che riprende le righe che la vecchia strada
+le toglieva. Il difetto d'implementazione che B voleva sorvegliare — testo che
+si perde — è già sorvegliato dall'invariante di copertura di IR 2, che la
+pipeline verifica a ogni pagina.
 
 **C. Il giudizio, sull'immagine della pagina.** Ogni tabella che cambia si
 guarda: **meglio** se esce una riga che la pagina stampa **fuori** dalla
