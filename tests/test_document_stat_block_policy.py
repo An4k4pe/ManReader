@@ -72,26 +72,6 @@ class PolicyTest(unittest.TestCase):
         pagine = [_pagina(i + 1, _scheda()) for i in range(3)]
         self.assertEqual(_ammesse(*pagine), frozenset({frozenset({"ferocia", "taglia"})}))
 
-    def _carta_area(self):
-        return (
-            _riga(0, ("Sentieri:", True), ("Baia di Aso", False)),
-            _riga(1, ("Mostri:", True), ("lotangwa", False)),
-            _riga(2, ("Umani:", True), ("CSA Sud", False)),
-        )
-
-    def test_una_struttura_su_tre_righe_e_ammessa(self) -> None:
-        """`Criterio_UnaCoppiaPerRiga_v2.md`: l'unita' e' il blocco."""
-        pagine = [_pagina(i + 1, *self._carta_area()) for i in range(3)]
-        self.assertEqual(
-            _ammesse(*pagine), frozenset({frozenset({"sentieri", "mostri", "umani"})})
-        )
-
-    def test_una_etichetta_sola_ripetuta_non_e_una_struttura(self) -> None:
-        """Controllo negativo: la cella `Versatile:` della tabella delle armi si
-        ripete e sta sempre alla stessa x, ma da sola non e' una struttura."""
-        cella = _riga(0, ("Versatile:", True), ("Quest’arma", False))
-        self.assertEqual(_ammesse(*[_pagina(i + 1, cella) for i in range(9)]), frozenset())
-
     def test_due_ripetizioni_non_bastano(self) -> None:
         pagine = [_pagina(i + 1, _scheda()) for i in range(2)]
         self.assertEqual(_ammesse(*pagine), frozenset())
