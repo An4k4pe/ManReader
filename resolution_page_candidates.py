@@ -22,7 +22,6 @@ parametro e' facoltativo apposta.
 
 from __future__ import annotations
 
-from document_stat_block_measurements import declared_labels
 from document_stat_block_policy import StatBlockFields
 from page_analysis_co_reference_binding import BoundCoReferencedPageAnalyses
 from page_analysis_co_reference_candidate_primitive_set_measurements import (
@@ -33,7 +32,7 @@ from page_analysis_co_reference_candidate_reference import (
     build_co_referenced_page_candidate_reference,
 )
 from page_analysis_model import PageAnalysis, RegionCandidate
-from page_analysis_stat_block import source_lines_of_page
+from page_analysis_stat_block import declared_labels, source_lines_of_page
 from resolution_model import ResolvedCandidateOutcome, ResolvedPageCandidates
 
 _INTERIOR_VISUAL_FRAME_PRODUCER_NAME = "page_analysis.interior_visual_frame"
@@ -46,19 +45,20 @@ def _carries_an_admitted_combination(
     candidate: RegionCandidate,
     fields: StatBlockFields,
 ) -> bool:
-    """Una riga del candidato porta una combinazione che il documento ripete.
+    """Il candidato porta una combinazione che il documento ripete.
 
-    Basta **una** riga: una scheda dichiara i suoi campi su una riga sola — e
-    quella riga e' cio' che la policy sa riconoscere — mentre le altre righe del
-    blocco portano il nome di un tratto o la prosa descrittiva."""
+    Le etichette si contano su **tutto il blocco**, non su una riga
+    (`Criterio_UnaCoppiaPerRiga_v2.md`): la cosa che si ripete in una scheda e'
+    la struttura, e un manuale puo' scriverne i campi uno per riga — `Sentieri:`,
+    `Mostri:`, `Umani:` sulle carte di Wilder. Una cella di tabella come
+    `Versatile: …` resta fuori perche' da sola non e' una struttura."""
 
     suoi = set(candidate.primitive_ids)
+    etichette: set[str] = set()
     for riga in source_lines_of_page(bound.primitive_page):
-        if not any(primitive.primitive_id in suoi for primitive in riga):
-            continue
-        if fields.carried_by(frozenset(declared_labels(riga))):
-            return True
-    return False
+        if any(primitive.primitive_id in suoi for primitive in riga):
+            etichette.update(declared_labels(riga))
+    return bool(etichette) and fields.carried_by(frozenset(etichette))
 
 
 def resolve_page_candidates(

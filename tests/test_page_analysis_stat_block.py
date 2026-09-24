@@ -110,6 +110,22 @@ class ProducerTest(unittest.TestCase):
         riga = _riga(0, ("Meteo Costiero.", True), ("Ogni volta che il branco", False))
         self.assertEqual(self._candidati(riga), ())
 
+    def test_tre_righe_da_un_campo_fanno_una_scheda(self) -> None:
+        """Le carte AREA di Wilder: `Sentieri:`, `Mostri:`, `Umani:`, una per
+        riga. `Criterio_UnaCoppiaPerRiga_v2.md`."""
+        righe = [
+            _riga(0, ("Sentieri:", True), ("Baia di Aso, Isola Culla", False)),
+            _riga(1, ("Mostri:", True), ("lotangwa, shulu xie", False)),
+            _riga(2, ("Umani:", True), ("CSA Sud, Villaggio di Da-o", False)),
+        ]
+        self.assertEqual(len(self._candidati(*righe)), 1)
+
+    def test_una_cella_con_un_campo_solo_non_e_una_struttura(self) -> None:
+        """La colonna CARATTERISTICA delle tabelle delle armi di Daggerheart:
+        `Versatile: Quest'arma…` e' un blocco di una etichetta sola."""
+        riga = _riga(0, ("Versatile:", True), ("Quest’arma puo' essere usata", False))
+        self.assertEqual(self._candidati(riga), ())
+
     def test_la_prosa_non_propone_niente(self) -> None:
         prosa = _riga(0, ("Una frase intera senza nessun campo dentro.", False))
         altra = _riga(1, ("E una seconda frase, sempre senza campi.", False))

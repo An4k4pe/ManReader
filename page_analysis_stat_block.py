@@ -5,8 +5,7 @@
 `Difficolta': 14 | Soglie: 9/18 | PF: 5 | Stress: 3`. La regola e' quella che il
 modulo delle schede si e' dato per primo e che `State.md:903` scrive alla lettera
 («campi etichetta:valore da preservare»): **almeno due coppie etichetta/valore
-su una riga**. Quante righe servano non lo decide il producer — vedi
-`_MINIMO_RIGHE_PER_SCHEDA`.
+in un blocco di righe**, una per riga se e' cosi' che il manuale le scrive.
 
 **Perche' il producer non puo' fare di piu'.** Un producer riceve una pagina e
 basta: non vede le altre pagine e non vede i candidati degli altri producer. Le
@@ -45,13 +44,22 @@ from page_analysis_model import (
 )
 from page_analysis_validate import validate_page_analysis_against_primitive_page
 from primitive_model import NormalizedPrimitivePage, TextPrimitive
-from stat_block_regions import field_labels
+from stat_block_regions import field_labels, normalised_label
 
 _OBSERVATION_ID_PATTERN = re.compile(r"^text:b(\d+):l(\d+):s(\d+)$")
 
-# Le coppie per riga sono la regola 2 del modulo delle schede, non una taratura:
-# «almeno due righe con almeno due coppie etichetta/valore».
-_MINIMO_COPPIE_PER_RIGA = 2
+# **Una coppia dichiarata basta a fare una riga di campi**, ma il blocco deve
+# dichiarare almeno due etichette DISTINTE: `Criterio_UnaCoppiaPerRiga_v2.md`,
+# indicazione dell'utente — «una scheda e' fatta da una struttura che ripete, e
+# nella tabella armi questo non c'e'».
+#
+# «Almeno due coppie» non sparisce: si sposta dalla riga al blocco. E' la
+# differenza fra `Sentieri:` / `Mostri:` / `Umani:` — tre righe, un campo
+# ciascuna, una struttura — e `Versatile:` dentro una cella della tabella delle
+# armi, che e' un blocco di uno. Misurato: la regola vecchia scartava tutte e tre
+# le righe di Wilder, e 1.349 righe su sei manuali mai toccati ne dichiarano una.
+_MINIMO_COPPIE_PER_RIGA = 1
+MINIMO_ETICHETTE_PER_BLOCCO = 2
 
 # **Una riga sola basta**, `Criterio_SchedaDaUnaRigaSola_v1.md`. Il minimo di due
 # righe era una seconda guardia nel posto sbagliato: chiedeva al producer di
@@ -92,6 +100,23 @@ def source_lines_of_page(page: NormalizedPrimitivePage) -> list[list[TextPrimiti
     ]
 
 
+def declared_labels(line: Sequence[TextPrimitive]) -> tuple[str, ...]:
+    """Le etichette della riga che si dichiarano tali, normalizzate.
+
+    Sta qui, nel livello piu' basso, perche' la serve anche la misura di
+    documento: `page_analysis_stat_block` non puo' importare da chi lo importa."""
+
+    return tuple(
+        etichetta
+        for etichetta in (
+            normalised_label(span.text)
+            for span in field_labels(line)
+            if span.text.strip().endswith(":")
+        )
+        if etichetta
+    )
+
+
 def declared_field_pairs(line: Sequence[TextPrimitive]) -> int:
     """Quante coppie etichetta/valore la riga dichiara con i due punti."""
 
@@ -110,6 +135,18 @@ def _bbox_of(righe: Sequence[Sequence[TextPrimitive]]) -> BBox | None:
     )
 
 
+def blocks_of_field_lines(
+    righe: Sequence[Sequence[TextPrimitive]],
+) -> list[list[Sequence[TextPrimitive]]]:
+    """I blocchi di righe di campi della pagina: **l'unita' che si ripete**.
+
+    Un blocco e' una corsa di righe consecutive che dichiarano almeno un campo,
+    e deve dichiarare almeno due etichette distinte in tutto. La serve anche la
+    misura di documento, che conta le strutture che il documento ripete."""
+
+    return [[righe[i] for i in gruppo] for gruppo in _groups_of_field_lines(righe)]
+
+
 def _groups_of_field_lines(righe: Sequence[Sequence[TextPrimitive]]) -> list[list[int]]:
     con_campi = [
         indice
@@ -122,7 +159,13 @@ def _groups_of_field_lines(righe: Sequence[Sequence[TextPrimitive]]) -> list[lis
             gruppi[-1].append(indice)
         else:
             gruppi.append([indice])
-    return [g for g in gruppi if len(g) >= _MINIMO_RIGHE_PER_SCHEDA]
+    return [
+        g
+        for g in gruppi
+        if len(g) >= _MINIMO_RIGHE_PER_SCHEDA
+        and len({e for i in g for e in declared_labels(righe[i])})
+        >= MINIMO_ETICHETTE_PER_BLOCCO
+    ]
 
 
 def build_stat_block_page_analysis(
