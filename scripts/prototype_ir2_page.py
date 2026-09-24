@@ -1176,7 +1176,16 @@ def run(
                 stat_block_areas = tuple(aree_dai_campi)
                 # Con ``stat_block_fields`` il riquadro l'ha gia' visto la
                 # Resolution: sommarlo di nuovo qui lo conterebbe due volte.
-                blocks = [] if stat_block_fields is not None else [
+                #
+                # Ma solo se la policy ha qualcosa da dire
+                # (`Criterio_PolicyMutaNonSpegne_v1.md`): su un manuale dove non
+                # ammette nessuna combinazione la Resolution non produce schede,
+                # e spegnere anche la strada vecchia lascia il riconoscimento
+                # senza nessuno. Su Wil costava 22 tabelle: i `TRATTI` delle
+                # carte AREA finivano dentro la tabella degli ingredienti.
+                blocks = [] if (
+                    stat_block_fields is not None and stat_block_fields.combinations
+                ) else [
                     block
                     for block in stat_block_regions(frames, visual_boxes, reading_lines)
                     if sum(
