@@ -103,6 +103,13 @@ class ProducerTest(unittest.TestCase):
         riga = _riga(0, ("Movimento:", True), ("24", False))
         self.assertEqual(self._candidati(riga), ())
 
+    def test_una_parola_in_grassetto_senza_due_punti_non_basta(self) -> None:
+        """I `TRATTI` delle carte AREA di Wilder — `Meteo Costiero.` — finiscono
+        con il punto, non con i due punti, e non sono campi. Visto misurando
+        `Criterio_UnaCoppiaPerRiga_v1.md`."""
+        riga = _riga(0, ("Meteo Costiero.", True), ("Ogni volta che il branco", False))
+        self.assertEqual(self._candidati(riga), ())
+
     def test_la_prosa_non_propone_niente(self) -> None:
         prosa = _riga(0, ("Una frase intera senza nessun campo dentro.", False))
         altra = _riga(1, ("E una seconda frase, sempre senza campi.", False))
