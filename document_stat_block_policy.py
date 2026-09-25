@@ -22,6 +22,7 @@ confrontarle non dice niente.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 
@@ -88,6 +89,25 @@ def stat_block_nuclei(counts: Mapping[str, Mapping[int, int]]) -> StatBlockField
     return StatBlockFields(
         combinations=frozenset(),
         nuclei=tuple(
-            nucleo for nucleo in bound_label_groups_from_counts(counts) if len(nucleo) >= 2
+            nucleo
+            for nucleo in bound_label_groups_from_counts(counts)
+            if len(nucleo) >= 2 and not is_a_scale(nucleo)
         ),
     )
+
+
+_NUMERO_E_SEGNI = re.compile(r"[\d+\-/()#]")
+
+
+def is_a_scale(nucleo: frozenset[str]) -> bool:
+    """Il nucleo e' una **scala**: la stessa parola con un numero che cambia.
+
+    `Criterio_NucleoCheSiContaInsieme_v2.md`. I campi di una scheda sono nomi
+    diversi — `Ferocia`, `Taglia`, `Movimento`. `Rango 1:` … `Rango 4:` sono un
+    campo solo, ripetuto con un grado che sale: su Dag idx 324 stanno impilati in
+    una cella della colonna DANNO di una tabella di armi, e la v1 li prendeva per
+    scheda. Lo stesso per i marcatori numerati `#1:` `#2:` `#3:` di Wilder.
+
+    Tolti cifre e segni, le etichette di una scala si riducono a una sola radice."""
+
+    return len({_NUMERO_E_SEGNI.sub("", etichetta) for etichetta in nucleo}) <= 1
