@@ -461,7 +461,15 @@ def main() -> int:
         "--finestra", type=int, default=20,
         help="pagine su cui misurare i fatti d'arredo e tipografia (default 20).",
     )
-    parser.add_argument("--tabelle", action="store_true")
+    # Accese di default dal 25 settembre 2026, indicazione dell'utente: «tabelle
+    # deve stare acceso». Con le tabelle accese le schede servono a toglier loro
+    # le righe che non sono loro, quindi si accendono insieme; lo stato misurato
+    # e' `Esito_NucleoCheSiContaInsieme_v2.md`. `--no-tabelle` e
+    # `--no-schede-producer` le spengono.
+    parser.add_argument(
+        "--tabelle", action=argparse.BooleanOptionalAction, default=True,
+        help="riconosce le tabelle (default: acceso).",
+    )
     parser.add_argument(
         "--schede-regola", choices=("righe", "riquadro"), default="righe",
         help="che cosa fa una scheda a una tabella: «righe» le toglie le righe "
@@ -479,13 +487,13 @@ def main() -> int:
              "combinazione che il documento ripete. Una passata in piu'.",
     )
     parser.add_argument(
-        "--schede-producer", action="store_true",
+        "--schede-producer", action=argparse.BooleanOptionalAction, default=True,
         help="le schede passano dalla strada dell'architettura: il producer "
              "`page_analysis.stat_block` le propone e il consumer le decide "
              "contro la policy del documento. Niente prima passata.",
     )
     parser.add_argument(
-        "--schede-rete", choices=("muta", "sempre"), default="muta",
+        "--schede-rete", choices=("muta", "sempre"), default="sempre",
         help="con --schede-producer: la vecchia strada dei riquadri si accende "
              "solo se la policy non ha nuclei («muta»), o resta accesa accanto "
              "ai nuclei («sempre»).",
