@@ -412,6 +412,18 @@ def _bound_label_groups(pages: Mapping[int, Sequence[LineFacts]]) -> list[frozen
             for label in facts.labels:
                 per_page = counts.setdefault(label, {})
                 per_page[index] = per_page.get(index, 0) + 1
+    return bound_label_groups_from_counts(counts)
+
+
+def bound_label_groups_from_counts(
+    counts: Mapping[str, Mapping[int, int]],
+) -> list[frozenset[str]]:
+    """Le etichette che si contano insieme, a partire dai conteggi per pagina.
+
+    La regola di `_bound_label_groups`, separata da come si contano le etichette:
+    la usa anche la policy delle schede, che conta solo quelle **dichiarate** con
+    i due punti (`Criterio_NucleoCheSiContaInsieme_v1.md`)."""
+
     labels = [label for label, per_page in counts.items() if len(per_page) >= 3]
     near: dict[str, set[str]] = {label: set() for label in labels}
     for position, first in enumerate(labels):

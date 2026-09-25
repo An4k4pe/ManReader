@@ -90,8 +90,8 @@ from document_heading_band_measurements import measure_size_mass  # noqa: E402
 from document_heading_band_policy import HeadingBands, heading_bands  # noqa: E402
 from document_heading_measurements import measure_font_sizes  # noqa: E402
 from document_heading_policy import prose_sizes  # noqa: E402
-from document_stat_block_measurements import measure_field_combinations  # noqa: E402
-from document_stat_block_policy import StatBlockFields, stat_block_fields  # noqa: E402
+from document_stat_block_measurements import measure_declared_label_counts  # noqa: E402
+from document_stat_block_policy import StatBlockFields, stat_block_nuclei  # noqa: E402
 from ir2_markdown import render_page_markdown  # noqa: E402
 from ir2_model import DocumentIR2, IR2Provenance  # noqa: E402
 from ir2_serialization import document_ir2_from_dict, document_ir2_to_dict  # noqa: E402
@@ -131,6 +131,7 @@ class _Lavoro:
     strutture_schede: tuple[RepeatedStructure, ...] | None = None
     combinazioni_schede: frozenset[frozenset[str]] | None = None
     campi_schede: StatBlockFields | None = None
+    rete_schede: str = "muta"
     opened: OpenedSource | None = None
 
 
@@ -180,6 +181,7 @@ def _rendi_pagina(page_index: int) -> tuple[int, object, str | None]:
             stat_block_document=_LAVORO.strutture_schede,
             stat_block_combinations=_LAVORO.combinazioni_schede,
             stat_block_fields=_LAVORO.campi_schede,
+            stat_block_net=_LAVORO.rete_schede,
             stat_block_rule=_LAVORO.regola_schede,
             stat_block_end=_LAVORO.fine_schede,
         ), None
@@ -483,6 +485,12 @@ def main() -> int:
              "contro la policy del documento. Niente prima passata.",
     )
     parser.add_argument(
+        "--schede-rete", choices=("muta", "sempre"), default="muta",
+        help="con --schede-producer: la vecchia strada dei riquadri si accende "
+             "solo se la policy non ha nuclei («muta»), o resta accesa accanto "
+             "ai nuclei («sempre»).",
+    )
+    parser.add_argument(
         "--schede-struttura", action="store_true",
         help="IN PROVA: le schede si riconoscono dalla struttura ricorrente del "
              "documento invece che dai riquadri disegnati. Una passata in piu'.",
@@ -571,13 +579,12 @@ def main() -> int:
             # Fatto di DOCUMENTO, nella forma di `heading_bands`: si misura una
             # volta sulle pagine gia' catturate e scende nelle pagine. Non
             # costa una passata in piu' -- le pagine sono gia' in mano.
-            campi_schede = stat_block_fields(measure_field_combinations(ordinate))
-            print(
-                f"schede: {len(campi_schede.combinations)} combinazioni di campi",
-                flush=True,
-            )
-            for combinazione in sorted(campi_schede.combinations, key=sorted):
-                print(f"    {sorted(combinazione)}", flush=True)
+            # I nuclei di etichette dichiarate che il documento conta insieme
+            # (`Criterio_NucleoCheSiContaInsieme_v1.md`).
+            campi_schede = stat_block_nuclei(measure_declared_label_counts(ordinate))
+            print(f"schede: {len(campi_schede.nuclei)} nuclei di campi", flush=True)
+            for nucleo in sorted(campi_schede.nuclei, key=lambda n: (-len(n), sorted(n))):
+                print(f"    {sorted(nucleo)}", flush=True)
         if fasce.ceiling is None:
             print("titoli: nessuna prosa misurata, il meccanismo tace", flush=True)
         else:
@@ -602,6 +609,7 @@ def main() -> int:
             regola_schede=arguments.schede_regola,
             fine_schede=arguments.schede_fine,
             campi_schede=campi_schede,
+            rete_schede=arguments.schede_rete,
             bands=fasce,
         )
         # --- Cio' che una corsa precedente ha gia' prodotto ---

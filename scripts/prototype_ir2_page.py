@@ -883,6 +883,7 @@ def run(
     stat_block_end: str = "modulo",
     stat_block_combinations: frozenset[frozenset[str]] | None = None,
     stat_block_fields: StatBlockFields | None = None,
+    stat_block_net: str = "muta",
 ) -> BuiltPage | None:
     """Costruisce e scrive una pagina; restituisce cio' che ha costruito.
 
@@ -1183,8 +1184,17 @@ def run(
                 # e spegnere anche la strada vecchia lascia il riconoscimento
                 # senza nessuno. Su Wil costava 22 tabelle: i `TRATTI` delle
                 # carte AREA finivano dentro la tabella degli ingredienti.
+                #
+                # Con ``stat_block_net == "sempre"`` la strada vecchia resta
+                # accesa ACCANTO ai nuclei, e le aree si sommano
+                # (`Criterio_NucleoCheSiContaInsieme_v1.md` §3): su Wilder il
+                # fondo delle carte AREA e' raster, la Resolution non puo'
+                # allargarle, e senza la strada vecchia i `TRATTI` rientrano
+                # nella tabella degli ingredienti.
                 blocks = [] if (
-                    stat_block_fields is not None and stat_block_fields.combinations
+                    stat_block_fields is not None
+                    and stat_block_fields.speaks
+                    and stat_block_net != "sempre"
                 ) else [
                     block
                     for block in stat_block_regions(frames, visual_boxes, reading_lines)

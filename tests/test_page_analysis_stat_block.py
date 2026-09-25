@@ -97,11 +97,21 @@ class ProducerTest(unittest.TestCase):
         dichiarano `Soglie: … | Stress: …` su una riga che sta da sola."""
         self.assertEqual(len(self._candidati(_campi(0))), 1)
 
-    def test_una_riga_con_una_coppia_sola_non_basta(self) -> None:
-        """Controllo negativo: cambia quante RIGHE servono, non quante coppie.
-        «Una coppia per riga» resta rifiutata."""
+    def test_un_blocco_con_una_etichetta_sola_non_basta(self) -> None:
+        """Controllo negativo: una coppia per riga basta, ma il BLOCCO deve
+        dichiarare due etichette distinte. `Movimento:` da solo — come la cella
+        `Versatile:` della tabella delle armi — non e' una struttura."""
         riga = _riga(0, ("Movimento:", True), ("24", False))
         self.assertEqual(self._candidati(riga), ())
+
+    def test_tre_righe_da_un_campo_fanno_una_scheda(self) -> None:
+        """Le carte AREA di Wilder: `Sentieri:`, `Mostri:`, `Umani:`, una per riga."""
+        righe = [
+            _riga(0, ("Sentieri:", True), ("Baia di Aso, Isola Culla", False)),
+            _riga(1, ("Mostri:", True), ("lotangwa, shulu xie", False)),
+            _riga(2, ("Umani:", True), ("CSA Sud, Villaggio di Da-o", False)),
+        ]
+        self.assertEqual(len(self._candidati(*righe)), 1)
 
     def test_una_parola_in_grassetto_senza_due_punti_non_basta(self) -> None:
         """I `TRATTI` delle carte AREA di Wilder — `Meteo Costiero.` — finiscono

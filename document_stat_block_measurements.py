@@ -22,10 +22,10 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-from page_analysis_stat_block import source_lines_of_page
-from primitive_model import NormalizedPrimitivePage, TextPrimitive
+from page_analysis_stat_block import declared_labels, source_lines_of_page
+from primitive_model import NormalizedPrimitivePage
 from stat_block_field_lines import position_profile
-from stat_block_regions import field_labels, line_facts, normalised_label
+from stat_block_regions import line_facts
 
 Profilo = tuple[tuple[str, int], ...]
 
@@ -41,20 +41,6 @@ class FieldCombinationMeasurements:
 
     occurrences: Mapping[frozenset[str], int]
     profiles: Mapping[frozenset[str], Mapping[Profilo, int]]
-
-
-def declared_labels(line: Sequence[TextPrimitive]) -> tuple[str, ...]:
-    """Le etichette della riga che si dichiarano tali, normalizzate."""
-
-    return tuple(
-        etichetta
-        for etichetta in (
-            normalised_label(span.text)
-            for span in field_labels(line)
-            if span.text.strip().endswith(":")
-        )
-        if etichetta
-    )
 
 
 def measure_field_combinations(
@@ -75,3 +61,21 @@ def measure_field_combinations(
                 position_profile(fatti, etichette)
             ] += 1
     return FieldCombinationMeasurements(occurrences=dict(quante), profiles=dict(profili))
+
+
+def measure_declared_label_counts(
+    pages: Sequence[NormalizedPrimitivePage],
+) -> dict[str, dict[int, int]]:
+    """Quante volte ogni etichetta **dichiarata** compare su ogni pagina.
+
+    La materia prima dei nuclei (`Criterio_NucleoCheSiContaInsieme_v1.md`): due
+    etichette che si contano insieme compaiono insieme su piu' pagine e, pagina
+    per pagina, con lo stesso numero di occorrenze."""
+
+    conteggi: dict[str, dict[int, int]] = {}
+    for indice, page in enumerate(pages):
+        for riga in source_lines_of_page(page):
+            for etichetta in declared_labels(riga):
+                per_pagina = conteggi.setdefault(etichetta, {})
+                per_pagina[indice] = per_pagina.get(indice, 0) + 1
+    return conteggi

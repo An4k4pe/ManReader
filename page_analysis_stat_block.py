@@ -5,8 +5,7 @@
 `Difficolta': 14 | Soglie: 9/18 | PF: 5 | Stress: 3`. La regola e' quella che il
 modulo delle schede si e' dato per primo e che `State.md:903` scrive alla lettera
 («campi etichetta:valore da preservare»): **almeno due coppie etichetta/valore
-su una riga**. Quante righe servano non lo decide il producer — vedi
-`_MINIMO_RIGHE_PER_SCHEDA`.
+in un blocco di righe**, una per riga se e' cosi' che il manuale le scrive.
 
 **Perche' il producer non puo' fare di piu'.** Un producer riceve una pagina e
 basta: non vede le altre pagine e non vede i candidati degli altri producer. Le
@@ -45,13 +44,19 @@ from page_analysis_model import (
 )
 from page_analysis_validate import validate_page_analysis_against_primitive_page
 from primitive_model import NormalizedPrimitivePage, TextPrimitive
-from stat_block_regions import field_labels
+from stat_block_regions import field_labels, normalised_label
 
 _OBSERVATION_ID_PATTERN = re.compile(r"^text:b(\d+):l(\d+):s(\d+)$")
 
-# Le coppie per riga sono la regola 2 del modulo delle schede, non una taratura:
-# «almeno due righe con almeno due coppie etichetta/valore».
-_MINIMO_COPPIE_PER_RIGA = 2
+# **Una coppia dichiarata basta a fare una riga di campi**, e il blocco deve
+# dichiararne almeno due DISTINTE: `Criterio_NucleoCheSiContaInsieme_v1.md`.
+# «Almeno due coppie su una riga» descriveva l'impaginato di Dragonbane e
+# Daggerheart: su sei manuali mai toccati 1.349 righe dichiarano un campo e 19 ne
+# dichiarano due, e le schede di Wilder scrivono `Sentieri:`, `Mostri:`,
+# `Umani:` una per riga. A decidere che il blocco e' una scheda e' il consumer,
+# con i nuclei di etichette che il documento conta insieme.
+_MINIMO_COPPIE_PER_RIGA = 1
+MINIMO_ETICHETTE_PER_BLOCCO = 2
 
 # **Una riga sola basta**, `Criterio_SchedaDaUnaRigaSola_v1.md`. Il minimo di due
 # righe era una seconda guardia nel posto sbagliato: chiedeva al producer di
@@ -92,6 +97,23 @@ def source_lines_of_page(page: NormalizedPrimitivePage) -> list[list[TextPrimiti
     ]
 
 
+def declared_labels(line: Sequence[TextPrimitive]) -> tuple[str, ...]:
+    """Le etichette della riga che si dichiarano tali, normalizzate.
+
+    Sta qui, nel livello piu' basso: la servono il producer, la misura di
+    documento e il consumer."""
+
+    return tuple(
+        etichetta
+        for etichetta in (
+            normalised_label(span.text)
+            for span in field_labels(line)
+            if span.text.strip().endswith(":")
+        )
+        if etichetta
+    )
+
+
 def declared_field_pairs(line: Sequence[TextPrimitive]) -> int:
     """Quante coppie etichetta/valore la riga dichiara con i due punti."""
 
@@ -122,7 +144,13 @@ def _groups_of_field_lines(righe: Sequence[Sequence[TextPrimitive]]) -> list[lis
             gruppi[-1].append(indice)
         else:
             gruppi.append([indice])
-    return [g for g in gruppi if len(g) >= _MINIMO_RIGHE_PER_SCHEDA]
+    return [
+        g
+        for g in gruppi
+        if len(g) >= _MINIMO_RIGHE_PER_SCHEDA
+        and len({e for i in g for e in declared_labels(righe[i])})
+        >= MINIMO_ETICHETTE_PER_BLOCCO
+    ]
 
 
 def build_stat_block_page_analysis(

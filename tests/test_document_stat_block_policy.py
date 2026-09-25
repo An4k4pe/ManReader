@@ -10,9 +10,10 @@ import unittest
 
 from document_stat_block_measurements import (
     declared_labels,
+    measure_declared_label_counts,
     measure_field_combinations,
 )
-from document_stat_block_policy import stat_block_fields
+from document_stat_block_policy import StatBlockFields, stat_block_fields, stat_block_nuclei
 from primitive_model import NormalizedPrimitivePage, PageGeometry, TextPrimitive
 
 
@@ -94,3 +95,44 @@ class PolicyTest(unittest.TestCase):
     def test_un_documento_senza_schede_non_ammette_niente(self) -> None:
         prosa = _riga(0, ("Una frase di prosa, senza campi dentro.", False))
         self.assertEqual(_ammesse(*[_pagina(i + 1, prosa) for i in range(5)]), frozenset())
+
+
+
+class NucleiTest(unittest.TestCase):
+    """`Criterio_NucleoCheSiContaInsieme_v1.md`: la scheda e' un nucleo di
+    etichette dichiarate che il documento conta insieme."""
+
+    def _nuclei(self, *pagine):
+        return stat_block_nuclei(measure_declared_label_counts(pagine)).nuclei
+
+    def _carta(self, numero):
+        return _pagina(
+            numero,
+            _riga(0, ("Sentieri:", True), ("Baia di Aso", False)),
+            _riga(1, ("Mostri:", True), ("lotangwa", False)),
+            _riga(2, ("Umani:", True), ("CSA Sud", False)),
+        )
+
+    def test_etichette_contate_insieme_fanno_un_nucleo(self) -> None:
+        nuclei = self._nuclei(*[self._carta(i + 1) for i in range(3)])
+        self.assertEqual(nuclei, (frozenset({"sentieri", "mostri", "umani"}),))
+
+    def test_un_etichetta_sola_non_fa_un_nucleo(self) -> None:
+        """Controllo negativo: la cella `Versatile:` si ripete, ma da sola."""
+        cella = _riga(0, ("Versatile:", True), ("Quest’arma", False))
+        self.assertEqual(self._nuclei(*[_pagina(i + 1, cella) for i in range(9)]), ())
+
+    def test_il_nome_d_arma_che_cambia_non_rompe_la_scheda(self) -> None:
+        """La sirena: il blocco porta `mascella disarticolata`, che cambia a ogni
+        creatura, ma porta due etichette del nucleo."""
+        fields = StatBlockFields(frozenset(), (frozenset({"difficolta", "soglie", "pf", "att"}),))
+        blocco = frozenset({"difficolta", "soglie", "att", "mascelladisarticolata"})
+        self.assertTrue(fields.carried_by(blocco))
+
+    def test_un_etichetta_sola_del_nucleo_non_basta(self) -> None:
+        """Controllo negativo: una cella con un tratto del nucleo delle armi."""
+        fields = StatBlockFields(frozenset(), (frozenset({"versatile", "potente", "pesante"}),))
+        self.assertFalse(fields.carried_by(frozenset({"versatile"})))
+
+    def test_senza_nuclei_la_policy_tace(self) -> None:
+        self.assertFalse(StatBlockFields(frozenset()).speaks)
