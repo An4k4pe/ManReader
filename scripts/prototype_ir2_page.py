@@ -809,6 +809,14 @@ def _record_start_ids(
     )
 
 
+# La regola che respinge le tabelle fantasma con la strategia a filetti
+# (`Criterio_TabellaAFiletti_v1.md`) e' SPENTA: toglieva le fantasma, ma anche le
+# tabelle vere segnate solo in orizzontale — le definizioni di DIE, gli
+# ingredienti di Wilder — e il veto e' scattato (`Esito_TabellaAFiletti_v1.md`).
+# Resta come interruttore, non come codice cancellato.
+TABELLE_A_FILETTI = False
+
+
 def resolved_stat_block_groups(
     chain: ReadingChain,
     reading_lines: Sequence[Sequence[TextPrimitive]],
@@ -917,10 +925,13 @@ def run(
         band_measures = chain.band_measures
         ordered_primitives = chain.ordered_primitives
 
-        # A tabelle accese entra anche l'analisi a filetti, e con lei la regola
-        # che respinge le tabelle fantasma (`Criterio_TabellaAFiletti_v1.md`).
+        # L'analisi a filetti e la regola che respinge le tabelle fantasma
+        # (`Criterio_TabellaAFiletti_v1.md`) sono RITIRATE: il veto e' scattato
+        # sulle tabelle segnate solo in orizzontale — le definizioni di DIE, gli
+        # ingredienti di Wilder — che la strategia a filetti non vede
+        # (`Esito_TabellaAFiletti_v1.md`). Producer e regola restano in albero.
         analyses_risolte = analyses
-        if enable_tables:
+        if enable_tables and TABELLE_A_FILETTI:
             analyses_risolte = (
                 *analyses,
                 build_ruled_table_page_analysis(
