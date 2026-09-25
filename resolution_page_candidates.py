@@ -38,6 +38,18 @@ from resolution_model import ResolvedCandidateOutcome, ResolvedPageCandidates
 _INTERIOR_VISUAL_FRAME_PRODUCER_NAME = "page_analysis.interior_visual_frame"
 _EMBEDDED_VISUAL_PRODUCER_NAME = "page_analysis.embedded_visual"
 _STAT_BLOCK_PRODUCER_NAME = "page_analysis.stat_block"
+_TABLE_CANDIDATE_PRODUCER_NAME = "table_candidate"
+_RULED_TABLE_PRODUCER_NAME = "page_analysis.ruled_table"
+
+
+def _holds_a_ruled_grid(candidate: RegionCandidate, grids: list[RegionCandidate]) -> bool:
+    """La regione contiene il centro di almeno una griglia a filetti."""
+
+    x0, y0, x1, y1 = candidate.bbox
+    return any(
+        x0 <= (g.bbox[0] + g.bbox[2]) / 2 < x1 and y0 <= (g.bbox[1] + g.bbox[3]) / 2 < y1
+        for g in grids
+    )
 
 
 def _carries_an_admitted_combination(
@@ -119,6 +131,26 @@ def resolve_page_candidates(
                 superseded_references.append(embedded_visual_reference)
                 break
 
+    # La terza regola (`Criterio_TabellaAFiletti_v1.md`): una regione di
+    # `table_candidate` e' una tabella se contiene una griglia che i filetti
+    # risolvono. Tace se l'analisi a filetti non c'e'.
+    rejected_table_references: list[CoReferencedPageCandidateReference] = []
+    ha_filetti = any(
+        a.provenance.producer_name == _RULED_TABLE_PRODUCER_NAME
+        for a in bound.co_referenced_page_analyses.analyses
+    )
+    if ha_filetti:
+        griglie = [
+            c for a, c, _r in entries if a.provenance.producer_name == _RULED_TABLE_PRODUCER_NAME
+        ]
+        for analysis, candidate, reference in entries:
+            if analysis.provenance.producer_name != _TABLE_CANDIDATE_PRODUCER_NAME:
+                continue
+            if _holds_a_ruled_grid(candidate, griglie):
+                accepted_references.append(reference)
+            else:
+                rejected_table_references.append(reference)
+
     rejected_stat_block_references: list[CoReferencedPageCandidateReference] = []
     if stat_block_fields is not None:
         for analysis, candidate, reference in entries:
@@ -131,7 +163,15 @@ def resolve_page_candidates(
 
     outcomes: list[ResolvedCandidateOutcome] = []
     for _, _, reference in entries:
-        if reference in rejected_stat_block_references:
+        if reference in rejected_table_references:
+            outcomes.append(
+                ResolvedCandidateOutcome(
+                    candidate_reference=reference,
+                    outcome="rejected",
+                    reason_token="not_resolved_by_rules",
+                )
+            )
+        elif reference in rejected_stat_block_references:
             outcomes.append(
                 ResolvedCandidateOutcome(
                     candidate_reference=reference,

@@ -18,6 +18,7 @@ from page_analysis_interior_visual_frame import build_interior_visual_frame_page
 from page_analysis_model import PageAnalysis
 from page_analysis_page_covering_visual import build_page_covering_visual_page_analysis
 from page_analysis_page_edge_visual import build_page_edge_visual_page_analysis
+from page_analysis_ruled_table import build_ruled_table_page_analysis
 from page_analysis_stat_block import build_stat_block_page_analysis
 from page_analysis_table_candidate import build_table_candidate_page_analysis
 from page_analysis_table_candidate_binding import BoundTableCandidatePage
@@ -79,6 +80,14 @@ _PRODUCER_SPECS: dict[str, _ProducerSpec] = {
         producer_version="0.1",
         configuration_id="interior-visual-frame-v1",
         requires_pdfplumber=False,
+    ),
+    "ruled_table": _ProducerSpec(
+        internal_producer_name="page_analysis.ruled_table",
+        producer_version="0.1",
+        # Le soglie sono quelle di `Criterio_TabellaRisolvibile_v1.md`, fissate
+        # il 20 agosto 2026: almeno due celle, almeno l'80% non vuote.
+        configuration_id="ruled_table:lines:min2:filled80",
+        requires_pdfplumber=True,
     ),
     "stat_block": _ProducerSpec(
         internal_producer_name="page_analysis.stat_block",
@@ -218,6 +227,16 @@ def run_job_page_analysis(
         elif producer_name == "interior_visual_frame":
             analysis = build_interior_visual_frame_page_analysis(
                 primitive_page,
+                generation_id=generation_id,
+            )
+        elif producer_name == "ruled_table":
+            if bound_source.plumber_pdf is None:
+                raise AssertionError("ruled_table requires an open pdfplumber document")
+            analysis = build_ruled_table_page_analysis(
+                BoundTableCandidatePage(
+                    primitive_page=primitive_page,
+                    plumber_page=bound_source.plumber_pdf.pages[page_num - 1],
+                ),
                 generation_id=generation_id,
             )
         elif producer_name == "stat_block":

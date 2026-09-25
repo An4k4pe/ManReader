@@ -24,6 +24,10 @@ _VALID_REASON_TOKENS = frozenset(
         # stesso posto: `Criterio_PosizioneRelativaDeiCampi_v1.md`. Il producer
         # vede una pagina sola e non puo' saperlo, quindi propone in eccesso.
         "field_combination_not_recurring",
+        # Una regione di `table_candidate` in cui la strategia a filetti non
+        # trova nessuna griglia piena: una tabella che non esiste, vista dove il
+        # testo si allinea. `Criterio_TabellaAFiletti_v1.md`.
+        "not_resolved_by_rules",
     }
 )
 

@@ -105,7 +105,9 @@ from page_analysis_column_band import (  # noqa: E402
     column_band_gutter_rows,
 )
 from page_analysis_column_band_rejected_gutters import measure_rejected_gutters  # noqa: E402
+from page_analysis_ruled_table import build_ruled_table_page_analysis  # noqa: E402
 from page_analysis_stat_block import build_stat_block_page_analysis  # noqa: E402
+from page_analysis_table_candidate_binding import BoundTableCandidatePage  # noqa: E402
 from primitive_model import NormalizedPrimitivePage, TextPrimitive  # noqa: E402
 from primitive_normalizer import normalize_backend_page_capture  # noqa: E402
 from pymupdf_capture import capture_pymupdf_page  # noqa: E402
@@ -915,9 +917,23 @@ def run(
         band_measures = chain.band_measures
         ordered_primitives = chain.ordered_primitives
 
+        # A tabelle accese entra anche l'analisi a filetti, e con lei la regola
+        # che respinge le tabelle fantasma (`Criterio_TabellaAFiletti_v1.md`).
+        analyses_risolte = analyses
+        if enable_tables:
+            analyses_risolte = (
+                *analyses,
+                build_ruled_table_page_analysis(
+                    BoundTableCandidatePage(
+                        primitive_page=primitive_page,
+                        plumber_page=plumber_pdf.pages[page_index],  # type: ignore[attr-defined]
+                    ),
+                    generation_id=generation_id,
+                ),
+            )
         bound = bind_co_referenced_page_analyses(
             primitive_page,
-            co_referenced_page_analyses=build_co_referenced_page_analyses(analyses),
+            co_referenced_page_analyses=build_co_referenced_page_analyses(analyses_risolte),
         )
         resolved = resolve_page_candidates(bound)
         outcome_by_candidate = {
@@ -964,6 +980,10 @@ def run(
                 outcome = outcome_by_candidate.get(
                     (analysis.provenance.producer_name, candidate.candidate_id)
                 )
+                if outcome == "rejected":
+                    # Nessuna griglia a filetti dentro: e' una tabella vista dove
+                    # il testo si allinea, e il suo testo resta prosa.
+                    continue
                 table_regions.append(
                     TableRegionInput(
                         bbox=candidate.bbox,
