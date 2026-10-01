@@ -22,6 +22,8 @@ from ir2_model import (
     IR2Provenance,
     NodeIR2,
     PageIR2,
+    StatBlockIR2,
+    StatFieldIR2,
     TableIR2,
     TextRunIR2,
 )
@@ -48,6 +50,8 @@ _NODE_KEYS = frozenset(
 )
 _RUN_KEYS = frozenset({"text", "traits"})
 _STRUCTURE_KEYS = frozenset({"kind", "rows"})
+_STAT_BLOCK_KEYS = frozenset({"kind", "fields"})
+_FIELD_KEYS = frozenset({"label", "value", "primitive_ids"})
 _CELL_KEYS = frozenset({"row", "column", "text", "primitive_ids"})
 _ASSET_KEYS = frozenset(
     {"digest", "file_name", "bbox", "occurrence_count", "proposed_structural_kind"}
@@ -97,10 +101,21 @@ def _node_to_dict(node: NodeIR2) -> dict[str, object]:
     }
 
 
-def _structure_to_dict(structure: TableIR2) -> dict[str, object]:
-    # ``kind`` discrimina l'unione: oggi ha un solo abitante, e alla seconda
-    # volta -- callout, scheda mostro -- il lettore sceglie su questo campo
-    # invece che indovinare dalla forma.
+def _structure_to_dict(structure: TableIR2 | StatBlockIR2) -> dict[str, object]:
+    # ``kind`` discrimina l'unione: il lettore sceglie su questo campo invece che
+    # indovinare dalla forma.
+    if isinstance(structure, StatBlockIR2):
+        return {
+            "kind": "stat_block",
+            "fields": [
+                {
+                    "label": item.label,
+                    "value": item.value,
+                    "primitive_ids": list(item.primitive_ids),
+                }
+                for item in structure.fields
+            ],
+        }
     return {
         "kind": "table",
         "rows": [
@@ -220,8 +235,26 @@ def _parse_runs(value: object, path: str) -> tuple[TextRunIR2, ...]:
     return tuple(runs)
 
 
-def _parse_structure(value: object, path: str) -> TableIR2:
+def _parse_structure(value: object, path: str) -> TableIR2 | StatBlockIR2:
     data = _require_dict(value, path)
+    kind = data.get("kind")
+    if kind == "stat_block":
+        _validate_exact_keys(data, _STAT_BLOCK_KEYS, path)
+        fields: list[StatFieldIR2] = []
+        for index, item in enumerate(_require_list(data, "fields", f"{path}.fields")):
+            item_path = f"{path}.fields[{index}]"
+            field_data = _require_dict(item, item_path)
+            _validate_exact_keys(field_data, _FIELD_KEYS, item_path)
+            fields.append(
+                StatFieldIR2(
+                    label=_require_str(field_data, "label", f"{item_path}.label"),
+                    value=_require_str(field_data, "value", f"{item_path}.value"),
+                    primitive_ids=_parse_str_tuple(
+                        field_data, "primitive_ids", f"{item_path}.primitive_ids"
+                    ),
+                )
+            )
+        return StatBlockIR2(fields=tuple(fields))
     _validate_exact_keys(data, _STRUCTURE_KEYS, path)
 
     kind = _require_str(data, "kind", f"{path}.kind")

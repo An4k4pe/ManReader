@@ -54,6 +54,7 @@ from document_list_policy import (  # noqa: I001
 from geometry_model import BBox
 from ir2_model import (
     KIND_ASSET_NOTE,
+    KIND_STAT_BLOCK,
     KIND_TABLE,
     KIND_TEXT_HEADING,
     KIND_TEXT_LIST_ITEM,
@@ -63,11 +64,14 @@ from ir2_model import (
     CellIR2,
     NodeIR2,
     PageIR2,
+    StatBlockIR2,
+    StatFieldIR2,
     TableIR2,
     TextRunIR2,
 )
 from ir_builder import _HYPHENATED_WORD_RE
 from primitive_model import TextPrimitive
+from stat_block_fields import compile_fields
 
 _SOURCE_LINE_PATTERN = re.compile(r"^text:(b\d+):(l\d+):s\d+$")
 _STARTS_LOWERCASE = re.compile(r"^[a-zà-öø-ÿ]")
@@ -135,6 +139,25 @@ class StatBlockNameInput:
     """
 
     primitive_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class StatBlockFieldsInput:
+    """The field part of one stat block, to compile into label/value fields.
+
+    ``primitive_ids`` are the source primitives of the lines between the name and
+    the last line with labels, from ``stat_block_regions``. ``recurrence`` and
+    ``instance_count`` are the structure's template, the first reading
+    (``stat_block_regions.structure_templates``). How the fields pair up is
+    ``stat_block_fields.compile_fields``' business. `Criterio_CompilazioneScheda_v1.md`.
+    """
+
+    primitive_ids: tuple[str, ...]
+    recurrence: tuple[tuple[str, int], ...] = ()
+    instance_count: int = 0
+    # Le righe della scheda dopo la parte a campi: entrano solo se continuano
+    # l'ultimo valore.
+    tail_primitive_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -667,6 +690,7 @@ def build_page_ir2(
     heading_levels: dict[float, int] | None = None,
     heading_max_length: float | None = None,
     stat_block_names: Sequence[StatBlockNameInput] = (),
+    stat_block_fields: Sequence[StatBlockFieldsInput] = (),
 ) -> PageIR2:
     """Build one IR 2 page. Reading order is the caller's; this only groups."""
 
@@ -711,6 +735,50 @@ def build_page_ir2(
             if primitive.primitive_id in set(owned)
         )
         tables.append((anchor, table, region, owned))
+        consumed_ids.update(owned)
+
+    # La parte a campi di una scheda diventa una struttura, come una tabella: le
+    # sue primitive escono dal flusso dei paragrafi e il nodo si ancora alla prima.
+    # Dopo le tabelle, perche' una tabella che attraversa la scheda il chiamante
+    # l'ha gia' tolta, e una dentro la scheda resta sua.
+    stat_blocks: list[tuple[int, StatBlockIR2, tuple[str, ...]]] = []
+    for block_input in stat_block_fields:
+        wanted = frozenset(block_input.primitive_ids)
+        tail_wanted = frozenset(block_input.tail_primitive_ids)
+        members = [
+            primitive
+            for primitive in ordered_text_primitives
+            if primitive.primitive_id in wanted and primitive.primitive_id not in consumed_ids
+        ]
+        tail_members = [
+            primitive
+            for primitive in ordered_text_primitives
+            if primitive.primitive_id in tail_wanted and primitive.primitive_id not in consumed_ids
+        ]
+        compiled = compile_fields(
+            [line.primitives for line in group_source_lines(members)],
+            dict(block_input.recurrence),
+            block_input.instance_count,
+            join=join_lines,
+            tail=[line.primitives for line in group_source_lines(tail_members)],
+        )
+        if not compiled:
+            continue
+        fields = tuple(
+            StatFieldIR2(
+                label=item.label,
+                value=item.value,
+                primitive_ids=_with_redraws(item.primitive_ids, redraw_ids),
+            )
+            for item in compiled
+        )
+        owned = tuple(primitive_id for item in compiled for primitive_id in item.primitive_ids)
+        anchor = min(
+            index
+            for index, primitive in enumerate(ordered_text_primitives)
+            if primitive.primitive_id in set(owned)
+        )
+        stat_blocks.append((anchor, StatBlockIR2(fields=fields), owned))
         consumed_ids.update(owned)
 
     remaining = [p for p in ordered_text_primitives if p.primitive_id not in consumed_ids]
@@ -948,10 +1016,16 @@ def build_page_ir2(
     for anchor, table, region, owned in tables:
         tables_by_rank.setdefault(_rank_for(anchor), []).append((table, region, owned))
 
+    stat_blocks_by_rank: dict[int, list[tuple[StatBlockIR2, tuple[str, ...]]]] = {}
+    for anchor, block, owned in stat_blocks:
+        stat_blocks_by_rank.setdefault(_rank_for(anchor), []).append((block, owned))
+
     items: list[tuple[str, object]] = []
     for index in range(len(paragraphs) + 1):
         for entry in tables_by_rank.get(index, ()):
             items.append(("table", entry))
+        for entry in stat_blocks_by_rank.get(index, ()):
+            items.append(("stat_block", entry))
         for note in sorted(notes_by_rank.get(index, ()), key=lambda item: item.anchor_index):
             items.append(("asset", note))
         if index < len(paragraphs):
@@ -1030,6 +1104,20 @@ def build_page_ir2(
                     structure=table,
                     candidate_ids=region.candidate_ids,
                     resolution=region.resolution,
+                )
+            )
+            continue
+
+        if kind == "stat_block":
+            block, owned = payload  # type: ignore[misc]
+            nodes.append(
+                NodeIR2(
+                    node_id=f"{page_id}:stat_block:{owned[0]}",
+                    order=order,
+                    kind=KIND_STAT_BLOCK,
+                    primitive_ids=_with_redraws(owned, redraw_ids),
+                    page_ids=(page_id,),
+                    structure=block,
                 )
             )
             continue

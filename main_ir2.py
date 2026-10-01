@@ -95,7 +95,12 @@ from ir2_model import DocumentIR2, IR2Provenance  # noqa: E402
 from ir2_serialization import document_ir2_from_dict, document_ir2_to_dict  # noqa: E402
 from job_source_snapshot import inspect_source_file  # noqa: E402
 from pymupdf_asset_extraction import extract_occurrence_raster  # noqa: E402
-from stat_block_regions import LineFacts, RepeatedStructure, repeated_structures  # noqa: E402
+from stat_block_regions import (  # noqa: E402
+    LineFacts,
+    RepeatedStructure,
+    repeated_structures,
+    structure_templates,
+)
 
 
 # **Lo stato dei processi figli, ereditato per `fork` e mai serializzato.**
@@ -590,8 +595,10 @@ def main() -> int:
                 ) as pool:
                     righe = list(pool.map(_righe_di_pagina, tutte, chunksize=1))
             cadute = [(i, e) for i, _r, e in righe if e is not None]
-            _LAVORO.strutture_schede = repeated_structures(
-                {i: fatti for i, fatti, e in righe if e is None}
+            pagine_righe = {i: fatti for i, fatti, e in righe if e is None}
+            # La prima lettura della compilazione: il modello di ogni struttura.
+            _LAVORO.strutture_schede = structure_templates(
+                pagine_righe, repeated_structures(pagine_righe)
             )
             _LAVORO.opened = None
             print(

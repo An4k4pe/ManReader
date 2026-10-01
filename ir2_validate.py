@@ -27,7 +27,7 @@ Requiring their coverage would forbid both by accident.
 
 from __future__ import annotations
 
-from ir2_model import PageIR2
+from ir2_model import PageIR2, StatBlockIR2, TableIR2
 from primitive_model import NormalizedPrimitivePage
 
 
@@ -60,7 +60,7 @@ def validate_page_ir2_against_primitive_page(
         # delle celle deve coincidere con cio' che il nodo dichiara: senza questo
         # la griglia sarebbe dentro il contratto e non verificata da niente, che
         # e' il difetto che questo modulo esiste per non avere.
-        if node.structure is not None:
+        if isinstance(node.structure, TableIR2):
             from_cells = [
                 primitive_id
                 for row in node.structure.rows
@@ -71,6 +71,16 @@ def validate_page_ir2_against_primitive_page(
                 raise ValueError("a primitive belongs to more than one cell of the same table")
             if set(from_cells) != set(node.primitive_ids):
                 raise ValueError("the union of the cells must equal the node primitives")
+        elif isinstance(node.structure, StatBlockIR2):
+            from_fields = [
+                primitive_id
+                for item in node.structure.fields
+                for primitive_id in item.primitive_ids
+            ]
+            if len(from_fields) != len(set(from_fields)):
+                raise ValueError("a primitive belongs to more than one field of the same stat block")
+            if set(from_fields) != set(node.primitive_ids):
+                raise ValueError("the union of the fields must equal the node primitives")
 
         for primitive_id in node.primitive_ids:
             if primitive_id not in known_ids:

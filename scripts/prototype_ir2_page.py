@@ -79,6 +79,7 @@ from document_text_recurrence_measurements import (  # noqa: E402
 )
 from ir2_builder import (  # noqa: E402
     AssetNoteInput,
+    StatBlockFieldsInput,
     StatBlockNameInput,
     TableRegionInput,
     body_font,
@@ -1000,6 +1001,7 @@ def run(
         # calcola `main_ir2` in una prima passata (`repeated_structures`), e qui
         # si trovano le loro istanze sulla pagina. Senza, e' la regola di 3a.
         frames, visual_boxes, reading_lines, _extent_gutters = stat_block_inputs(facts)
+        line_boxes: list[LineFacts] = []
         if stat_block_document is None:
             stat_blocks = stat_block_regions(frames, visual_boxes, reading_lines)
             structure_note = ""
@@ -1052,6 +1054,30 @@ def run(
             for block in stat_blocks
             if block.name_line_indices
         )
+        # La compilazione dei campi, solo con la regola dalla struttura ripetuta:
+        # il modello della struttura viene dalla prima passata di `main_ir2`
+        # (`structure_templates`). `Criterio_CompilazioneScheda_v1.md`.
+        templates = {structure.labels: structure for structure in stat_block_document or ()}
+        stat_block_fields = tuple(
+            StatBlockFieldsInput(
+                primitive_ids=tuple(
+                    primitive.primitive_id
+                    for index in block.field_line_indices
+                    for primitive in reading_lines[index]
+                ),
+                recurrence=templates[block.signature].recurrence,
+                instance_count=templates[block.signature].instance_count,
+                tail_primitive_ids=tuple(
+                    primitive.primitive_id
+                    for index in block.line_indices
+                    if index > block.field_line_indices[-1]
+                    and index not in block.name_line_indices
+                    for primitive in reading_lines[index]
+                ),
+            )
+            for block in stat_blocks
+            if block.field_line_indices and block.signature in templates
+        )
         # Con le tabelle accese, una regione che attraversa il confine di una
         # scheda non si costruisce: su Daggerheart `table_candidate` copre
         # colonne intere di tre schede. Una tabella dentro la scheda resta.
@@ -1059,10 +1085,26 @@ def run(
         # scheda invece di bloccarla faceva ricostruire tabelle rotte da
         # `build_table` -- una vuota su Daggerheart, gli attacchi di Dragonbane
         # spezzati fra cella e paragrafo.)
+        # E una tabella che contiene righe della parte a campi non si costruisce: i
+        # campi li compila la scheda (DrM, Arixx: `Size 2 | Speed 5` in griglia).
+        field_boxes = (
+            [
+                box
+                for block in stat_blocks
+                for index in block.field_line_indices
+                if (box := line_boxes[index].bbox) is not None
+            ]
+            if stat_block_document is not None
+            else []
+        )
         built_tables = []
         crossing = 0
         for region in table_regions:
-            if crossed_stat_blocks(region.bbox, stat_blocks):
+            x0, y0, x1, y1 = region.bbox
+            if crossed_stat_blocks(region.bbox, stat_blocks) or any(
+                x0 <= (box[0] + box[2]) / 2 <= x1 and y0 <= (box[1] + box[3]) / 2 <= y1
+                for box in field_boxes
+            ):
                 crossing += 1
                 continue
             built_tables.append(region)
@@ -1091,6 +1133,7 @@ def run(
             heading_levels=levels,
             heading_max_length=scan.heading_max_length,
             stat_block_names=stat_block_names,
+            stat_block_fields=stat_block_fields,
         )
         validate_page_ir2_against_primitive_page(ir2_page, primitive_page)
 
@@ -1236,7 +1279,7 @@ def run(
             f"paragraphs={sum(1 for n in ir2_page.nodes if n.kind == 'text.paragraph')} "
             f"asset_notes={sum(1 for n in ir2_page.nodes if n.kind == 'asset.note')} "
             f"note_in_body={sum(1 for n in ir2_page.nodes if n.kind == 'asset.note' and n.resolution == 'accepted')} "
-            f"tables={sum(1 for n in ir2_page.nodes if n.structure is not None)}/{len(table_regions)} "
+            f"tables={sum(1 for n in ir2_page.nodes if n.kind == 'layout.table')}/{len(table_regions)} "
             f"text_primitives={len(primitive_page.text_primitives)}",
             file=sys.stderr,
         )

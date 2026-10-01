@@ -55,7 +55,7 @@ from __future__ import annotations
 
 import unicodedata
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from geometry_model import BBox
 from primitive_model import TextPrimitive
@@ -87,6 +87,9 @@ class StatBlockRegion:
     line_indices: tuple[int, ...]
     name_line_indices: tuple[int, ...]
     signature: frozenset[str] = frozenset()
+    # Le righe della parte a campi: dopo il nome, fino all'ultima riga con
+    # etichette della struttura. Solo la regola dalla struttura ripetuta le da'.
+    field_line_indices: tuple[int, ...] = ()
 
 
 def _style(primitive: TextPrimitive) -> Style:
@@ -336,13 +339,16 @@ class LineFacts:
 
     Si calcola per ogni riga di ogni pagina nella prima passata di `main_ir2` e
     passa fra processi, quindi porta solo valori semplici. Una riga di sole
-    spaziature ha ``style`` e ``bbox`` a ``None``."""
+    spaziature ha ``style`` e ``bbox`` a ``None``. ``span_texts`` sono i testi
+    dei suoi span con lettere o cifre, normalizzati come le etichette: servono al
+    modello della compilazione (`structure_templates`)."""
 
     style: Style | None
     text: str
     labels: tuple[str, ...]
     label_starts: tuple[tuple[float, float], ...]
     bbox: BBox | None
+    span_texts: tuple[str, ...] = ()
 
 
 def line_facts(line: Sequence[TextPrimitive]) -> LineFacts:
@@ -366,16 +372,25 @@ def line_facts(line: Sequence[TextPrimitive]) -> LineFacts:
             for _label, span in found
         ),
         bbox=_line_bbox(line),
+        span_texts=tuple(
+            normalised_label(span.text) for span in spans if any(c.isalnum() for c in span.text)
+        ),
     )
 
 
 @dataclass(frozen=True, slots=True)
 class RepeatedStructure:
     """Una struttura che si ripete nel documento: le sue etichette e lo stile del
-    nome che la intesta (``None`` se nessuno stile la precede regolarmente)."""
+    nome che la intesta (``None`` se nessuno stile la precede regolarmente).
+
+    ``recurrence`` e ``instance_count`` sono il **modello** della compilazione,
+    riempiti da `structure_templates`: in quante istanze compare ogni testo della
+    parte a campi, tenuti solo quelli presenti nella maggioranza."""
 
     labels: frozenset[str]
     head_style: Style | None
+    recurrence: tuple[tuple[str, int], ...] = ()
+    instance_count: int = 0
 
 
 def _bound_label_groups(pages: Mapping[int, Sequence[LineFacts]]) -> list[frozenset[str]]:
@@ -556,10 +571,14 @@ def _block_tail(
     frames: Sequence[BBox],
 ) -> list[int]:
     """Le righe della parte libera: dopo l'ultima riga con etichette la scheda
-    continua fino alla prima **interruzione**, e comunque non oltre ``limit``:
+    continua fino alla prima **interruzione**, e comunque non oltre ``limit``.
+    Prima si risolvono i riquadri, poi i titoli (indicazione dell'utente del 15
+    settembre):
 
-    - una riga in ``breaks``: un nome o una riga a dimensione di titolo;
     - se la scheda sta in un riquadro, la prima riga fuori dal riquadro;
+    - una riga in ``breaks``: un nome o una riga a dimensione di titolo, se non
+      sta in un riquadro estraneo.
+
     Le righe dentro un **riquadro estraneo** si saltano, senza chiudere la scheda:
     su DrM idx 43 il box laterale «Angulotl Tactics» sta, nell'ordine di lettura,
     in mezzo alla scheda di Angulotl Wave. Estraneo vuol dire che porta almeno due
@@ -589,15 +608,61 @@ def _block_tail(
     tail: list[int] = []
     for position in range(last + 1, limit + 1):
         box = lines[position].bbox
-        if position in breaks:
-            break
         if box is not None:
             if own is not None and not _centre_inside(own, box):
                 break
             if any(_centre_inside(piece, box) for piece in others):
                 continue
+        if position in breaks:
+            break
         tail.append(position)
     return tail
+
+
+def _field_lines(
+    lines: Sequence[LineFacts],
+    structure: RepeatedStructure,
+    start: int,
+    last: int,
+    name: Sequence[int],
+    taken: set[int],
+) -> tuple[int, ...]:
+    """Le righe della parte a campi: dopo il nome, fino all'ultima riga con
+    un'etichetta **del modello** -- presente nella maggioranza delle istanze -- e
+    non sotto di lei sulla pagina.
+
+    Le etichette della struttura non bastano: su DrM sono 65, compresi i gradini
+    dei tiri (`m<4]`, `1+ Malice`) che stanno dentro le capacita', e la parte a
+    campi arrivava in fondo alla scheda. E l'ordine di lettura non basta: sulle
+    schede larghe la colonna di sinistra, capacita' comprese, si legge prima delle
+    ultime etichette a destra. Senza modello (la prima lettura stessa), fino
+    all'ultima riga con etichette. **Col modello e senza nessuna sua etichetta,
+    niente**: su DrM i box Malice e le azioni del villain sono istanze della
+    struttura per le etichette dei gradini, e compilavano capacita' intere."""
+
+    recurrence = dict(structure.recurrence)
+    core = {
+        label
+        for label in structure.labels
+        if recurrence.get(label, 0) * 2 > structure.instance_count
+    }
+    with_core = [
+        index for index in range(start, last + 1) if core.intersection(lines[index].labels)
+    ]
+    if not with_core:
+        if structure.recurrence:
+            return ()
+        return tuple(
+            index for index in range(start, last + 1) if index not in taken and index not in name
+        )
+    bottom = max(box[3] for index in with_core if (box := lines[index].bbox) is not None)
+    return tuple(
+        index
+        for index in range(start, with_core[-1] + 1)
+        if index not in taken
+        and index not in name
+        and ((box := lines[index].bbox) is None or box[1] < bottom)
+    )
 
 
 def stat_blocks_from_structures(
@@ -696,6 +761,9 @@ def stat_blocks_from_structures(
                     line_indices=span,
                     name_line_indices=names[position],
                     signature=structure.labels,
+                    field_line_indices=_field_lines(
+                        lines, structure, start, last, names[position], taken
+                    ),
                 )
             )
             taken.update(span)
@@ -723,3 +791,43 @@ def crosses_a_stat_block(bbox: BBox, regions: Sequence[StatBlockRegion]) -> bool
     """Una tabella che attraversa il confine di almeno una scheda."""
 
     return bool(crossed_stat_blocks(bbox, regions))
+
+
+def structure_templates(
+    pages: Mapping[int, Sequence[LineFacts]],
+    structures: Sequence[RepeatedStructure],
+) -> tuple[RepeatedStructure, ...]:
+    """La prima lettura della compilazione: il modello di ogni struttura.
+
+    Per ogni testo di span della parte a campi, in quante istanze della struttura
+    compare. Cio' che si ripete in tutte le schede e' etichetta, cio' che cambia e'
+    valore: e' la stessa idea della struttura ripetuta, un livello sotto. Si tengono
+    solo i testi presenti nella maggioranza delle istanze, perche' e' la sola cosa
+    che la seconda lettura (`stat_block_fields.compile_fields`) chiede.
+    `Criterio_CompilazioneScheda_v1.md`."""
+
+    counts: dict[frozenset[str], dict[str, int]] = {s.labels: {} for s in structures}
+    instances: dict[frozenset[str], int] = dict.fromkeys(counts, 0)
+    for index in sorted(pages):
+        lines = pages[index]
+        for block in stat_blocks_from_structures(lines, structures):
+            if block.signature not in counts:
+                continue
+            instances[block.signature] += 1
+            per_text = counts[block.signature]
+            for text in {t for i in block.field_line_indices for t in lines[i].span_texts}:
+                per_text[text] = per_text.get(text, 0) + 1
+    return tuple(
+        replace(
+            structure,
+            recurrence=tuple(
+                sorted(
+                    (text, count)
+                    for text, count in counts[structure.labels].items()
+                    if count * 2 > instances[structure.labels]
+                )
+            ),
+            instance_count=instances[structure.labels],
+        )
+        for structure in structures
+    )

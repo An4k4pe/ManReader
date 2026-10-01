@@ -348,6 +348,22 @@ class RepeatedStructureTest(unittest.TestCase):
         blocks = stat_blocks_from_structures(page, repeated_structures(pages), frames=[sidebar])
         self.assertEqual(blocks[-1].line_indices, (0, 1, 2, 3, 4, 5, 8))
 
+    def test_a_heading_inside_a_foreign_box_does_not_end_the_block(self) -> None:
+        # Prima i riquadri, poi i titoli: il titolo del box laterale si salta col box.
+        from stat_block_regions import repeated_structures, stat_blocks_from_structures
+
+        pages = self._pages()
+        page = pages[2] + [
+            self._row("ANGULOTL TACTICS", x=450.0, y=300.0, style=("Newzald-Bold", 24.0, None)),
+            self._row("Prose in the box.", x=450.0, y=320.0),
+            self._row("Noxious Bubble", y=70.0),
+        ]
+        sidebar = (440.0, 290.0, 700.0, 340.0)
+        blocks = stat_blocks_from_structures(
+            page, repeated_structures(pages), heading_sizes=frozenset({24.0}), frames=[sidebar]
+        )
+        self.assertEqual(blocks[-1].line_indices, (0, 1, 2, 3, 4, 5, 8))
+
     def test_a_single_label_is_not_an_instance(self) -> None:
         from stat_block_regions import repeated_structures, stat_blocks_from_structures
 

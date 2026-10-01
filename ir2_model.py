@@ -71,6 +71,10 @@ KIND_TEXT_LIST_ITEM = "text.list_item"
 KIND_TEXT_LIST_ITEM_ORDERED = "text.list_item_ordered"
 KIND_ASSET_NOTE = "asset.note"
 KIND_TABLE = "layout.table"
+# Una scheda statistica compilata: campi etichetta/valore. Kind suo e struttura
+# sua perche' un'etichetta va distinta dal suo valore, e il testo di un nodo non
+# ha dove dirlo. `Criterio_CompilazioneScheda_v1.md`.
+KIND_STAT_BLOCK = "layout.stat_block"
 # Nel vocabolario, NON in emissione in v0:
 #   text.heading  -- il criterio non esiste; su DB p.99 il solo corpo di pagina
 #                    ne prende uno su quattro. Milestone sua.
@@ -179,9 +183,52 @@ class TableIR2:
                     raise ValueError("cell coordinates must match their position")
 
 
+@dataclass(frozen=True, slots=True)
+class StatFieldIR2:
+    """One field of a stat block: a label and its value, as printed.
+
+    ``label`` is empty for a value the page prints without a label -- the keywords
+    under a Draw Steel name, the tier line of Daggerheart. The text is the
+    source's, whitespace collapsed: the label's colon and a value's trailing
+    separator are the renderer's to drop, as the list marker is.
+    """
+
+    label: str
+    value: str
+    primitive_ids: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.label, str) or not isinstance(self.value, str):
+            raise ValueError("label and value must be strings")
+        if not self.label and not self.value:
+            raise ValueError("a field must carry a label or a value")
+        _validate_unique_non_empty_ids(self.primitive_ids, "primitive_ids")
+        if not self.primitive_ids:
+            raise ValueError("a field must own the primitives it came from")
+
+
+@dataclass(frozen=True, slots=True)
+class StatBlockIR2:
+    """The field part of a stat block, in page order.
+
+    Only the fields: the name is the heading node before it, and the free part --
+    abilities, features -- stays in the paragraphs after it.
+    """
+
+    fields: tuple[StatFieldIR2, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.fields, tuple) or not self.fields:
+            raise ValueError("fields must be a non-empty tuple")
+        for item in self.fields:
+            if not isinstance(item, StatFieldIR2):
+                raise ValueError("fields must contain StatFieldIR2 values")
+
+
 # La categoria, non il kind: alla seconda volta -- callout, scheda mostro -- si
 # allarga questa unione invece di aggiungere un braccio all'invariante di NodeIR2.
-type StructureIR2 = TableIR2
+# La seconda e' arrivata: la scheda statistica.
+type StructureIR2 = TableIR2 | StatBlockIR2
 
 
 @dataclass(frozen=True, slots=True)
@@ -298,7 +345,7 @@ class NodeIR2:
                 raise ValueError("text must not be empty")
         if self.asset is not None and not isinstance(self.asset, AssetRefIR2):
             raise ValueError("asset must be an AssetRefIR2")
-        if self.structure is not None and not isinstance(self.structure, TableIR2):
+        if self.structure is not None and not isinstance(self.structure, (TableIR2, StatBlockIR2)):
             raise ValueError("structure must be a StructureIR2")
 
         if self.runs:

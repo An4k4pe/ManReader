@@ -31,6 +31,7 @@ from __future__ import annotations
 from document_list_policy import split_number
 from ir2_model import (
     KIND_ASSET_NOTE,
+    KIND_STAT_BLOCK,
     KIND_TABLE,
     KIND_TEXT_HEADING,
     KIND_TEXT_LIST_ITEM,
@@ -40,6 +41,7 @@ from ir2_model import (
     DocumentIR2,
     NodeIR2,
     PageIR2,
+    StatBlockIR2,
     TableIR2,
     TextRunIR2,
 )
@@ -108,6 +110,70 @@ def render_table(table: TableIR2) -> str:
     width = len(rows[0])
     lines = ["| " + " | ".join(rows[0]) + " |", "| " + " | ".join(["---"] * width) + " |"]
     lines.extend("| " + " | ".join(row) + " |" for row in rows[1:])
+    return "\n".join(lines)
+
+
+# Il primo carattere che in YAML apre qualcos'altro che un testo, e le parole che
+# un lettore YAML legge come booleani o nulla.
+_YAML_INDICATORS = frozenset("-?:,[]{}#&*!|>'\"%@`")
+_YAML_WORDS = frozenset({"yes", "no", "true", "false", "null", "on", "off", "~"})
+
+
+def _yaml_scalar(text: str) -> str:
+    """Il testo come scalare YAML: senza virgolette dove si puo', perche' il blocco
+    si legge a occhio; fra virgolette solo dove il YAML lo leggerebbe diverso."""
+
+    if (
+        not text
+        or text[0] in _YAML_INDICATORS
+        or ": " in text
+        or " #" in text
+        or text.endswith(":")
+        or text.casefold() in _YAML_WORDS
+    ):
+        return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    return text
+
+
+def _field_label(text: str) -> str:
+    return text.rstrip().rstrip(":").rstrip()
+
+
+def _field_value(text: str) -> str:
+    """Il valore senza i due punti in testa e senza un **separatore finale**:
+    l'ultima parola se non ha lettere ne' cifre e non e' tutto il valore --
+    `12 |` su Daggerheart e' `12`, mentre `—` resta `—`."""
+
+    words = text.lstrip(":").split()
+    if len(words) > 1 and not any(character.isalnum() for character in words[-1]):
+        words.pop()
+    return " ".join(words)
+
+
+def render_stat_block(block: StatBlockIR2) -> str:
+    """Render the fields of a stat block as a YAML block.
+
+    YAML by the user's choice (`Criterio_CompilazioneScheda_v1.md`): readable as
+    it is, and a stylesheet can lay it out later. Keys are the labels as printed,
+    without their colon. Values printed without a label go under ``text``, as a
+    list, where the first of them stands; a label that repeats becomes a list. The
+    name is not repeated here: it is the heading before the block.
+    """
+
+    entries: dict[str, list[str]] = {}
+    for item in block.fields:
+        key = _field_label(item.label) or "text"
+        entries.setdefault(key, []).append(_field_value(item.value))
+    lines = ["```yaml"]
+    for key, values in entries.items():
+        if key == "text" or len(values) > 1:
+            lines.append(f"{_yaml_scalar(key)}:")
+            lines.extend(f"  - {_yaml_scalar(value)}" for value in values)
+        elif values[0]:
+            lines.append(f"{_yaml_scalar(key)}: {_yaml_scalar(values[0])}")
+        else:
+            lines.append(f"{_yaml_scalar(key)}:")
+    lines.append("```")
     return "\n".join(lines)
 
 
@@ -314,9 +380,13 @@ def render_node(node: NodeIR2) -> str:
             raise ValueError("an asset.note node must carry an asset")
         return render_asset_note(node.asset)
     if node.kind == KIND_TABLE:
-        if node.structure is None:
+        if not isinstance(node.structure, TableIR2):
             raise ValueError("a table node must carry a structure")
         return render_table(node.structure)
+    if node.kind == KIND_STAT_BLOCK:
+        if not isinstance(node.structure, StatBlockIR2):
+            raise ValueError("a stat block node must carry a stat block")
+        return render_stat_block(node.structure)
     raise ValueError(f"no renderer for kind {node.kind!r}")
 
 

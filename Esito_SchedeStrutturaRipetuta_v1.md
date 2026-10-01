@@ -127,4 +127,14 @@ Resta il numero di pagina in coda all'ultima scheda di DrM, che l'arredo toglie
 dal corpo; e su DB idx 91 il nome e' il titolo della pagina GOBLIN, con la
 descrizione in prosa dentro la prima delle due varianti.
 
+**Ordine di risoluzione** (indicazione dell'utente del 15 settembre): prima i
+riquadri, poi i titoli. Un nome o una riga a dimensione di titolo dentro un
+riquadro estraneo si salta col riquadro invece di chiudere la scheda. Sui quattro
+giri nessuna pagina cambia, ne' in `schede.json` ne' nel Markdown: il caso non vi
+compare, e la regola vale per quando comparira'.
+
+Giudizio dell'utente: buon risultato. Accettati come difetti piccoli la tabella
+ATTACCHI MOSTRUOSI che a volte entra nella scheda e a volte no, e la prosa dei
+goblin presa dentro la scheda (DB idx 91).
+
 Diagnostica per pagina, fuori dall'IR: `schede.json` nella cartella della pagina.
