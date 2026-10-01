@@ -1,0 +1,191 @@
+[
+ {
+  "m": "Vileborn",
+  "n": 33,
+  "g": "ordine",
+  "old": "vil_ordine_vecchio",
+  "new": "vil_nuova"
+ },
+ {
+  "m": "Vileborn",
+  "n": 37,
+  "g": "ordine",
+  "old": "vil_ordine_vecchio",
+  "new": "vil_nuova"
+ },
+ {
+  "m": "Vileborn",
+  "n": 39,
+  "g": "ordine",
+  "old": "vil_ordine_vecchio",
+  "new": "vil_nuova"
+ },
+ {
+  "m": "Vileborn",
+  "n": 41,
+  "g": "ordine",
+  "old": "vil_ordine_vecchio",
+  "new": "vil_nuova"
+ },
+ {
+  "m": "Vileborn",
+  "n": 45,
+  "g": "ordine",
+  "old": "vil_ordine_vecchio",
+  "new": "vil_nuova"
+ },
+ {
+  "m": "Vileborn",
+  "n": 101,
+  "g": "ordine",
+  "old": "vil_ordine_vecchio",
+  "new": "vil_nuova"
+ },
+ {
+  "m": "Vileborn",
+  "n": 111,
+  "g": "ordine",
+  "old": "vil_ordine_vecchio",
+  "new": "vil_nuova"
+ },
+ {
+  "m": "Vileborn",
+  "n": 131,
+  "g": "ordine",
+  "old": "vil_ordine_vecchio",
+  "new": "vil_nuova"
+ },
+ {
+  "m": "Vileborn",
+  "n": 135,
+  "g": "ordine",
+  "old": "vil_ordine_vecchio",
+  "new": "vil_nuova"
+ },
+ {
+  "m": "Vileborn",
+  "n": 137,
+  "g": "ordine",
+  "old": "vil_ordine_vecchio",
+  "new": "vil_nuova"
+ },
+ {
+  "m": "Vileborn",
+  "n": 187,
+  "g": "ordine",
+  "old": "vil_ordine_vecchio",
+  "new": "vil_nuova"
+ },
+ {
+  "m": "Vileborn",
+  "n": 203,
+  "g": "ordine",
+  "old": "vil_ordine_vecchio",
+  "new": "vil_nuova"
+ },
+ {
+  "m": "Vileborn",
+  "n": 8,
+  "g": "ordine",
+  "old": "vil_ordine_vecchio",
+  "new": "vil_nuova"
+ },
+ {
+  "m": "Vileborn",
+  "n": 16,
+  "g": "titoli",
+  "old": "vil_titoli_vecchi",
+  "new": "vil_nuova"
+ },
+ {
+  "m": "Vileborn",
+  "n": 92,
+  "g": "titoli",
+  "old": "vil_titoli_vecchi",
+  "new": "vil_nuova"
+ },
+ {
+  "m": "Vileborn",
+  "n": 141,
+  "g": "titoli",
+  "old": "vil_titoli_vecchi",
+  "new": "vil_nuova"
+ },
+ {
+  "m": "Vileborn",
+  "n": 150,
+  "g": "titoli",
+  "old": "vil_titoli_vecchi",
+  "new": "vil_nuova"
+ },
+ {
+  "m": "Vileborn",
+  "n": 161,
+  "g": "titoli",
+  "old": "vil_titoli_vecchi",
+  "new": "vil_nuova"
+ },
+ {
+  "m": "Vileborn",
+  "n": 185,
+  "g": "titoli",
+  "old": "vil_titoli_vecchi",
+  "new": "vil_nuova"
+ },
+ {
+  "m": "Vileborn",
+  "n": 186,
+  "g": "titoli",
+  "old": "vil_titoli_vecchi",
+  "new": "vil_nuova"
+ },
+ {
+  "m": "Vileborn",
+  "n": 266,
+  "g": "titoli",
+  "old": "vil_titoli_vecchi",
+  "new": "vil_nuova"
+ },
+ {
+  "m": "Candela",
+  "n": 149,
+  "g": "titoli",
+  "old": "can_titoli_vecchi",
+  "new": "can_nuova"
+ },
+ {
+  "m": "Candela",
+  "n": 150,
+  "g": "titoli",
+  "old": "can_titoli_vecchi",
+  "new": "can_nuova"
+ },
+ {
+  "m": "Candela",
+  "n": 160,
+  "g": "titoli",
+  "old": "can_titoli_vecchi",
+  "new": "can_nuova"
+ },
+ {
+  "m": "Vileborn",
+  "n": 2,
+  "g": "mappe e callout",
+  "old": "vil_ordine_vecchio",
+  "new": "vil_nuova"
+ },
+ {
+  "m": "Vileborn",
+  "n": 3,
+  "g": "mappe e callout",
+  "old": "vil_ordine_vecchio",
+  "new": "vil_nuova"
+ },
+ {
+  "m": "Vileborn",
+  "n": 85,
+  "g": "mappe e callout",
+  "old": "vil_ordine_vecchio",
+  "new": "vil_nuova"
+ }
+]

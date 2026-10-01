@@ -1,0 +1,7 @@
+{
+ "_nota": "Profilo di Draw Steel: resa dei glifi del font DrawSteelGlyphs. Compilato guardando il contesto e i render (p. 30, 48, 65, 97, 122). '' = ornamento da togliere.",
+ "glifi": {"o": "**Distance:**", "x": "**Target:**", "á": "**≤11:**", "é": "**12–16:**", "í": "**17+:**",
+           "¥": "•", "®": "", "£": "",
+           "M": "M", "A": "A", "R": "R", "I": "I", "P": "P", "<": " < ",
+           "a": "A", "m": "M", "r": "R", "i": "I", "p": "P", "w": "WEAK", "v": "AVERAGE", "s": "STRONG"}
+}

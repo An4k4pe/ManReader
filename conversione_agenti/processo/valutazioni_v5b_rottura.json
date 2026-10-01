@@ -1,0 +1,23 @@
+{
+ "Candela": {
+  "pagine": 211,
+  "identiche": 72,
+  "ok99": 170,
+  "sotto95": 28,
+  "mediana": 1.0
+ },
+ "Vileborn": {
+  "pagine": 272,
+  "identiche": 85,
+  "ok99": 176,
+  "sotto95": 36,
+  "mediana": 0.997
+ },
+ "DrW": {
+  "pagine": 20,
+  "identiche": 2,
+  "ok99": 9,
+  "sotto95": 8,
+  "mediana": 0.989
+ }
+}

@@ -1,0 +1,8 @@
+                                 bozza             marker            docling             mineru             paddle        pymupdf4llm                odl          liteparse
+Candela  difficili     A 0.447 B 0.478    A 0.392 B 0.471    A 0.911 B 0.897    A 0.090 B 0.085    A 0.458 B 0.478    A 0.441 B 0.476    A 0.463 B 0.473    A 0.651 B 0.684
+Candela  facili        A 1.000 B 1.000    A 0.997 B 0.999    A 0.995 B 0.999    A 0.996 B 1.000    A 0.995 B 0.998    A 0.996 B 0.999    A 0.994 B 0.995    A 0.993 B 1.000
+Vileborn difficili     A 0.926 B 0.974    A 0.929 B 1.000    A 0.745 B 0.933    A 0.730 B 1.000    A 0.745 B 0.984    A 0.735 B 0.694    A 0.791 B 0.908    A 0.699 B 0.901
+Vileborn facili        A 0.995 B 1.000    A 0.966 B 0.946    A 0.974 B 0.964    A 0.858 B 0.994    A 0.894 B 0.974    A 0.958 B 0.916    A 0.957 B 0.943    A 0.941 B 0.919
+DrW      difficili     A 0.743 B 0.783    A 0.725 B 0.674    A 0.802 B 0.864    A 0.839 B 0.859    A 0.843 B 0.912    A 0.888 B 0.940    A 0.875 B 0.897    A 0.722 B 0.716
+DrW      facili        A 0.994 B 1.000    A 0.917 B 0.966    A 0.980 B 0.999    A 0.996 B 0.997    A 0.969 B 0.993    A 0.977 B 0.999    A 0.990 B 0.998    A 0.978 B 0.994
+parole assenti da PDF e riveduta: {'bozza': '18/12077 = 0.15%', 'marker': '69/11691 = 0.59%', 'docling': '59/11763 = 0.50%', 'mineru': '183/11199 = 1.63%', 'paddle': '147/11838 = 1.24%', 'pymupdf4llm': '12/12306 = 0.10%', 'odl': '103/11995 = 0.86%', 'liteparse': '39/12216 = 0.32%'}
